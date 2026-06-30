@@ -1,0 +1,86 @@
+# Albert Code — chaîne de sécurité CI réutilisable.
+# Semgrep (secrets + SAST) + Trivy (containers/dépendances) + CodeQL (SAST).
+# CRITICAL/ERROR bloquent (fail) ; HIGH/WARNING informent sans bloquer.
+#
+# Copie ce fichier dans ton projet : .github/workflows/security.yml
+name: Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  # --- Semgrep : secrets + analyse statique. ERROR/CRITICAL = échec ------------
+  semgrep:
+    name: Semgrep (secrets + SAST)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Semgrep scan
+        uses: semgrep/semgrep-action@v1
+        with:
+          config: >-
+            p/owasp-top-ten
+            p/secrets
+            p/security-audit
+          # Code de sortie non nul si des trouvailles ERROR/CRITICAL.
+          generate-sarif: "true"
+
+  # --- Trivy : vulnérabilités dépendances + Docker. CRITICAL = échec ------------
+  trivy:
+    name: Trivy (vuln dépendances)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Trivy — dépendances (fs)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: sarif
+          output: trivy-results.sarif
+          # CRITICAL fait échouer le job ; HIGH informe.
+          exit-code: "1"
+          severity: CRITICAL
+          ignore-unfixed: true
+      - name: Upload Trivy SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-results.sarif
+
+  # --- CodeQL : analyse SAST profonde ----------------------------------------
+  codeql:
+    name: CodeQL (SAST)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [python, javascript-typescript]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          # CRITICAL/HIGH = alerte (security-events), le job ne casse que sur erreur.
+          queries: security-extended
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"

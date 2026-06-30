@@ -1,0 +1,29 @@
+# Skills externes — synchronisées par runtime/agent-vm.runtime.sh depuis etalab-ia/skills
+.claude/skills/
+.opencode/skills/
+.agents/skills/
+
+# Config OpenCode locale projet (générée par install.sh, pas versionnée)
+opencode.json
+opencode.jsonc
+
+# Runtime agent-vm local
+.agent-vm.runtime.sh
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Secrets (ne jamais committer)
+.env
+.env.*
+!.env.example
+*.pem
+*.key

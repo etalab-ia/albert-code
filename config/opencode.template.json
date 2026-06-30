@@ -1,0 +1,69 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "albert": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Albert API (État)",
+      "options": {
+        "baseURL": "https://albert.api.etalab.gouv.fr/v1",
+        "apiKey": "{env:ALBERT_API_KEY}"
+      },
+      "models": {
+        "mistralai/Mistral-Medium-3.5-128B": {
+          "name": "Mistral Medium 3.5 (Albert)",
+          "limit": {
+            "context": 131072,
+            "output": 65536
+          }
+        },
+        "deepseek-ai/DeepSeek-V4-Flash": {
+          "name": "DeepSeek V4 Flash (Albert)",
+          "limit": {
+            "context": 393216,
+            "output": 65536
+          }
+        }
+      }
+    }
+  },
+  "model": "albert/mistralai/Mistral-Medium-3.5-128B",
+  "small_model": "albert/deepseek-ai/DeepSeek-V4-Flash",
+  "mcp": {
+    "data-gouv": {
+      "type": "remote",
+      "url": "https://mcp.data.gouv.fr/mcp",
+      "enabled": true
+    },
+    "context7": {
+      "type": "remote",
+      "url": "https://mcp.context7.com/mcp",
+      "enabled": true,
+      "headers": {
+        "Authorization": "Bearer {env:CONTEXT7_API_KEY}"
+      }
+    },
+    "playwright": {
+      "type": "local",
+      "command": ["npx", "-y", "@playwright/mcp@latest"],
+      "enabled": true
+    },
+    "chrome-devtools": {
+      "type": "local",
+      "command": ["npx", "-y", "chrome-devtools-mcp@latest"],
+      "enabled": true
+    }
+  },
+  "permission": {
+    "edit": "allow",
+    "bash": {
+      ".*": "allow",
+      "git push --force.*": "deny",
+      "git push -f .*": "deny",
+      "sudo .*": "deny"
+    },
+    "webfetch": "allow",
+    "websearch": "allow",
+    "skill": "allow",
+    "task": "allow"
+  }
+}
