@@ -6,14 +6,14 @@
 
 ---
 
-## S1 — Smoke test chaîne minimale (T0.1) ☐
+## S1 — Smoke test chaîne minimale (T0.1) ✅
 **Préconditions :** agent-vm installé, `ALBERT_API_KEY` exportée, OpenCode dans la VM.
 **Étapes :**
 1. `agent-vm opencode` (entrer dans la VM).
 2. Demander : « écris un hello world en Python dans hello.py ».
 **Attendu :** `hello.py` créé dans la VM, contenu valide, réponse venue d'Albert. Aucune clé visible dans les logs/historique.
 
-## S2 — Skill locale + small_model (T0.2) ☐
+## S2 — Skill locale + small_model (T0.2) ✅
 **Préconditions :** `react-dsfr` dans `~/.config/opencode/skills/`.
 **Étapes :**
 1. Demander une page d'accueil DSFR.
@@ -85,11 +85,20 @@
 - La config Albert du bundle est posée **au niveau du projet** (`opencode.json` racine projet), pas dans le global.
 - Aucune clé dupliquée dans `~/.zshenv`.
 
+## S13 — Dry-run non-destructif (T2.4) ✅
+**Préconditions :** dossier de test vide `/tmp/ac-test`.
+**Étapes :**
+1. `mkdir -p /tmp/ac-test`
+2. `HOME=/tmp/ac-test ./install.sh --dry-run`
+3. `find /tmp/ac-test -type f` (avant/après)
+**Attendu :** sortie listant chaque action en `[dry-run]`, exit 0,
+AUCUN fichier créé dans `/tmp/ac-test`, `~/.zshenv` réel inchangé.
+
 ---
 
 ## Critères d'acceptation v1 (Definition of Done globale)
-- [x] S6 ✅.
-- [ ] S1, S2, S3, S4, S7, S11 (bloquants v1 — implémentés, tests runtime en attente).
+- [x] S1, S2, S6, S13 ✅.
+- [ ] S3, S4, S7, S11 (bloquants v1 — implémentés, tests runtime en attente).
 - [ ] Un agent public installe le bundle, choisit son contexte, et produit une page DSFR conforme dans une VM isolée, alimentée par Albert, sans qu'aucune clé ne fuite.
 - [ ] Un utilisateur beta.gouv n'a jamais de convention IAE, et inversement.
 - [ ] Les skills se rafraîchissent au reboot de la VM.

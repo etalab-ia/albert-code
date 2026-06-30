@@ -22,11 +22,21 @@ LIB_DIR="$SELF_DIR/lib"
 # shellcheck source=lib/ui.sh
 source "$LIB_DIR/ui.sh"
 
+# --- Parsing des arguments -----------------------------------------------------
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --dry-run) DRY_RUN=1; export DRY_RUN ;;
+    --help|-h) usage_install; exit 0 ;;
+    *) err "Option inconnue : $1"; usage_install; exit 1 ;;
+  esac
+  shift
+done
+
 ALBERT_CODE_REPO="${ALBERT_CODE_REPO:-$HOME/Dev/albert-code}"
 AGENT_VM_DIR="${AGENT_VM_DIR:-$HOME/Dev/agent-vm}"
 AGENT_VM_REPO="https://github.com/sylvinus/agent-vm.git"
 SKILLS_REPO="https://github.com/etalab-ia/skills.git"
-SKILLS_DIR_HOST="$HOME/.config/opencode/skills"
+SKILLS_DIR_HOST="$OPENCODE_CONFIG_DIR/skills"
 RUNTIME_VM_FILE="$HOME/.agent-vm/runtime.sh"
 ZSHENV="$HOME/.zshenv"
 
@@ -53,7 +63,7 @@ phase_a() {
         err "Homebrew absent. Installe Lima manuellement : https://lima-vm.io/docs/installation/"
         exit 1
       fi
-      brew install lima
+      apply "installer Lima via Homebrew" brew install lima
     else
       warn "Sans Lima, la bulle isolée ne peut pas démarrer. Installe-le puis relance."
     fi
@@ -130,9 +140,9 @@ install_agent_vm() {
     ok "agent-vm déjà cloné dans $AGENT_VM_DIR"
   else
     info "Clonage d'agent-vm…"
-    mkdir -p "$(dirname "$AGENT_VM_DIR")"
-    git clone --depth 1 --quiet "$AGENT_VM_REPO" "$AGENT_VM_DIR"
-    ok "agent-vm cloné dans $AGENT_VM_DIR"
+    apply_mkdir "créer $(dirname "$AGENT_VM_DIR")" "$(dirname "$AGENT_VM_DIR")"
+    apply "cloner agent-vm depuis $AGENT_VM_REPO" git clone --depth 1 --quiet "$AGENT_VM_REPO" "$AGENT_VM_DIR"
+    [ "$DRY_RUN" -eq 0 ] && ok "agent-vm cloné dans $AGENT_VM_DIR" || true
   fi
   # Sourcing dans le shell rc (idempotent)
   local rc=""
@@ -141,12 +151,15 @@ install_agent_vm() {
     bash) rc="$HOME/.bashrc" ;;
     *)    rc="$HOME/.profile" ;;
   esac
-  touch "$rc"
+  apply_touch "créer $rc si absent" "$rc"
   if file_contains "$rc" "agent-vm.sh"; then
     ok "agent-vm déjà sourcé dans $rc"
   else
-    printf '\n# Albert Code — agent-vm\n[ -f "%s/agent-vm.sh" ] && source "%s/agent-vm.sh"\n' "$AGENT_VM_DIR" "$AGENT_VM_DIR" >> "$rc"
-    ok "agent-vm sourcé dans $rc"
+    apply_append "sourcer agent-vm dans $rc" "$rc" \
+      "# Albert Code — agent-vm"
+    apply_append "sourcer agent-vm dans $rc (ligne source)" "$rc" \
+      "[ -f \"$AGENT_VM_DIR/agent-vm.sh\" ] && source \"$AGENT_VM_DIR/agent-vm.sh\""
+    [ "$DRY_RUN" -eq 0 ] && ok "agent-vm sourcé dans $rc" || true
     warn "Ouvre un nouveau terminal (ou « source %s ») pour activer agent-vm." "$rc"
   fi
   # Activation pour la session courante
@@ -156,15 +169,14 @@ install_agent_vm() {
 
 # --- A.5 ~/.agent-vm/runtime.sh — exporte les clés dans la VM au démarrage -----
 ensure_vm_runtime() {
-  mkdir -p "$(dirname "$RUNTIME_VM_FILE")"
-  touch "$RUNTIME_VM_FILE"
+  apply_mkdir "créer $(dirname "$RUNTIME_VM_FILE")" "$(dirname "$RUNTIME_VM_FILE")"
+  apply_touch "créer $RUNTIME_VM_FILE si absent" "$RUNTIME_VM_FILE"
   info "Configuration du runtime VM (~/.agent-vm/runtime.sh)…"
 
   # En-tête idempotent
   if ! file_contains "$RUNTIME_VM_FILE" "albert-code"; then
-    {
-      printf '\n# --- Albert Code : export des clés dans la VM ---\n'
-    } >> "$RUNTIME_VM_FILE"
+    apply_append "en-tête albert-code dans runtime.sh" "$RUNTIME_VM_FILE" \
+      "# --- Albert Code : export des clés dans la VM ---"
   fi
 
   # ALBERT_API_KEY
@@ -182,6 +194,7 @@ ensure_vm_runtime() {
   add_runtime_export "CONTEXT7_API_KEY" "$ctx7_val"
 
   ok "Runtime VM configuré"
+  [ "$DRY_RUN" -eq 0 ] || true
 }
 
 # add_runtime_export <VAR> <VAL> — ajoute export si absent, additive.
@@ -191,10 +204,10 @@ add_runtime_export() {
     return 0
   fi
   if [ -z "$val" ]; then
-    printf 'export %s=""\n' "$var" >> "$RUNTIME_VM_FILE"
+    apply_append "export $var (vide) dans runtime.sh" "$RUNTIME_VM_FILE" "export ${var}=\"\""
   else
     local safe="${val//\'/\'\"\'\"\'}"
-    printf "export %s='%s'\n" "$var" "$safe" >> "$RUNTIME_VM_FILE"
+    apply_append "export $var dans runtime.sh" "$RUNTIME_VM_FILE" "export ${var}='${safe}'"
   fi
 }
 
@@ -202,10 +215,13 @@ add_runtime_export() {
 sync_skills_host() {
   info "Synchronisation des skills État…"
   if [ -d "$SKILLS_DIR_HOST/.git" ]; then
-    git -C "$SKILLS_DIR_HOST" pull --ff-only --quiet 2>/dev/null && ok "skills à jour" || warn "maj skills impossible (hors ligne ?)"
+    apply "maj skills (git pull)" git -C "$SKILLS_DIR_HOST" pull --ff-only --quiet
+    [ "$DRY_RUN" -eq 0 ] && ok "skills à jour" || true
   else
-    mkdir -p "$(dirname "$SKILLS_DIR_HOST")"
-    if git clone --depth 1 --quiet "$SKILLS_REPO" "$SKILLS_DIR_HOST" 2>/dev/null; then
+    apply_mkdir "créer $(dirname "$SKILLS_DIR_HOST")" "$(dirname "$SKILLS_DIR_HOST")"
+    if [ "$DRY_RUN" -eq 1 ]; then
+      apply "cloner skills État dans $SKILLS_DIR_HOST" true
+    elif git clone --depth 1 --quiet "$SKILLS_REPO" "$SKILLS_DIR_HOST" 2>/dev/null; then
       ok "skills clonées dans $SKILLS_DIR_HOST"
     else
       warn "clonage skills impossible (hors ligne ?)"
@@ -218,14 +234,14 @@ persist_zshenv() {
   local var="$1" val="$2"
   [ -z "$val" ] && return 0
   [ "$val" = "<<from-zshenv>>" ] && return 0
-  touch "$ZSHENV" 2>/dev/null || return 0
+  apply_touch "créer $ZSHENV si absent" "$ZSHENV"
   if file_contains "$ZSHENV" "^export ${var}="; then
     ok "$var déjà présente dans ~/.zshenv"
     return 0
   fi
   local safe="${val//\'/\'\"\'\"\'}"
-  printf "export %s='%s'\n" "$var" "$safe" >> "$ZSHENV"
-  ok "$var ajoutée à ~/.zshenv"
+  apply_append "ajouter $var à ~/.zshenv" "$ZSHENV" "export ${var}='${safe}'"
+  [ "$DRY_RUN" -eq 0 ] && ok "$var ajoutée à ~/.zshenv" || true
 }
 
 # =============================================================================
@@ -275,7 +291,7 @@ phase_b() {
 
   # B.4 .agent-vm.runtime.sh (runtime de référence)
   copy_template "runtime/agent-vm.runtime.sh" "./.agent-vm.runtime.sh" "runtime VM (sync skills + clés)"
-  chmod +x "./.agent-vm.runtime.sh" 2>/dev/null || true
+  apply "chmod +x .agent-vm.runtime.sh" chmod +x "./.agent-vm.runtime.sh" 2>/dev/null || true
 
   echo
   ok "Projet configuré pour le contexte « $context »."
@@ -287,8 +303,6 @@ phase_b() {
   info "Au 1er lancement, agent-vm crée la VM (~quelques minutes)."
   info "Les skills se synchronisent automatiquement au démarrage."
 }
-
-# copy_template <src relative to SELF_DIR> <dest> <label>
 copy_template() {
   local src="$SELF_DIR/$1" dest="$2" label="$3"
   if [ -f "$dest" ]; then
@@ -296,7 +310,7 @@ copy_template() {
   elif [ ! -f "$src" ]; then
     err "Modèle introuvable : $src"
   else
-    cp "$src" "$dest"
+    apply_cp "poser $dest ($label)" "$src" "$dest"
     ok "%s posé (%s)" "$dest" "$label"
   fi
 }
@@ -310,6 +324,3 @@ echo
 phase_b
 echo
 title "C'est prêt. Bon code avec Albert."
-
-
-# copy_template <src relative to SELF_DIR> <dest> <label>

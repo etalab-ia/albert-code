@@ -8,18 +8,18 @@
 
 ## EPIC 0 — Spike technique (dé-risquer la chaîne)
 
-### T0.1 🔴 Smoke test chaîne minimale ⏳ (agent-vm non installé)
+### T0.1 🔴 Smoke test chaîne minimale ✅ validé
 **But :** prouver que agent-vm + OpenCode + Albert (`Mistral-Medium-3.5-128B`) fonctionnent ensemble.
 **Tâches :**
 - Installer agent-vm (Lima) ; `agent-vm setup`.
 - Config OpenCode minimale avec provider Albert (`@ai-sdk/openai-compatible`, baseURL, `{env:ALBERT_API_KEY}`).
 - Dans la VM : `opencode run "écris un hello world en python"` → vérifier réponse + écriture fichier.
-**DoD :** un fichier est créé par l'agent dans la VM, via Albert, sans clé en clair. → `TESTS.md` S1.
+**DoD :** un fichier est créé par l'agent dans la VM, via Albert, sans clé en clair. → `TESTS.md` S1 ✅.
 
-### T0.2 🔴 Valider une skill + le small_model ⏳ (agent-vm non installé)
+### T0.2 🔴 Valider une skill + le small_model ✅ validé
 **But :** confirmer chargement skill local + bascule modèle.
 **Tâches :** placer `react-dsfr` dans `~/.config/opencode/skills/` ; demander une page DSFR ; configurer `small_model = DeepSeek-V4-Flash` et vérifier qu'il est utilisé pour les tâches légères.
-**DoD :** page DSFR générée conforme + small_model actif. → `TESTS.md` S2.
+**DoD :** page DSFR générée conforme + small_model actif. → `TESTS.md` S2 ✅.
 
 ---
 
@@ -80,6 +80,21 @@ Config MCP de référence :
 ### T2.3 🟠 Couche universelle commune ✅ implémenté
 **But :** factoriser le socle (anglais code / FR UI, RGAA, ANSSI, RGPD, secrets, souveraineté) sans casser l'isolation.
 **DoD :** le socle est présent dans les 3 profils, les divergences restent dures par profil. → `TESTS.md` S6.
+
+### T2.4 🔴 Mode --dry-run + sandbox de test (testabilité) ✅ implémenté
+**But :** pouvoir tester install.sh / runtime sur une machine déjà configurée sans rien modifier.
+**Tâches :**
+- `install.sh` et `runtime/agent-vm.runtime.sh` acceptent `--dry-run` : chaque action
+  (write fichier, clone/pull skills, append `~/.zshenv`, install outil) est AFFICHÉE
+  préfixée `[dry-run]` mais PAS exécutée ; exit 0.
+- Toutes les écritures passent par UNE fonction unique (ex. `apply()`), qui en dry-run
+  logge au lieu d'exécuter → aucun chemin ne peut « oublier » le dry-run.
+- Respecter des overrides d'env pour sandboxer les écritures :
+  `OPENCODE_CONFIG_DIR` (défaut `~/.config/opencode`) et un `HOME` configurable
+  pour `~/.zshenv` → tout peut être redirigé vers un dossier jetable.
+- `--help` documente `--dry-run` et ces variables.
+**DoD :** `HOME=/tmp/ac-test ./install.sh --dry-run` n'écrit AUCUN fichier
+(diff de `/tmp/ac-test` avant/après = vide), affiche le plan complet, exit 0. → TESTS S13.
 
 ---
 

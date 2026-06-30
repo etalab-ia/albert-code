@@ -17,6 +17,37 @@ else
   C_RESET=""; C_BOLD=""; C_RED=""; C_GREEN=""; C_YELLOW=""; C_BLUE=""; C_CYAN=""; C_GREY=""
 fi
 
+# --- Dry-run + sandbox ---------------------------------------------------------
+# DRY_RUN=1          : chaque mutation est loggée [dry-run] mais PAS exécutée.
+# OPENCODE_CONFIG_DIR : override ~/.config/opencode (sandbox test).
+# HOME               : override → redirige ~/.zshenv etc. vers un dossier jetable.
+DRY_RUN="${DRY_RUN:-0}"
+OPENCODE_CONFIG_DIR="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
+
+# _dry_gate <description> : LE point d'entrée unique pour toute mutation.
+# Retourne 0 si l'action doit s'exécuter, 1 si dry-run l'a skip (déjà loggé).
+# Règle : AUCUNE écriture (fichier, clone, install, append) ne peut contourner _dry_gate.
+_dry_gate() {
+  if [ "$DRY_RUN" -eq 1 ]; then
+    printf '%s[dry-run] %s%s\n' "${C_GREY}" "$1" "${C_RESET}"
+    return 1
+  fi
+  return 0
+}
+
+# apply <desc> <cmd...>          — exécute une commande (git clone, brew, chmod…).
+apply()        { local desc="$1"; shift; _dry_gate "$desc" || return 0; "$@"; }
+# apply_append <desc> <file> <line> — ajoute une ligne à un fichier.
+apply_append() { local desc="$1" file="$2" line="$3"; _dry_gate "$desc" || return 0; printf '%s\n' "$line" >> "$file"; }
+# apply_write <desc> <file> <content> — écrit (écrase) un fichier.
+apply_write()  { local desc="$1" file="$2" content="$3"; _dry_gate "$desc" || return 0; printf '%s' "$content" > "$file"; }
+# apply_cp <desc> <src> <dest>  — copie un fichier.
+apply_cp()     { local desc="$1" src="$2" dest="$3"; _dry_gate "$desc" || return 0; cp "$src" "$dest"; }
+# apply_mkdir <desc> <dir>      — crée un dossier (-p).
+apply_mkdir()  { local desc="$1" dir="$2"; _dry_gate "$desc" || return 0; mkdir -p "$dir"; }
+# apply_touch <desc> <file>     — touch un fichier.
+apply_touch()  { local desc="$1" file="$2"; _dry_gate "$desc" || return 0; touch "$file" 2>/dev/null || true; }
+
 # --- Messages ------------------------------------------------------------------
 # Une action = un retour. Tutoiement, français.
 # Acceptent le formatage printf : ok "%s fait" "$x"  OU  ok "message simple".
@@ -68,6 +99,12 @@ prompt_choice() {
   local question="$1"; shift
   local choices=("$@")
   local n choice
+  if [ "$DRY_RUN" -eq 1 ]; then
+    choice="${choices[0]}"
+    printf '%s[dry-run] prompt: %s → %s%s\n' "${C_GREY}" "$question" "$choice" "${C_RESET}"
+    printf '%s' "$choice"
+    return 0
+  fi
   while true; do
     title "$question"
     for i in "${!choices[@]}"; do
@@ -88,6 +125,11 @@ prompt_choice() {
 # prompt_secret <question> : lit une valeur masquée, renvoie via stdout.
 prompt_secret() {
   local question="$1"
+  if [ "$DRY_RUN" -eq 1 ]; then
+    printf '%s[dry-run] prompt: %s (ignoré)\n' "${C_GREY}" "$question" "${C_RESET}"
+    printf ''
+    return 0
+  fi
   printf '%s%s%s : ' "${C_BOLD}" "$question" "${C_RESET}"
   stty -echo 2>/dev/null || true
   read -r val </dev/tty
@@ -100,6 +142,11 @@ prompt_secret() {
 prompt_input() {
   local question="$1"
   local default="${2:-}"
+  if [ "$DRY_RUN" -eq 1 ]; then
+    printf '%s[dry-run] prompt: %s → %s%s\n' "${C_GREY}" "$question" "${default:-<vide>}" "${C_RESET}"
+    printf '%s' "$default"
+    return 0
+  fi
   if [ -n "$default" ]; then
     printf '%s%s%s [%s] : ' "${C_BOLD}" "$question" "${C_RESET}" "$default"
   else
@@ -112,6 +159,10 @@ prompt_input() {
 # confirm <question> : 0 si oui, 1 si non.
 confirm() {
   local question="$1"
+  if [ "$DRY_RUN" -eq 1 ]; then
+    printf '%s[dry-run] confirm: %s → non%s\n' "${C_GREY}" "$question" "${C_RESET}"
+    return 1
+  fi
   local answer
   printf '%s%s%s [o/N] : ' "${C_BOLD}" "$question" "${C_RESET}"
   read -r answer </dev/tty
@@ -121,4 +172,46 @@ confirm() {
 # file_contains <fichier> <pattern> : 0 si le pattern est présent.
 file_contains() {
   grep -q -- "$2" "$1" 2>/dev/null
+}
+
+# --- Usage / help --------------------------------------------------------------
+# usage_install : texte d'aide pour install.sh.
+usage_install() {
+  cat <<'USAGE'
+Albert Code — installation
+
+Usage: ./install.sh [--dry-run] [--help]
+
+Options:
+  --dry-run   Affiche chaque action sans l'exécuter. Aucun fichier n'est écrit.
+              Toutes les écritures passent par _dry_gate() → aucune ne peut être oubliée.
+  --help      Affiche cette aide.
+
+Variables d'environnement (sandbox) :
+  HOME                   Redirige ~/.zshenv, ~/.config/opencode, etc.
+  OPENCODE_CONFIG_DIR     Dossier de config OpenCode (défaut: ~/.config/opencode).
+  ALBERT_CODE_REPO        Chemin du dépôt albert-code (défaut: ~/Dev/albert-code).
+  AGENT_VM_DIR            Dossier d'installation d'agent-vm (défaut: ~/Dev/agent-vm).
+
+Exemple (test non-destructif) :
+  mkdir -p /tmp/ac-test
+  HOME=/tmp/ac-test ./install.sh --dry-run
+USAGE
+}
+
+# usage_runtime : texte d'aide pour runtime/agent-vm.runtime.sh.
+usage_runtime() {
+  cat <<'USAGE'
+Albert Code — runtime VM (agent-vm)
+
+Usage: ./.agent-vm.runtime.sh [--dry-run] [--help]
+
+Options:
+  --dry-run   Affiche chaque action sans l'exécuter (test sur VM déjà configurée).
+  --help      Affiche cette aide.
+
+Variables d'environnement (sandbox) :
+  HOME                   Redirige ~/.zshenv, ~/.config/opencode dans la VM.
+  OPENCODE_CONFIG_DIR     Dossier de config OpenCode (défaut: ~/.config/opencode).
+USAGE
 }
