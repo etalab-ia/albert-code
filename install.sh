@@ -162,21 +162,24 @@ install_agent_vm() {
     [ "$DRY_RUN" -eq 0 ] && ok "agent-vm sourcé dans $rc" || true
     warn "Ouvre un nouveau terminal (ou « source %s ») pour activer agent-vm." "$rc"
   fi
-  # Activation pour la session courante
-  # shellcheck disable=SC1090
-  [ -f "$AGENT_VM_DIR/agent-vm.sh" ] && source "$AGENT_VM_DIR/agent-vm.sh" 2>/dev/null || true
+  # Activation pour la session courante (pas en dry-run)
+  if [ "$DRY_RUN" -eq 0 ]; then
+    # shellcheck disable=SC1090
+    [ -f "$AGENT_VM_DIR/agent-vm.sh" ] && source "$AGENT_VM_DIR/agent-vm.sh" 2>/dev/null || true
+  fi
 }
 
 # --- A.5 ~/.agent-vm/runtime.sh — exporte les clés dans la VM au démarrage -----
 ensure_vm_runtime() {
   apply_mkdir "créer $(dirname "$RUNTIME_VM_FILE")" "$(dirname "$RUNTIME_VM_FILE")"
   apply_touch "créer $RUNTIME_VM_FILE si absent" "$RUNTIME_VM_FILE"
+  apply_chmod "chmod 600 $RUNTIME_VM_FILE (contient une clé)" 600 "$RUNTIME_VM_FILE"
   info "Configuration du runtime VM (~/.agent-vm/runtime.sh)…"
 
   # En-tête idempotent
-  if ! file_contains "$RUNTIME_VM_FILE" "albert-code"; then
+  if ! file_contains "$RUNTIME_VM_FILE" "$AC_MARKER"; then
     apply_append "en-tête albert-code dans runtime.sh" "$RUNTIME_VM_FILE" \
-      "# --- Albert Code : export des clés dans la VM ---"
+      "$AC_MARKER"
   fi
 
   # ALBERT_API_KEY
@@ -235,6 +238,7 @@ persist_zshenv() {
   [ -z "$val" ] && return 0
   [ "$val" = "<<from-zshenv>>" ] && return 0
   apply_touch "créer $ZSHENV si absent" "$ZSHENV"
+  apply_chmod "chmod 600 $ZSHENV (contient une clé)" 600 "$ZSHENV"
   if file_contains "$ZSHENV" "^export ${var}="; then
     ok "$var déjà présente dans ~/.zshenv"
     return 0

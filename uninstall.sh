@@ -23,6 +23,7 @@ SKILLS_DIR="$HOME/.config/opencode/skills"
 RUNTIME_VM_FILE="$HOME/.agent-vm/runtime.sh"
 ZSHENV="$HOME/.zshenv"
 AGENT_VM_DIR="${AGENT_VM_DIR:-$HOME/Dev/agent-vm}"
+AC_MARKER="# --- albert-code : clés VM ---"
 
 banner
 title "Désinstallation d'Albert Code"
@@ -37,12 +38,13 @@ else
 fi
 
 # 2. Bloc Albert Code dans ~/.agent-vm/runtime.sh
-if [ -f "$RUNTIME_VM_FILE" ] && file_contains "$RUNTIME_VM_FILE" "albert-code"; then
+#    Retire : la ligne marqueur + les exports ALBERT_API_KEY / CONTEXT7_API_KEY.
+if [ -f "$RUNTIME_VM_FILE" ] && file_contains "$RUNTIME_VM_FILE" "$AC_MARKER"; then
   if confirm "Retirer le bloc Albert Code de ~/.agent-vm/runtime.sh ?"; then
-    # On retire les lignes entre le marqueur et les exports Albert/Context7.
     _tmp="$(mktemp)"
-    awk '/^# --- Albert Code : export des clés dans la VM ---$/{skip=1} skip && /^export (ALBERT_API_KEY|CONTEXT7_API_KEY)=/{next} /^export (ALBERT_API_KEY|CONTEXT7_API_KEY)=""/{next} {skip=0; print}' "$RUNTIME_VM_FILE" > "$_tmp" || cp "$RUNTIME_VM_FILE" "$_tmp"
+    grep -vE "$AC_MARKER|^export (ALBERT_API_KEY|CONTEXT7_API_KEY)=" "$RUNTIME_VM_FILE" > "$_tmp" || true
     mv "$_tmp" "$RUNTIME_VM_FILE"
+    chmod 600 "$RUNTIME_VM_FILE" 2>/dev/null || true
     ok "bloc Albert Code retiré de ~/.agent-vm/runtime.sh"
   fi
 fi
@@ -54,6 +56,7 @@ for var in ALBERT_API_KEY CONTEXT7_API_KEY; do
       _tmp="$(mktemp)"
       grep -vE "^export ${var}=" "$ZSHENV" > "$_tmp" || true
       mv "$_tmp" "$ZSHENV"
+      chmod 600 "$ZSHENV" 2>/dev/null || true
       ok "$var retirée de ~/.zshenv"
     fi
   fi

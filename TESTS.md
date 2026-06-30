@@ -94,10 +94,21 @@
 **Attendu :** sortie listant chaque action en `[dry-run]`, exit 0,
 AUCUN fichier créé dans `/tmp/ac-test`, `~/.zshenv` réel inchangé.
 
+## S14 — Désinstallation propre (T-FIX-1, T-FIX-4) ✅
+**Préconditions :** dossier de test `/tmp/ac-test` avec Albert Code installé.
+**Étapes :**
+1. `HOME=/tmp/ac-test ./install.sh` (install réelle dans la sandbox).
+2. Vérifier : `~/.agent-vm/runtime.sh` contient le marqueur + 2 exports ; `~/.zshenv` contient 2 clés.
+3. `HOME=/tmp/ac-test ./uninstall.sh` (répondre « oui » à toutes les questions).
+4. Vérifier : `~/.agent-vm/runtime.sh` ne contient PLUS le marqueur ni les exports ;
+   `~/.zshenv` ne contient PLUS les clés.
+**Attendu :** aucune clé ne subsiste dans `~/.agent-vm/runtime.sh` ni `~/.zshenv`,
+et le bloc marqueur a disparu.
+
 ---
 
 ## Critères d'acceptation v1 (Definition of Done globale)
-- [x] S1, S2, S6, S13 ✅.
+- [x] S1, S2, S6, S13, S14 ✅.
 - [ ] S3, S4, S7, S11 (bloquants v1 — implémentés, tests runtime en attente).
 - [ ] Un agent public installe le bundle, choisit son contexte, et produit une page DSFR conforme dans une VM isolée, alimentée par Albert, sans qu'aucune clé ne fuite.
 - [ ] Un utilisateur beta.gouv n'a jamais de convention IAE, et inversement.

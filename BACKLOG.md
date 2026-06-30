@@ -100,6 +100,36 @@ Config MCP de référence :
 
 ## EPIC 4 — Standards & CI
 
+### T-FIX-1 🟠 uninstall.sh laisse les clés + install non-idempotent ✅ implémenté
+**But :** corriger le marqueur cassé (casse-sensible) et le retrait awk défectueux.
+**Tâches :**
+- Définir UNE constante marqueur unique (`AC_MARKER`) utilisée à l'écriture (install.sh) ET aux tests (install.sh idempotence, uninstall.sh retrait).
+- Réécrire le retrait dans uninstall.sh : `grep -vE` pour supprimer marqueur + lignes `export ALBERT_API_KEY=` / `export CONTEXT7_API_KEY=`.
+**DoD :** install.sh relancé n'ajoute pas un 2e en-tête (S4) ; uninstall.sh retire le bloc ET les 2 clés de ~/.agent-vm/runtime.sh (S14).
+
+### T-FIX-2 🟠 Posture sécurité clé/bash ✅ implémenté
+**But :** durcir la posture sécurité (clé, exfiltration, permissions bash).
+**Tâches :**
+- Recommander/imposer une clé Albert DÉDIÉE par projet (révocable) → README + AGENTS.
+- Documenter le risque résiduel d'exfiltration (prompt-injection) dans README + AGENTS.
+- Corriger la deny-list git push : `git push.*(--force|-f | --force-with-lease)` (l'ancienne ne matchait pas `... main --force`).
+**DoD :** README + AGENTS documentent clé dédiée + exfiltration ; config bash deny-list corrigée.
+
+### T-FIX-3 🟡 Quick wins ✅ implémenté
+**But :** durcissements rapides.
+**Tâches :**
+- `templates/.github/workflows/security.yml` : pin `trivy-action@0.28.0` (au lieu de `@master`).
+- `chmod 600` sur `~/.zshenv` et `~/.agent-vm/runtime.sh` après création (contiennent une clé).
+- `local val` dans `prompt_secret`/`prompt_input` (`lib/ui.sh`).
+- Ne pas `source agent-vm.sh` en `--dry-run` (`install.sh`).
+**DoD :** bash -n OK ; dry-run ne source rien ; permissions 600 appliquées.
+
+### T-FIX-4 🟠 Test désinstallation ✅ implémenté
+**But :** valider la désinstallation complète.
+**DoD :** S14 — après install puis uninstall, aucune clé ne subsiste dans `~/.agent-vm/runtime.sh` ni `~/.zshenv`, et le bloc marqueur a disparu.
+
+---
+
 ### T4.1 🟠 Skill `conventions-iae` (dans etalab-ia/skills)
 **But :** house style Python/Albert (uv, Ruff `line-length=150`/`py312`/ignores, pytest async unit+intég ≥80 %, Alembic upgrade+downgrade, Makefile/cli.py, PR DoD). PR sur `etalab-ia/skills`.
 **DoD :** skill chargée par OpenCode, déclenchée sur projet Python. → `TESTS.md` S9.

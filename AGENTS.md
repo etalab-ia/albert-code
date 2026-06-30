@@ -119,8 +119,11 @@ albert-code/
 
 ### Secrets & données (NON négociable)
 - **Jamais** de secret / clé API / token / URL de prod en clair dans le repo ou les commits. Lire depuis l'environnement (`{env:ALBERT_API_KEY}`) ou `~/.zshenv`.
+- **Clé dédiée par projet** : recommander une clé Albert révocable par usage, pas la clé perso maître (une fuite est contenue et rotable).
+- **Risque d'exfiltration** : l'IA peut lire du contenu malveillant (prompt-injection). La VM isole du réseau hôte, mais l'agent peut tenter des appels réseau. Mitigations : clé dédiée révocable, permissions bash durcies (`sudo` / `git push --force` = deny), validation humaine de chaque PR.
 - **Jamais** de données réelles dans des exemples/fixtures.
 - gitleaks recommandé en pre-commit ; ne jamais contourner avec `--no-verify`.
+- `chmod 600` sur tout fichier contenant une clé (`~/.zshenv`, `~/.agent-vm/runtime.sh`).
 
 ### Git
 - Commits **Conventional Commits** : `type(scope): message` (`feat|fix|docs|refactor|chore|test`). Message qui explique le *pourquoi*. Squash des commits intermédiaires avant push.

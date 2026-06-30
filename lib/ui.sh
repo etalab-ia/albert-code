@@ -24,6 +24,10 @@ fi
 DRY_RUN="${DRY_RUN:-0}"
 OPENCODE_CONFIG_DIR="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
 
+# Marqueur unique pour les blocs Albert Code dans les fichiers de l'utilisateur.
+# Utilisé à l'écriture (install.sh) ET aux tests (install.sh idempotence, uninstall.sh retrait).
+AC_MARKER="# --- albert-code : clés VM ---"
+
 # _dry_gate <description> : LE point d'entrée unique pour toute mutation.
 # Retourne 0 si l'action doit s'exécuter, 1 si dry-run l'a skip (déjà loggé).
 # Règle : AUCUNE écriture (fichier, clone, install, append) ne peut contourner _dry_gate.
@@ -47,6 +51,8 @@ apply_cp()     { local desc="$1" src="$2" dest="$3"; _dry_gate "$desc" || return
 apply_mkdir()  { local desc="$1" dir="$2"; _dry_gate "$desc" || return 0; mkdir -p "$dir"; }
 # apply_touch <desc> <file>     — touch un fichier.
 apply_touch()  { local desc="$1" file="$2"; _dry_gate "$desc" || return 0; touch "$file" 2>/dev/null || true; }
+# apply_chmod <desc> <mode> <file> — change les permissions d'un fichier.
+apply_chmod()  { local desc="$1" mode="$2" file="$3"; _dry_gate "$desc" || return 0; chmod "$mode" "$file" 2>/dev/null || true; }
 
 # --- Messages ------------------------------------------------------------------
 # Une action = un retour. Tutoiement, français.
@@ -111,7 +117,11 @@ prompt_choice() {
       printf '  %s%d)%s %s\n' "${C_CYAN}" "$((i+1))" "${C_RESET}" "${choices[$i]}"
     done
     printf '%s→ %s' "${C_BOLD}" "${C_RESET}"
-    read -r n </dev/tty
+    if [ -t 0 ]; then
+      read -r n </dev/tty
+    else
+      read -r n
+    fi
     if [[ "$n" =~ ^[0-9]+$ ]] && [ "$n" -ge 1 ] && [ "$n" -le "${#choices[@]}" ]; then
       choice="${choices[$((n-1))]}"
       printf '%s✓ %s choisi%s\n' "${C_GREEN}" "$choice" "${C_RESET}"
@@ -132,7 +142,12 @@ prompt_secret() {
   fi
   printf '%s%s%s : ' "${C_BOLD}" "$question" "${C_RESET}"
   stty -echo 2>/dev/null || true
-  read -r val </dev/tty
+  local val
+  if [ -t 0 ]; then
+    read -r val </dev/tty
+  else
+    read -r val
+  fi
   stty echo 2>/dev/null || true
   printf '\n'
   printf '%s' "$val"
@@ -152,7 +167,12 @@ prompt_input() {
   else
     printf '%s%s%s : ' "${C_BOLD}" "$question" "${C_RESET}"
   fi
-  read -r val </dev/tty
+  local val
+  if [ -t 0 ]; then
+    read -r val </dev/tty
+  else
+    read -r val
+  fi
   printf '%s' "${val:-$default}"
 }
 
@@ -165,7 +185,11 @@ confirm() {
   fi
   local answer
   printf '%s%s%s [o/N] : ' "${C_BOLD}" "$question" "${C_RESET}"
-  read -r answer </dev/tty
+  if [ -t 0 ]; then
+    read -r answer </dev/tty
+  else
+    read -r answer
+  fi
   [[ "$answer" =~ ^[oOyY] ]]
 }
 

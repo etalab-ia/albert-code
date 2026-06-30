@@ -67,6 +67,7 @@ _apply()        { local d="$1"; shift; _dry_gate "$d" || return 0; "$@"; }
 _apply_append() { local d="$1" f="$2" l="$3"; _dry_gate "$d" || return 0; printf '%s\n' "$l" >> "$f"; }
 _apply_mkdir()  { local d="$1" dir="$2"; _dry_gate "$d" || return 0; mkdir -p "$dir"; }
 _apply_touch()  { local d="$1" f="$2"; _dry_gate "$d" || return 0; touch "$f" 2>/dev/null || true; }
+_apply_chmod()  { local d="$1" mode="$2" f="$3"; _dry_gate "$d" || return 0; chmod "$mode" "$f" 2>/dev/null || true; }
 
 SKILLS_REPO="https://github.com/etalab-ia/skills.git"
 SKILLS_DIR="$OPENCODE_CONFIG_DIR/skills"
@@ -83,6 +84,7 @@ persist_env_var() {
   [ -z "$val" ] && return 0
 
   _apply_touch "créer $zshenv si absent" "$zshenv"
+  _apply_chmod "chmod 600 $zshenv (contient une clé)" 600 "$zshenv"
 
   if grep -qE "^export ${var}=" "$zshenv" 2>/dev/null; then
     _ok "$var déjà présente dans ~/.zshenv (inchangée)"

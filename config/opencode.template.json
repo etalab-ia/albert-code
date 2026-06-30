@@ -57,8 +57,7 @@
     "edit": "allow",
     "bash": {
       ".*": "allow",
-      "git push --force.*": "deny",
-      "git push -f .*": "deny",
+      "git push.*(--force|-f | --force-with-lease)": "deny",
       "sudo .*": "deny"
     },
     "webfetch": "allow",

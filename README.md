@@ -31,6 +31,8 @@ Il te faut :
 
 > 💡 Pas de clé Albert ? Tu peux quand même lancer l'installation : le script t'expliquera comment l'obtenir et tu reviendras après.
 
+> 🔑 **Clé dédiée par projet (recommandé).** Crée une clé Albert spécifique pour Albert Code, pas ta clé perso maître. Une clé dédiée est révocable : en cas de fuite, tu la révoques sans toucher tes autres usages. Voir la [doc Albert API](https://doc.incubateur.net/alliance/albert-api).
+
 ---
 
 ## Installation
@@ -107,6 +109,15 @@ L'IA travaille en mode autonome (elle n'arrête pas de te demander la permission
 - la bulle est jetable : en cas de souci, on la supprime et on recommence.
 
 > Règle d'or de l'État : on ne fait **jamais** tourner un agent de code directement sur sa machine. Albert Code applique ça par défaut.
+
+### Risque résiduel : exfiltration par prompt-injection
+
+L'IA peut lire du contenu (issues, pages web, fichiers du projet) qui contient des instructions malveillantes. Même si elle n'a pas accès à tes mots de passe, elle pourrait tenter d'exfiltrer ta clé Albert (par ex. via un appel réseau depuis la VM). Mitigations :
+
+- **Clé dédiée** révocable (voir ci-dessus).
+- La VM est isolée du réseau hôte (pas d'accès direct à tes cookies/sessions).
+- Les permissions bash refusent `sudo` et `git push --force`.
+- Reste vigilant : **valide chaque PR** avant merge, ne donne pas de données sensibles (RH, médicales, classifiées) à l'agent.
 
 ---
 
