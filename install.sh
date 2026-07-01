@@ -174,66 +174,67 @@ ensure_vm_runtime() {
   apply_chmod "chmod 600 $RUNTIME_VM_FILE (contient une clé)" 600 "$RUNTIME_VM_FILE"
   info "Configuration du runtime VM (~/.agent-vm/runtime.sh)…"
 
-  # Migration : ancien bloc export-only → nouveau format (persiste ~/.zshenv + export)
-  if file_contains "$RUNTIME_VM_FILE" "$AC_MARKER" && ! file_contains "$RUNTIME_VM_FILE" "grep -q.*ALBERT_API_KEY"; then
-    _tmp="$(mktemp)"
-    grep -vE "$AC_MARKER|^export (ALBERT_API_KEY|CONTEXT7_API_KEY)=" "$RUNTIME_VM_FILE" > "$_tmp" || true
-    mv "$_tmp" "$RUNTIME_VM_FILE"
-    apply_append "en-tête albert-code dans runtime.sh (migration)" "$RUNTIME_VM_FILE" "$AC_MARKER"
-    info "Ancien bloc runtime.sh export-only migré vers nouveau format (persistence ~/.zshenv)."
-  fi
-
-  # En-tête idempotent (avec blank line de sécurité)
-  if ! file_contains "$RUNTIME_VM_FILE" "$AC_MARKER"; then
-    # S'assurer que le marqueur est sur sa propre ligne
-    apply_append "blank line dans runtime.sh" "$RUNTIME_VM_FILE" ""
-    apply_append "en-tête albert-code dans runtime.sh" "$RUNTIME_VM_FILE" "$AC_MARKER"
-  fi
-
-  # ALBERT_API_KEY
+  # Collect les valeurs
   local albert_val="${ALBERT_API_KEY:-}"
   if [ -z "$albert_val" ] && file_contains "$ZSHENV" "ALBERT_API_KEY"; then
     albert_val="$(grep -E "^export ALBERT_API_KEY=" "$ZSHENV" | head -1 | sed -E "s/^export ALBERT_API_KEY=['\"]?//; s/['\"]?$//")"
   fi
-  add_runtime_export "ALBERT_API_KEY" "$albert_val"
-
-  # CONTEXT7_API_KEY
   local ctx7_val="${CONTEXT7_API_KEY:-}"
   if [ -z "$ctx7_val" ] && file_contains "$ZSHENV" "CONTEXT7_API_KEY"; then
     ctx7_val="$(grep -E "^export CONTEXT7_API_KEY=" "$ZSHENV" | head -1 | sed -E "s/^export CONTEXT7_API_KEY=['\"]?//; s/['\"]?$//")"
   fi
-  add_runtime_export "CONTEXT7_API_KEY" "$ctx7_val"
+
+  local safe_albert="" safe_ctx=""
+  [ -n "$albert_val" ] && safe_albert="${albert_val//\'/\'\"\'\"\'}"
+  [ -n "$ctx7_val" ] && safe_ctx="${ctx7_val//\'/\'\"\'\"\'}"
+
+  # Supprime TOUT bloc existant (ancien format export-only OU nouveau format)
+  # → ne touche JAMAIS aux lignes hors du bloc (exports perso, etc.)
+  if file_contains "$RUNTIME_VM_FILE" "$AC_MARKER"; then
+    local end_pat="$AC_MARKER_END"
+    if ! file_contains "$RUNTIME_VM_FILE" "$AC_MARKER_END"; then
+      end_pat='$'  # ancien format : pas de marqueur de fin → supprimer jusqu'à EOF
+    fi
+    _tmp="$(mktemp)"
+    # sed | délimiteur (évite / dans AC_MARKER_END)
+    sed -E "\|^${AC_MARKER}$|,\|^${end_pat}$|d" "$RUNTIME_VM_FILE" > "$_tmp" || cp "$RUNTIME_VM_FILE" "$_tmp"
+    mv "$_tmp" "$RUNTIME_VM_FILE"
+    info "Ancien bloc runtime.sh supprimé (migration ou réécriture)."
+  fi
+
+  # Écrit le nouveau bloc complet (idempotent : si marker absent après, écrire)
+  if ! file_contains "$RUNTIME_VM_FILE" "$AC_MARKER"; then
+    apply_append "blank line dans runtime.sh" "$RUNTIME_VM_FILE" ""
+    apply_append "albert-code block start" "$RUNTIME_VM_FILE" "$AC_MARKER"
+    # ALBERT_API_KEY
+    if [ -n "$albert_val" ]; then
+      apply_append "persist ALBERT_API_KEY dans runtime.sh" "$RUNTIME_VM_FILE" \
+        "grep -q 'ALBERT_API_KEY' ~/.zshenv 2>/dev/null || echo \"export ALBERT_API_KEY='${safe_albert}'\" >> ~/.zshenv"
+      apply_append "export ALBERT_API_KEY dans runtime.sh" "$RUNTIME_VM_FILE" \
+        "export ALBERT_API_KEY='${safe_albert}'"
+    else
+      apply_append "persist ALBERT_API_KEY (vide) dans runtime.sh" "$RUNTIME_VM_FILE" \
+        "grep -q 'ALBERT_API_KEY' ~/.zshenv 2>/dev/null || echo \"export ALBERT_API_KEY=''\" >> ~/.zshenv"
+      apply_append "export ALBERT_API_KEY (vide) dans runtime.sh" "$RUNTIME_VM_FILE" \
+        "export ALBERT_API_KEY=''"
+    fi
+    # CONTEXT7_API_KEY
+    if [ -n "$ctx7_val" ]; then
+      apply_append "persist CONTEXT7_API_KEY dans runtime.sh" "$RUNTIME_VM_FILE" \
+        "grep -q 'CONTEXT7_API_KEY' ~/.zshenv 2>/dev/null || echo \"export CONTEXT7_API_KEY='${safe_ctx}'\" >> ~/.zshenv"
+      apply_append "export CONTEXT7_API_KEY dans runtime.sh" "$RUNTIME_VM_FILE" \
+        "export CONTEXT7_API_KEY='${safe_ctx}'"
+    else
+      apply_append "persist CONTEXT7_API_KEY (vide) dans runtime.sh" "$RUNTIME_VM_FILE" \
+        "grep -q 'CONTEXT7_API_KEY' ~/.zshenv 2>/dev/null || echo \"export CONTEXT7_API_KEY=''\" >> ~/.zshenv"
+      apply_append "export CONTEXT7_API_KEY (vide) dans runtime.sh" "$RUNTIME_VM_FILE" \
+        "export CONTEXT7_API_KEY=''"
+    fi
+    apply_append "albert-code block end" "$RUNTIME_VM_FILE" "$AC_MARKER_END"
+  fi
 
   ok "Runtime VM configuré"
   [ "$DRY_RUN" -eq 0 ] || true
-}
-
-# add_runtime_export <VAR> <VAL>
-# Ajoute au runtime.sh :
-#   1. grep -q 'VAR' ~/.zshenv || echo "export VAR='val'" >> ~/.zshenv   (persistence VM ~/.zshenv)
-#   2. export VAR='val'                                                    (session courante)
-# Idempotent : chaque ligne est gardée par un grep individuel.
-add_runtime_export() {
-  local var="$1" val="$2"
-  local safe
-  if [ -z "$val" ]; then
-    safe=""
-  else
-    safe="${val//\'/\'\"\'\"\'}"
-  fi
-  # Ligne de persistance ~/.zshenv (gardée par grep -q)
-  if ! file_contains "$RUNTIME_VM_FILE" "grep -q '$var' ~/.zshenv"; then
-    apply_append "persist $var dans runtime.sh" "$RUNTIME_VM_FILE" \
-      "grep -q '$var' ~/.zshenv 2>/dev/null || echo \"export ${var}='${safe}'\" >> ~/.zshenv"
-  fi
-  # Export session courante (gardée par export VAR=)
-  if ! file_contains "$RUNTIME_VM_FILE" "^export ${var}="; then
-    if [ -z "$val" ]; then
-      apply_append "export $var (vide) dans runtime.sh" "$RUNTIME_VM_FILE" "export ${var}=\"\""
-    else
-      apply_append "export $var dans runtime.sh" "$RUNTIME_VM_FILE" "export ${var}='${safe}'"
-    fi
-  fi
 }
 
 # --- A.6 Skills côté hôte ------------------------------------------------------

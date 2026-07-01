@@ -26,7 +26,9 @@ OPENCODE_CONFIG_DIR="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
 
 # Marqueur unique pour les blocs Albert Code dans les fichiers de l'utilisateur.
 # Utilisé à l'écriture (install.sh) ET aux tests (install.sh idempotence, uninstall.sh retrait).
+# Début et FIN pour ne supprimer QUE le bloc, jamais les lignes hors plage.
 AC_MARKER="# --- albert-code : clés VM ---"
+AC_MARKER_END="# --- /albert-code ---"
 
 # _dry_gate <description> : LE point d'entrée unique pour toute mutation.
 # Retourne 0 si l'action doit s'exécuter, 1 si dry-run l'a skip (déjà loggé).

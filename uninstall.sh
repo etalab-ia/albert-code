@@ -51,13 +51,16 @@ else
 fi
 
 # 2. Bloc Albert Code dans ~/.agent-vm/runtime.sh
-#    Retire : marqueur + lignes grep persist + exports ALBERT_API_KEY / CONTEXT7_API_KEY.
+#    Supprime UNIQUEMENT les lignes entre AC_MARKER et AC_MARKER_END (inclusif).
+#    Ne touche JAMAIS aux lignes hors de cette plage (exports perso, etc.).
 if [ -f "$RUNTIME_VM_FILE" ] && file_contains "$RUNTIME_VM_FILE" "$AC_MARKER"; then
   if confirm "Retirer le bloc Albert Code de ~/.agent-vm/runtime.sh ?"; then
+    end_pat="$AC_MARKER_END"
+    if ! file_contains "$RUNTIME_VM_FILE" "$AC_MARKER_END"; then
+      end_pat='$'  # ancien format : pas de marqueur de fin → jusqu'à EOF
+    fi
     _tmp="$(mktemp)"
-    grep -vE \
-      "$AC_MARKER|grep -q.*(ALBERT_API_KEY|CONTEXT7_API_KEY)|^export (ALBERT_API_KEY|CONTEXT7_API_KEY)=" \
-      "$RUNTIME_VM_FILE" > "$_tmp" || true
+    sed -E "\|^${AC_MARKER}$|,\|^${end_pat}$|d" "$RUNTIME_VM_FILE" > "$_tmp" || cp "$RUNTIME_VM_FILE" "$_tmp"
     mv "$_tmp" "$RUNTIME_VM_FILE"
     chmod 600 "$RUNTIME_VM_FILE" 2>/dev/null || true
     ok "bloc Albert Code retiré de ~/.agent-vm/runtime.sh"
