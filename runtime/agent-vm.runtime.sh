@@ -68,9 +68,11 @@ _apply_append() { local d="$1" f="$2" l="$3"; _dry_gate "$d" || return 0; printf
 _apply_mkdir()  { local d="$1" dir="$2"; _dry_gate "$d" || return 0; mkdir -p "$dir"; }
 _apply_touch()  { local d="$1" f="$2"; _dry_gate "$d" || return 0; touch "$f" 2>/dev/null || true; }
 _apply_chmod()  { local d="$1" mode="$2" f="$3"; _dry_gate "$d" || return 0; chmod "$mode" "$f" 2>/dev/null || true; }
+_apply_symlink() { local d="$1" t="$2" l="$3"; _dry_gate "$d" || return 0; ln -sf "$t" "$l" 2>/dev/null || true; }
 
 SKILLS_REPO="https://github.com/etalab-ia/skills.git"
-SKILLS_DIR="$OPENCODE_CONFIG_DIR/skills"
+SKILLS_CACHE="$OPENCODE_CONFIG_DIR/.albert-skills-cache"
+SKILLS_TARGET="$OPENCODE_CONFIG_DIR/skills"
 
 # -----------------------------------------------------------------------------
 # persist_env_var <VAR> <VALEUR>
@@ -99,23 +101,45 @@ persist_env_var() {
 }
 
 # -----------------------------------------------------------------------------
-# sync_skills — clone ou met à jour les skills État.
+# sync_skills — clone ou met à jour les skills État (cache + symlinks).
 # -----------------------------------------------------------------------------
 sync_skills() {
-  if [ -d "$SKILLS_DIR/.git" ]; then
-    _ok "skills déjà clonées — mise à jour…"
-    _apply "maj skills (git pull)" git -C "$SKILLS_DIR" pull --ff-only --quiet 2>/dev/null
-    [ "$DRY_RUN" -eq 0 ] && _ok "skills à jour" || true
+  # 1. Cache repo
+  if [ -d "$SKILLS_CACHE/.git" ]; then
+    _ok "cache skills déjà cloné — mise à jour…"
+    _apply "maj cache skills (git pull)" git -C "$SKILLS_CACHE" pull --ff-only --quiet 2>/dev/null || true
+    [ "$DRY_RUN" -eq 0 ] && _ok "cache skills à jour" || true
   else
-    _info "Clonage des skills État (etalab-ia/skills)…"
-    _apply_mkdir "créer $(dirname "$SKILLS_DIR")" "$(dirname "$SKILLS_DIR")"
+    _info "Clonage du cache skills État (etalab-ia/skills)…"
+    _apply_mkdir "créer $(dirname "$SKILLS_CACHE")" "$(dirname "$SKILLS_CACHE")"
     if [ "$DRY_RUN" -eq 1 ]; then
-      _apply "cloner skills dans $SKILLS_DIR" true
-    elif git clone --depth 1 --quiet "$SKILLS_REPO" "$SKILLS_DIR" 2>/dev/null; then
-      _ok "skills clonées dans $SKILLS_DIR"
+      _apply "cloner cache skills dans $SKILLS_CACHE" true
+    elif git clone --depth 1 --quiet "$SKILLS_REPO" "$SKILLS_CACHE" 2>/dev/null; then
+      _ok "cache skills cloné dans $SKILLS_CACHE"
     else
-      _warn "clonage impossible (hors ligne ?) — OpenCode démarrera sans skills État"
+      _warn "clonage cache impossible (hors ligne ?)"
     fi
+  fi
+
+  # 2. Symlink chaque skill du cache vers le dossier skills (sans collision)
+  _apply_mkdir "créer $SKILLS_TARGET" "$SKILLS_TARGET"
+  if [ -d "$SKILLS_CACHE/skills" ]; then
+    local linked=0 skipped=0
+    for _entry in "$SKILLS_CACHE/skills"/*/; do
+      [ -d "$_entry" ] || continue
+      local name
+      name="$(basename "$_entry")"
+      case "$name" in .*|.experimental|.git) continue ;; esac
+      local link_path="$SKILLS_TARGET/$name"
+      if [ -e "$link_path" ] && [ ! -L "$link_path" ]; then
+        [ "$DRY_RUN" -eq 0 ] && _warn "skill « ${name} » déjà présente (perso) — conservée" || true
+        skipped=$((skipped + 1))
+      else
+        _apply_symlink "symlink $name" "$_entry" "$link_path"
+        linked=$((linked + 1))
+      fi
+    done
+    [ "$DRY_RUN" -eq 0 ] && _ok "${linked} skills liées, ${skipped} ignorées (existantes)" || true
   fi
 }
 

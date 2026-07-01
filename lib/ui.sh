@@ -53,6 +53,57 @@ apply_mkdir()  { local desc="$1" dir="$2"; _dry_gate "$desc" || return 0; mkdir 
 apply_touch()  { local desc="$1" file="$2"; _dry_gate "$desc" || return 0; touch "$file" 2>/dev/null || true; }
 # apply_chmod <desc> <mode> <file> — change les permissions d'un fichier.
 apply_chmod()  { local desc="$1" mode="$2" file="$3"; _dry_gate "$desc" || return 0; chmod "$mode" "$file" 2>/dev/null || true; }
+# apply_symlink <desc> <target> <link> — crée un lien symbolique (ne remplace pas un fichier/répertoire existant).
+apply_symlink() { local desc="$1" target="$2" link="$3"; _dry_gate "$desc" || return 0; ln -sf "$target" "$link" 2>/dev/null || true; }
+
+# --- Skills État (cache + symlinks) -------------------------------------------
+# SKILLS_CACHE : dépôt git cloné de etalab-ia/skills (vrai .git, updatable).
+# Les skills sont symlinkées dans OPENCODE_CONFIG_DIR/skills/<nom> → cache/skills/<nom>.
+# Collisions : un dossier perso existant dans skills/ n'est jamais écrasé.
+SKILLS_REPO="https://github.com/etalab-ia/skills.git"
+SKILLS_CACHE="$OPENCODE_CONFIG_DIR/.albert-skills-cache"
+SKILLS_TARGET="$OPENCODE_CONFIG_DIR/skills"
+
+# sync_skills_cached : canonical implementation — used by install.sh AND documented
+# for runtime/agent-vm.runtime.sh.
+sync_skills_cached() {
+  info "Synchronisation des skills État…"
+
+  # 1. Clone ou pull le cache
+  if [ -d "$SKILLS_CACHE/.git" ]; then
+    apply "maj cache skills (git pull)" git -C "$SKILLS_CACHE" pull --ff-only --quiet 2>/dev/null || true
+    [ "$DRY_RUN" -eq 0 ] && ok "cache skills à jour" || true
+  else
+    apply_mkdir "créer $SKILLS_CACHE" "$(dirname "$SKILLS_CACHE")"
+    apply "cloner skills État dans $SKILLS_CACHE" git clone --depth 1 --quiet "$SKILLS_REPO" "$SKILLS_CACHE" 2>/dev/null
+    if [ "$DRY_RUN" -eq 0 ] && [ -d "$SKILLS_CACHE/.git" ]; then
+      ok "cache skills cloné dans $SKILLS_CACHE"
+    fi
+  fi
+
+  # 2. Symlink chaque skill du cache vers le dossier skills (sans collision)
+  apply_mkdir "créer $SKILLS_TARGET" "$SKILLS_TARGET"
+  if [ -d "$SKILLS_CACHE/skills" ]; then
+    local linked=0 skipped=0
+    for _skill_entry in "$SKILLS_CACHE/skills"/*/; do
+      [ -d "$_skill_entry" ] || continue
+      local name
+      name="$(basename "$_skill_entry")"
+      # Ignorer les dossiers cachés/expérimentaux
+      case "$name" in .*|.experimental|.git) continue ;; esac
+      local link_path="$SKILLS_TARGET/$name"
+      if [ -e "$link_path" ] && [ ! -L "$link_path" ]; then
+        # Collision : fichier/répertoire perso existe déjà — skip
+        [ "$DRY_RUN" -eq 0 ] && warn "skill « %s » déjà présente (perso) — conservée" "$name" || true
+        skipped=$((skipped + 1))
+      else
+        apply_symlink "symlink $name" "$_skill_entry" "$link_path"
+        linked=$((linked + 1))
+      fi
+    done
+    [ "$DRY_RUN" -eq 0 ] && ok "%d skills liées, %d ignorées (existantes)" "$linked" "$skipped" || true
+  fi
+}
 
 # --- Messages ------------------------------------------------------------------
 # Une action = un retour. Tutoiement, français.

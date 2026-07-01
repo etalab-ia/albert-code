@@ -32,13 +32,14 @@
 2. Le relancer immédiatement.
 **Attendu :** 1re exécution provisionne tout ; 2e exécution = no-ops (messages « déjà présent / à jour »), durée &lt; quelques secondes, aucun doublon, aucune erreur.
 
-## S5 — Synchro skills au boot (T1.3) ☐ (logique dans runtime.sh, test VM en attente)
+## S5 — Synchro skills au boot (T1.3) ☐ (logique cache+symlinks implémentée, test collision perso/skills État ✅)
 **Étapes :**
 1. Noter la liste des skills disponibles dans OpenCode.
 2. Ajouter une skill bidon dans le repo `etalab-ia/skills` (ou un fork de test).
 3. Redémarrer la VM (`.agent-vm.runtime.sh` fait son `git pull`).
 4. Relister les skills.
-**Attendu :** la nouvelle skill apparaît **sans action manuelle** après reboot. (Confirme le contournement du « pas de maj auto » OpenCode.)
+**Attendu :** la nouvelle skill apparaît **sans action manuelle** après reboot. Le mécanisme cache+symlinks
+préserve les skills perso si elles existent déjà (testé avec collision react-dsfr/mon-outil-perso ✅).
 
 ## S6 — Isolation des profils (T2.1, T2.3) ✅
 **Étapes :** ouvrir chaque `profiles/<contexte>/AGENTS.md`.

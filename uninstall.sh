@@ -20,6 +20,7 @@ SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SELF_DIR/lib/ui.sh"
 
 SKILLS_DIR="$HOME/.config/opencode/skills"
+SKILLS_CACHE="$HOME/.config/opencode/.albert-skills-cache"
 RUNTIME_VM_FILE="$HOME/.agent-vm/runtime.sh"
 ZSHENV="$HOME/.zshenv"
 AGENT_VM_DIR="${AGENT_VM_DIR:-$HOME/Dev/agent-vm}"
@@ -29,10 +30,22 @@ banner
 title "Désinstallation d'Albert Code"
 echo
 
-# 1. Skills État (clone local)
-if [ -d "$SKILLS_DIR" ] && confirm "Supprimer les skills État ($SKILLS_DIR) ?"; then
-  rm -rf "$SKILLS_DIR"
-  ok "skills supprimées"
+# 1. Skills État (symlinks + cache, préserve les skills perso)
+if [ -d "$SKILLS_DIR" ] && confirm "Retirer les liens des skills État et le cache ($SKILLS_DIR) ?"; then
+  # Retire uniquement les symlinks pointant vers le cache
+  removed=0
+  for _f in "$SKILLS_DIR"/*; do
+    [ -L "$_f" ] || continue
+    target="$(readlink "$_f")"
+    if echo "$target" | grep -q "$SKILLS_CACHE"; then
+      rm -f "$_f"
+      removed=$((removed + 1))
+    fi
+  done
+  # Supprime le cache
+  rm -rf "$SKILLS_CACHE" 2>/dev/null || true
+  ok "%d symlinks retirés, cache skills État supprimé" "$removed"
+  info "Les skills perso dans $SKILLS_DIR sont conservées."
 else
   info "skills conservées"
 fi

@@ -35,8 +35,6 @@ done
 ALBERT_CODE_REPO="${ALBERT_CODE_REPO:-$HOME/Dev/albert-code}"
 AGENT_VM_DIR="${AGENT_VM_DIR:-$HOME/Dev/agent-vm}"
 AGENT_VM_REPO="https://github.com/sylvinus/agent-vm.git"
-SKILLS_REPO="https://github.com/etalab-ia/skills.git"
-SKILLS_DIR_HOST="$OPENCODE_CONFIG_DIR/skills"
 RUNTIME_VM_FILE="$HOME/.agent-vm/runtime.sh"
 ZSHENV="$HOME/.zshenv"
 
@@ -216,20 +214,7 @@ add_runtime_export() {
 
 # --- A.6 Skills côté hôte ------------------------------------------------------
 sync_skills_host() {
-  info "Synchronisation des skills État…"
-  if [ -d "$SKILLS_DIR_HOST/.git" ]; then
-    apply "maj skills (git pull)" git -C "$SKILLS_DIR_HOST" pull --ff-only --quiet
-    [ "$DRY_RUN" -eq 0 ] && ok "skills à jour" || true
-  else
-    apply_mkdir "créer $(dirname "$SKILLS_DIR_HOST")" "$(dirname "$SKILLS_DIR_HOST")"
-    if [ "$DRY_RUN" -eq 1 ]; then
-      apply "cloner skills État dans $SKILLS_DIR_HOST" true
-    elif git clone --depth 1 --quiet "$SKILLS_REPO" "$SKILLS_DIR_HOST" 2>/dev/null; then
-      ok "skills clonées dans $SKILLS_DIR_HOST"
-    else
-      warn "clonage skills impossible (hors ligne ?)"
-    fi
-  fi
+  sync_skills_cached
 }
 
 # --- Persistance ~/.zshenv (additive, idempotente) -----------------------------
