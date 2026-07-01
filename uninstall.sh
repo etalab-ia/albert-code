@@ -51,11 +51,13 @@ else
 fi
 
 # 2. Bloc Albert Code dans ~/.agent-vm/runtime.sh
-#    Retire : la ligne marqueur + les exports ALBERT_API_KEY / CONTEXT7_API_KEY.
+#    Retire : marqueur + lignes grep persist + exports ALBERT_API_KEY / CONTEXT7_API_KEY.
 if [ -f "$RUNTIME_VM_FILE" ] && file_contains "$RUNTIME_VM_FILE" "$AC_MARKER"; then
   if confirm "Retirer le bloc Albert Code de ~/.agent-vm/runtime.sh ?"; then
     _tmp="$(mktemp)"
-    grep -vE "$AC_MARKER|^export (ALBERT_API_KEY|CONTEXT7_API_KEY)=" "$RUNTIME_VM_FILE" > "$_tmp" || true
+    grep -vE \
+      "$AC_MARKER|grep -q.*(ALBERT_API_KEY|CONTEXT7_API_KEY)|^export (ALBERT_API_KEY|CONTEXT7_API_KEY)=" \
+      "$RUNTIME_VM_FILE" > "$_tmp" || true
     mv "$_tmp" "$RUNTIME_VM_FILE"
     chmod 600 "$RUNTIME_VM_FILE" 2>/dev/null || true
     ok "bloc Albert Code retiré de ~/.agent-vm/runtime.sh"
@@ -110,4 +112,5 @@ done
 
 echo
 warn "La config OpenCode globale perso (~/.config/opencode/opencode.*) est conservée."
+warn "Le ~/.zshenv de la VM n'est pas nettoyé (la VM est jetable : agent-vm destroy + réinstall)."
 ok "Désinstallation terminée."

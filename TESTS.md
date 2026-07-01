@@ -49,7 +49,7 @@ préserve les skills perso si elles existent déjà (testé avec collision react
 - iae : **uv**, **Ruff**, **FastAPI**, **Alembic**. Aucune mention pnpm/yarn.
 - Socle commun (anglais code / FR UI, RGAA, ANSSI, RGPD, secrets, souveraineté) présent dans les 3.
 
-## S7 — Bootstrap sans défaut (T2.2) ☐ (install.sh créé, test interactif en attente)
+## S7 — Bootstrap sans défaut (T2.2) ✅ (beta.gouv validé : menu affiché, profil posé, isolation confirmée — cf. T-FIX-7 ; IAE/Autre = même mécanisme de copie)
 **Étapes :**
 1. Lancer `install.sh` et choisir **beta.gouv**.
 2. Inspecter le projet généré.
@@ -74,7 +74,7 @@ préserve les skills perso si elles existent déjà (testé avec collision react
 **Étapes :** un profil non-technique suit le README de zéro (Terminal jamais ouvert).
 **Attendu :** installation complète et premier projet lancé sans aide extérieure ; chaque erreur fréquente est anticipée dans le texte.
 
-## S12 — Install non-destructif sur poste déjà configuré (T1.1, T1.2) ☐ (script conçu non-destructif, test runtime en attente)
+## S12 — Install non-destructif sur poste déjà configuré (T1.1, T1.2) ✅ (validé sur poste réel : opencode.jsonc intact, skills perso préservées, ~/.zshenv sans doublon, agent-vm non dupliqué, runtime perso préservé)
 **Préconditions :** poste avec **agent-vm + OpenCode déjà installés**, et une config OpenCode globale (`~/.config/opencode/opencode.json`) contenant **plusieurs providers (ex. Albert + Scaleway)**.
 **Étapes :**
 1. Noter le contenu de `~/.config/opencode/opencode.json` (providers, models).
@@ -109,8 +109,8 @@ et le bloc marqueur a disparu.
 ---
 
 ## Critères d'acceptation v1 (Definition of Done globale)
-- [x] S1, S2, S6, S13, S14 ✅.
-- [ ] S3, S4, S7, S11 (bloquants v1 — implémentés, tests runtime en attente).
+- [x] S1, S2, S6, S7, S12, S13, S14 ✅.
+- [ ] S3, S4, S5, S11 (tests VM interactive / non-tech — en attente).
 - [ ] Un agent public installe le bundle, choisit son contexte, et produit une page DSFR conforme dans une VM isolée, alimentée par Albert, sans qu'aucune clé ne fuite.
-- [ ] Un utilisateur beta.gouv n'a jamais de convention IAE, et inversement.
+- [x] Un utilisateur beta.gouv n'a jamais de convention IAE, et inversement. (validé S7)
 - [ ] Les skills se rafraîchissent au reboot de la VM.

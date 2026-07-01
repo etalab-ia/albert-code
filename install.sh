@@ -167,17 +167,27 @@ install_agent_vm() {
   fi
 }
 
-# --- A.5 ~/.agent-vm/runtime.sh — exporte les clés dans la VM au démarrage -----
+# --- A.5 ~/.agent-vm/runtime.sh — clés dans la VM (persiste ~/.zshenv + export) ---
 ensure_vm_runtime() {
   apply_mkdir "créer $(dirname "$RUNTIME_VM_FILE")" "$(dirname "$RUNTIME_VM_FILE")"
   apply_touch "créer $RUNTIME_VM_FILE si absent" "$RUNTIME_VM_FILE"
   apply_chmod "chmod 600 $RUNTIME_VM_FILE (contient une clé)" 600 "$RUNTIME_VM_FILE"
   info "Configuration du runtime VM (~/.agent-vm/runtime.sh)…"
 
-  # En-tête idempotent
+  # Migration : ancien bloc export-only → nouveau format (persiste ~/.zshenv + export)
+  if file_contains "$RUNTIME_VM_FILE" "$AC_MARKER" && ! file_contains "$RUNTIME_VM_FILE" "grep -q.*ALBERT_API_KEY"; then
+    _tmp="$(mktemp)"
+    grep -vE "$AC_MARKER|^export (ALBERT_API_KEY|CONTEXT7_API_KEY)=" "$RUNTIME_VM_FILE" > "$_tmp" || true
+    mv "$_tmp" "$RUNTIME_VM_FILE"
+    apply_append "en-tête albert-code dans runtime.sh (migration)" "$RUNTIME_VM_FILE" "$AC_MARKER"
+    info "Ancien bloc runtime.sh export-only migré vers nouveau format (persistence ~/.zshenv)."
+  fi
+
+  # En-tête idempotent (avec blank line de sécurité)
   if ! file_contains "$RUNTIME_VM_FILE" "$AC_MARKER"; then
-    apply_append "en-tête albert-code dans runtime.sh" "$RUNTIME_VM_FILE" \
-      "$AC_MARKER"
+    # S'assurer que le marqueur est sur sa propre ligne
+    apply_append "blank line dans runtime.sh" "$RUNTIME_VM_FILE" ""
+    apply_append "en-tête albert-code dans runtime.sh" "$RUNTIME_VM_FILE" "$AC_MARKER"
   fi
 
   # ALBERT_API_KEY
@@ -198,17 +208,31 @@ ensure_vm_runtime() {
   [ "$DRY_RUN" -eq 0 ] || true
 }
 
-# add_runtime_export <VAR> <VAL> — ajoute export si absent, additive.
+# add_runtime_export <VAR> <VAL>
+# Ajoute au runtime.sh :
+#   1. grep -q 'VAR' ~/.zshenv || echo "export VAR='val'" >> ~/.zshenv   (persistence VM ~/.zshenv)
+#   2. export VAR='val'                                                    (session courante)
+# Idempotent : chaque ligne est gardée par un grep individuel.
 add_runtime_export() {
   local var="$1" val="$2"
-  if file_contains "$RUNTIME_VM_FILE" "^export ${var}="; then
-    return 0
-  fi
+  local safe
   if [ -z "$val" ]; then
-    apply_append "export $var (vide) dans runtime.sh" "$RUNTIME_VM_FILE" "export ${var}=\"\""
+    safe=""
   else
-    local safe="${val//\'/\'\"\'\"\'}"
-    apply_append "export $var dans runtime.sh" "$RUNTIME_VM_FILE" "export ${var}='${safe}'"
+    safe="${val//\'/\'\"\'\"\'}"
+  fi
+  # Ligne de persistance ~/.zshenv (gardée par grep -q)
+  if ! file_contains "$RUNTIME_VM_FILE" "grep -q '$var' ~/.zshenv"; then
+    apply_append "persist $var dans runtime.sh" "$RUNTIME_VM_FILE" \
+      "grep -q '$var' ~/.zshenv 2>/dev/null || echo \"export ${var}='${safe}'\" >> ~/.zshenv"
+  fi
+  # Export session courante (gardée par export VAR=)
+  if ! file_contains "$RUNTIME_VM_FILE" "^export ${var}="; then
+    if [ -z "$val" ]; then
+      apply_append "export $var (vide) dans runtime.sh" "$RUNTIME_VM_FILE" "export ${var}=\"\""
+    else
+      apply_append "export $var dans runtime.sh" "$RUNTIME_VM_FILE" "export ${var}='${safe}'"
+    fi
   fi
 }
 
