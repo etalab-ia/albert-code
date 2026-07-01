@@ -20,7 +20,7 @@
 2. Vérifier dans les logs OpenCode quel modèle répond aux tâches légères (titre/résumé).
 **Attendu :** page utilisant `@codegouvfr/react-dsfr` (composants natifs, pas de CSS inventé) ; `DeepSeek-V4-Flash` utilisé comme `small_model`, `Mistral-Medium-3.5-128B` pour la génération principale.
 
-## S3 — `opencode.json` valide (T1.1) ☐ (config créée + validée JSON, test runtime en attente)
+## S3 — `opencode.json` valide (T1.1) ✅ (VM : provider `albert` reconnu, 4 MCP connectés, Albert répond, MCP data.gouv fonctionnel via `data-gouv_search_datasets` — débloqué par T-FIX-8/9)
 **Étapes :**
 1. `opencode` démarre à la racine du repo.
 2. Lister les MCP actifs.
@@ -109,8 +109,8 @@ et le bloc marqueur a disparu.
 ---
 
 ## Critères d'acceptation v1 (Definition of Done globale)
-- [x] S1, S2, S6, S7, S12, S13, S14 ✅.
-- [ ] S3, S4, S5, S11 (tests VM interactive / non-tech — en attente).
+- [x] S1, S2, S3, S6, S7, S12, S13, S14 ✅.
+- [ ] S4, S5, S11 (idempotence runtime VM / skills au boot / non-tech — en attente).
 - [ ] Un agent public installe le bundle, choisit son contexte, et produit une page DSFR conforme dans une VM isolée, alimentée par Albert, sans qu'aucune clé ne fuite.
 - [x] Un utilisateur beta.gouv n'a jamais de convention IAE, et inversement. (validé S7)
 - [ ] Les skills se rafraîchissent au reboot de la VM.

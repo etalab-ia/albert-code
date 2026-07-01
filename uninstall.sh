@@ -51,16 +51,23 @@ else
 fi
 
 # 2. Bloc Albert Code dans ~/.agent-vm/runtime.sh
-#    Supprime UNIQUEMENT les lignes entre AC_MARKER et AC_MARKER_END (inclusif).
+#    Supprime UNIQUEMENT les lignes entre AC_MARKER et AC_MARKER_END (inclusif)
+#    (ou du marqueur jusqu'au 1er contenu non-export pour l'ancien format).
 #    Ne touche JAMAIS aux lignes hors de cette plage (exports perso, etc.).
 if [ -f "$RUNTIME_VM_FILE" ] && file_contains "$RUNTIME_VM_FILE" "$AC_MARKER"; then
   if confirm "Retirer le bloc Albert Code de ~/.agent-vm/runtime.sh ?"; then
-    end_pat="$AC_MARKER_END"
-    if ! file_contains "$RUNTIME_VM_FILE" "$AC_MARKER_END"; then
-      end_pat='$'  # ancien format : pas de marqueur de fin → jusqu'à EOF
-    fi
     _tmp="$(mktemp)"
-    sed -E "\|^${AC_MARKER}$|,\|^${end_pat}$|d" "$RUNTIME_VM_FILE" > "$_tmp" || cp "$RUNTIME_VM_FILE" "$_tmp"
+    if file_contains "$RUNTIME_VM_FILE" "$AC_MARKER_END"; then
+      sed -E "\|^${AC_MARKER}$|,\|^${AC_MARKER_END}$|d" "$RUNTIME_VM_FILE" > "$_tmp"
+    else
+      awk -v marker="$AC_MARKER" '
+        $0 == marker { in_block=1; next }
+        in_block && $0 ~ /^export (ALBERT_API_KEY|CONTEXT7_API_KEY)=/ { next }
+        in_block && $0 ~ /^[[:space:]]*$/ { next }
+        in_block { in_block=0 }
+        { print }
+      ' "$RUNTIME_VM_FILE" > "$_tmp"
+    fi
     mv "$_tmp" "$RUNTIME_VM_FILE"
     chmod 600 "$RUNTIME_VM_FILE" 2>/dev/null || true
     ok "bloc Albert Code retiré de ~/.agent-vm/runtime.sh"

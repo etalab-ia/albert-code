@@ -191,13 +191,21 @@ ensure_vm_runtime() {
   # Supprime TOUT bloc existant (ancien format export-only OU nouveau format)
   # → ne touche JAMAIS aux lignes hors du bloc (exports perso, etc.)
   if file_contains "$RUNTIME_VM_FILE" "$AC_MARKER"; then
-    local end_pat="$AC_MARKER_END"
-    if ! file_contains "$RUNTIME_VM_FILE" "$AC_MARKER_END"; then
-      end_pat='$'  # ancien format : pas de marqueur de fin → supprimer jusqu'à EOF
-    fi
     _tmp="$(mktemp)"
-    # sed | délimiteur (évite / dans AC_MARKER_END)
-    sed -E "\|^${AC_MARKER}$|,\|^${end_pat}$|d" "$RUNTIME_VM_FILE" > "$_tmp" || cp "$RUNTIME_VM_FILE" "$_tmp"
+    if file_contains "$RUNTIME_VM_FILE" "$AC_MARKER_END"; then
+      # Nouveau format : supprimer entre les deux marqueurs
+      sed -E "\|^${AC_MARKER}$|,\|^${AC_MARKER_END}$|d" "$RUNTIME_VM_FILE" > "$_tmp"
+    else
+      # Ancien format : supprimer le marqueur + lignes export/blank, s'arrêter
+      # au premier autre contenu (heuristic : préserve le contenu perso après le bloc).
+      awk -v marker="$AC_MARKER" '
+        $0 == marker { in_block=1; next }
+        in_block && $0 ~ /^export (ALBERT_API_KEY|CONTEXT7_API_KEY)=/ { next }
+        in_block && $0 ~ /^[[:space:]]*$/ { next }
+        in_block { in_block=0 }
+        { print }
+      ' "$RUNTIME_VM_FILE" > "$_tmp"
+    fi
     mv "$_tmp" "$RUNTIME_VM_FILE"
     info "Ancien bloc runtime.sh supprimé (migration ou réécriture)."
   fi
