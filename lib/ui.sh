@@ -151,6 +151,8 @@ require_cmd() {
 
 # --- Prompts -------------------------------------------------------------------
 # prompt_choice <question> <choix...> : affiche un menu numéroté, renvoie le choix.
+# ATTENTION : TOUT l'affichage humain (menu, ✓, erreurs) va sur STDERR (>2).
+# Seule la VALEUR finale va sur STDOUT — compatible $(...) capture.
 # Ex : prompt_choice "Quel contexte ?" "beta.gouv" "La Suite" "IAE" "Autre"
 prompt_choice() {
   local question="$1"; shift
@@ -158,16 +160,16 @@ prompt_choice() {
   local n choice
   if [ "$DRY_RUN" -eq 1 ]; then
     choice="${choices[0]}"
-    printf '%s[dry-run] prompt: %s → %s%s\n' "${C_GREY}" "$question" "$choice" "${C_RESET}"
+    printf '%s[dry-run] prompt: %s → %s%s\n' "${C_GREY}" "$question" "$choice" "${C_RESET}" >&2
     printf '%s' "$choice"
     return 0
   fi
   while true; do
-    title "$question"
+    title "$question" >&2
     for i in "${!choices[@]}"; do
-      printf '  %s%d)%s %s\n' "${C_CYAN}" "$((i+1))" "${C_RESET}" "${choices[$i]}"
+      printf '  %s%d)%s %s\n' "${C_CYAN}" "$((i+1))" "${C_RESET}" "${choices[$i]}" >&2
     done
-    printf '%s→ %s' "${C_BOLD}" "${C_RESET}"
+    printf '%s→ %s' "${C_BOLD}" "${C_RESET}" >&2
     if [ -t 0 ]; then
       read -r n </dev/tty
     else
@@ -175,11 +177,11 @@ prompt_choice() {
     fi
     if [[ "$n" =~ ^[0-9]+$ ]] && [ "$n" -ge 1 ] && [ "$n" -le "${#choices[@]}" ]; then
       choice="${choices[$((n-1))]}"
-      printf '%s✓ %s choisi%s\n' "${C_GREEN}" "$choice" "${C_RESET}"
+      printf '%s✓ %s choisi%s\n' "${C_GREEN}" "$choice" "${C_RESET}" >&2
       printf '%s' "$choice"
       return 0
     fi
-    warn "Choix invalide, réessaie."
+    warn "Choix invalide, réessaie." >&2
   done
 }
 
@@ -187,11 +189,11 @@ prompt_choice() {
 prompt_secret() {
   local question="$1"
   if [ "$DRY_RUN" -eq 1 ]; then
-    printf '%s[dry-run] prompt: %s (ignoré)\n' "${C_GREY}" "$question" "${C_RESET}"
+    printf '%s[dry-run] prompt: %s (ignoré)\n' "${C_GREY}" "$question" "${C_RESET}" >&2
     printf ''
     return 0
   fi
-  printf '%s%s%s : ' "${C_BOLD}" "$question" "${C_RESET}"
+  printf '%s%s%s : ' "${C_BOLD}" "$question" "${C_RESET}" >&2
   stty -echo 2>/dev/null || true
   local val
   if [ -t 0 ]; then
@@ -200,7 +202,7 @@ prompt_secret() {
     read -r val
   fi
   stty echo 2>/dev/null || true
-  printf '\n'
+  printf '\n' >&2
   printf '%s' "$val"
 }
 
@@ -209,14 +211,14 @@ prompt_input() {
   local question="$1"
   local default="${2:-}"
   if [ "$DRY_RUN" -eq 1 ]; then
-    printf '%s[dry-run] prompt: %s → %s%s\n' "${C_GREY}" "$question" "${default:-<vide>}" "${C_RESET}"
+    printf '%s[dry-run] prompt: %s → %s%s\n' "${C_GREY}" "$question" "${default:-<vide>}" "${C_RESET}" >&2
     printf '%s' "$default"
     return 0
   fi
   if [ -n "$default" ]; then
-    printf '%s%s%s [%s] : ' "${C_BOLD}" "$question" "${C_RESET}" "$default"
+    printf '%s%s%s [%s] : ' "${C_BOLD}" "$question" "${C_RESET}" "$default" >&2
   else
-    printf '%s%s%s : ' "${C_BOLD}" "$question" "${C_RESET}"
+    printf '%s%s%s : ' "${C_BOLD}" "$question" "${C_RESET}" >&2
   fi
   local val
   if [ -t 0 ]; then
@@ -227,15 +229,15 @@ prompt_input() {
   printf '%s' "${val:-$default}"
 }
 
-# confirm <question> : 0 si oui, 1 si non.
+# confirm <question> : 0 si oui, 1 si non. Écrit le prompt sur >&2.
 confirm() {
   local question="$1"
   if [ "$DRY_RUN" -eq 1 ]; then
-    printf '%s[dry-run] confirm: %s → non%s\n' "${C_GREY}" "$question" "${C_RESET}"
+    printf '%s[dry-run] confirm: %s → non%s\n' "${C_GREY}" "$question" "${C_RESET}" >&2
     return 1
   fi
   local answer
-  printf '%s%s%s [o/N] : ' "${C_BOLD}" "$question" "${C_RESET}"
+  printf '%s%s%s [o/N] : ' "${C_BOLD}" "$question" "${C_RESET}" >&2
   if [ -t 0 ]; then
     read -r answer </dev/tty
   else
