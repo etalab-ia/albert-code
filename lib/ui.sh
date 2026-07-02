@@ -21,6 +21,8 @@ fi
 # DRY_RUN=1          : chaque mutation est loggée [dry-run] mais PAS exécutée.
 # OPENCODE_CONFIG_DIR : override ~/.config/opencode (sandbox test).
 # HOME               : override → redirige ~/.zshenv etc. vers un dossier jetable.
+# SHIM_BIN_DIR       : override → dossier du shim agent-vm (install_shim), au lieu
+#                       de sonder /opt/homebrew/bin, /usr/local/bin puis $PATH.
 DRY_RUN="${DRY_RUN:-0}"
 OPENCODE_CONFIG_DIR="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
 
@@ -64,35 +66,46 @@ apply_symlink() { local desc="$1" target="$2" link="$3"; _dry_gate "$desc" || re
 #   /opt/homebrew/bin (Apple Silicon), /usr/local/bin, ~/.local/bin
 # Si seulement ~/.local/bin est trouvé, l'ajoute à ~/.zshenv si absent.
 # Retourne 0 si le shim est posé, 1 si aucun dossier writable trouvé (avertit).
-# Variables lues : DRY_RUN (pour _dry_gate).
+# Variables lues : DRY_RUN (pour _dry_gate), SHIM_BIN_DIR (override test/CI :
+#   si défini et non vide, utilisé directement comme dossier du shim,
+#   sans sonder /opt/homebrew/bin, /usr/local/bin ni $PATH — cf. HOME,
+#   OPENCODE_CONFIG_DIR pour le même usage de sandboxing).
 SHIM_PATH_ADDED="${SHIM_PATH_ADDED:-0}"
 install_shim() {
   local name="$1" source_script="$2"
   local shim_dir="" _dir="" _old_ifs=""
 
-  # 1. Trouver le premier dossier dans $PATH qui est writable
-  _old_ifs="$IFS"
-  IFS=':'
-  for _dir in /opt/homebrew/bin /usr/local/bin $PATH; do
-    [ -z "$_dir" ] && continue
-    if [ -d "$_dir" ] && [ -w "$_dir" ]; then
-      shim_dir="$_dir"
-      break
-    fi
-  done
-  IFS="$_old_ifs"
-
-  # 2. Si rien trouvé, utiliser ~/.local/bin
-  if [ -z "$shim_dir" ]; then
-    shim_dir="$HOME/.local/bin"
+  if [ -n "${SHIM_BIN_DIR:-}" ]; then
+    # Override explicite (tests/CI) : court-circuite la sonde PATH.
+    shim_dir="$SHIM_BIN_DIR"
     if [ ! -d "$shim_dir" ]; then
       apply_mkdir "créer $shim_dir" "$shim_dir"
     fi
-    # Ajouter au PATH via ~/.zshenv si pas déjà
-    if ! file_contains "$HOME/.zshenv" "\.local/bin"; then
-      apply_append "ajouter ~/.local/bin au PATH dans ~/.zshenv" "$HOME/.zshenv" \
-        "export PATH=\"\$HOME/.local/bin:\$PATH\""
-      SHIM_PATH_ADDED=1
+  else
+    # 1. Trouver le premier dossier dans $PATH qui est writable
+    _old_ifs="$IFS"
+    IFS=':'
+    for _dir in /opt/homebrew/bin /usr/local/bin $PATH; do
+      [ -z "$_dir" ] && continue
+      if [ -d "$_dir" ] && [ -w "$_dir" ]; then
+        shim_dir="$_dir"
+        break
+      fi
+    done
+    IFS="$_old_ifs"
+
+    # 2. Si rien trouvé, utiliser ~/.local/bin
+    if [ -z "$shim_dir" ]; then
+      shim_dir="$HOME/.local/bin"
+      if [ ! -d "$shim_dir" ]; then
+        apply_mkdir "créer $shim_dir" "$shim_dir"
+      fi
+      # Ajouter au PATH via ~/.zshenv si pas déjà
+      if ! file_contains "$HOME/.zshenv" "\.local/bin"; then
+        apply_append "ajouter ~/.local/bin au PATH dans ~/.zshenv" "$HOME/.zshenv" \
+          "export PATH=\"\$HOME/.local/bin:\$PATH\""
+        SHIM_PATH_ADDED=1
+      fi
     fi
   fi
 
@@ -347,6 +360,8 @@ Variables d'environnement (sandbox) :
   HOME                   Redirige ~/.zshenv, ~/.config/opencode, etc.
   OPENCODE_CONFIG_DIR     Dossier de config OpenCode (défaut: ~/.config/opencode).
   AGENT_VM_DIR            Dossier d'installation d'agent-vm (défaut: \${XDG_DATA_HOME:-~/.local/share}/agent-vm).
+  SHIM_BIN_DIR            Dossier du shim agent-vm (défaut: sonde /opt/homebrew/bin,
+                          /usr/local/bin puis \$PATH, sinon ~/.local/bin).
 
 Exemple (test non-destructif) :
   mkdir -p /tmp/ac-test

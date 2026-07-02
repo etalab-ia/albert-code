@@ -129,15 +129,27 @@ Config MCP de référence :
 **But :** valider la désinstallation complète.
 **DoD :** S14 — après install puis uninstall, aucune clé ne subsiste dans `~/.agent-vm/runtime.sh` ni `~/.zshenv`, et le bloc marqueur a disparu.
 
-### T-FIX-5 🔴 `agent-vm` résolu immédiatement après install ✅ implémenté `<- AC-R001, AC-R002`
+> **Note numérotation :** T-FIX-5 à T-FIX-10 ont été utilisés lors de la revue sécurité/robustesse (banner, skills sync, prompt_choice, clé VM 401, migrations — cf. `git log`), livrés puis retirés du backlog. Les tickets issus des retours utilisateurs reprennent donc à T-FIX-11 pour éviter toute collision.
+
+### T-FIX-11 🔴 `agent-vm` résolu immédiatement après install ✅ implémenté `<- AC-R001, AC-R002`
 **But :** `agent-vm` est une fonction shell (sourcée) ; après `./install.sh`, elle n'est pas chargée dans le terminal courant → « command not found », y compris après relance.
 **Tâches :** shim exécutable `agent-vm` posé dans un dossier déjà présent dans `$PATH` (source `agent-vm.sh` + dispatch) ; atténuer les messages « déjà sourcé » trompeurs ; vérif finale `command -v agent-vm`.
 **DoD :** `agent-vm` résout dans le même terminal juste après install, sans réouverture. → `TESTS.md` S15.
 
-### T-FIX-6 🟡 Retirer les chemins `~/Dev` en dur `<- AC-R003` ✅ implémenté
+### T-FIX-12 🟡 Retirer les chemins `~/Dev` en dur `<- AC-R003` ✅ implémenté
 **But :** `~/Dev` est une convention personnelle ; ne doit pas apparaître en dur dans le code, le README ni la doc.
 **Tâches :** défauts `AGENT_VM_DIR`/`ALBERT_CODE_REPO` → emplacement neutre (XDG / `SELF_DIR`), identiques install/uninstall ; placeholders neutres sans espace dans README/doc ; grep de contrôle 0 hit.
 **DoD :** `grep -rE '\$HOME/Dev|~/Dev'` (hors `.git`) ne renvoie rien ; `--dry-run` cohérent install/uninstall.
+
+### T-FIX-13 🟠 Hint de scaffold dynamique (`$SELF_DIR`) `<- AC-R006` ✅ implémenté
+**But :** le message de scaffold (`phase_b`, quand on est dans le dépôt) hardcode `~/albert-code/install.sh` au lieu du chemin réel d'invocation → copier-coller cassé si le dépôt est cloné ailleurs. Régression de T-FIX-12.
+**Tâches :** remplacer par `$SELF_DIR/install.sh` ; commentaire d'usage en tête d'`install.sh` → placeholder neutre `<chemin-du-dépôt>/install.sh` ; vérifier qu'aucun message runtime ne hardcode un chemin de dépôt.
+**DoD :** le hint affiche le chemin réel quelle que soit la position du clone. → `TESTS.md` S16.
+
+### T-FIX-14 🔴 Onboarding VM de base (`agent-vm setup`) `<- AC-R007` ✅ implémenté
+**But :** après une install fraîche, `agent-vm opencode` échoue (`Base VM not found`) car la VM de base n'existe pas et `agent-vm setup` n'est ni lancé ni mentionné.
+**Tâches :** « Prochaines étapes » → lister `agent-vm setup` comme étape 1 (avant `agent-vm opencode`) ; en Phase A, détecter l'absence de VM de base et prévenir (option : proposer de lancer `agent-vm setup` avec confirmation — pas d'auto-run silencieux, c'est long).
+**DoD :** un nouvel utilisateur qui suit les instructions ne rencontre jamais `Base VM not found`. → `TESTS.md` S17.
 
 ---
 
@@ -153,6 +165,13 @@ Config MCP de référence :
 **But :** reprendre la chaîne sécu OpenGateLLM.
 **Tâches :** workflows réutilisables Semgrep + Trivy + CodeQL (HIGH=warn / CRITICAL=block) ; `PULL_REQUEST_TEMPLATE.md` (fusion DoD OpenGateLLM + checklist beta) ; script de conformité (footer légal + /accessibilite + scan secrets/URL prod + données fixtures).
 **DoD :** workflows valides, script de conformité exécutable. → `TESTS.md` S10.
+
+### T4.4 🟠 Test hermétique S15 rejouable en CI `<- AC-R001` ✅ implémenté
+**But :** rendre S15 automatisable (le dogfood manuel prouve mais ne se rejoue pas seul).
+**Tâches :**
+- `lib/ui.sh` `install_shim` : override `SHIM_BIN_DIR` (si défini et non vide → dossier du shim direct, sinon sonde `/opt/homebrew/bin…$PATH` inchangée) ; documenté à côté de `HOME` / `OPENCODE_CONFIG_DIR`.
+- `tests/s15_shim.sh` : sandbox jetable (`HOME` / `SHIM_BIN_DIR` / `XDG_DATA_HOME` sous `mktemp -d`), stub `agent-vm.sh` (`agent-vm(){ echo "STUB OK $*"; }`), PATH minimal ; asserter précondition `command -v agent-vm` introuvable → `install_shim` → `command -v agent-vm` = `$SHIM_BIN_DIR/agent-vm` + exécution du stub ; vérifier non-pollution de `/opt/homebrew/bin` et du vrai `$HOME` ; cleanup `trap EXIT`.
+**DoD :** `tests/s15_shim.sh` exit 0 sans écrire hors de la sandbox ; intégrable en CI. → `TESTS.md` S15 (variante automatisée).
 
 ---
 

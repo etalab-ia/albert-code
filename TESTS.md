@@ -108,16 +108,32 @@ et le bloc marqueur a disparu.
 
 ---
 
-## S15 — Shim agent-vm résolution immédiate ☐ (shim créé, test sur machine sans agent-vm à confirmer)
+## S15 — Shim agent-vm résolution immédiate ☑ (validé en dogfood réel 2026-07-02)
 **Préconditions :** agent-vm PAS installé, `agent-vm` introuvable (`command -v agent-vm` exit 1).
 **Étapes :**
 1. Lancer `./install.sh` (Phase A complète).
 2. Sans sourcer de fichier ni ouvrir de nouveau terminal, lancer `command -v agent-vm`.
 3. Lancer `agent-vm help` (ou `agent-vm list` si une VM existe).
 **Attendu :** `command -v agent-vm` retourne un chemin exécutable (ex. `/opt/homebrew/bin/agent-vm`) ; la commande `agent-vm` fonctionne immédiatement, sans `source` ni nouveau terminal.
+**Validé le :** 2026-07-02, en dogfood réel (machine remise à zéro, agent-vm désinstallé, 16 VMs supprimées) : après `./install.sh`, dans le MÊME terminal sans `rehash` ni réouverture, `command -v agent-vm` → `/opt/homebrew/bin/agent-vm` et `agent-vm help` s'exécute. Variante automatisée en CI : voir `BACKLOG.md` T4.4.
+
+## S16 — Hint de scaffold dynamique ☑ (AC-R006)
+**Préconditions :** dépôt albert-code cloné dans un chemin quelconque (ex. `~/Dev/albert-code`, pas `~/albert-code`).
+**Étapes :**
+1. Depuis le dépôt, lancer `./install.sh` (Phase A ; le bloc « Pour scaffold un projet » s'affiche).
+**Attendu :** le message affiche le chemin RÉEL de l'installeur (`$SELF_DIR/install.sh`), copiable-collable tel quel — jamais un `~/albert-code/install.sh` hardcodé.
+**Validé le :** 2026-07-02, `./install.sh --dry-run` lancé depuis le chemin réel du dépôt (hors `~/albert-code`) affiche bien ce même chemin absolu réel (`$SELF_DIR/install.sh`), pas un chemin générique hardcodé.
+
+## S17 — Onboarding VM de base ☑ (AC-R007)
+**Préconditions :** machine sans VM de base agent-vm (`agent-vm list` sans `agent-vm-base`).
+**Étapes :**
+1. Installer le bundle, configurer un projet (Phase B).
+2. Lire les « Prochaines étapes » affichées.
+**Attendu :** l'utilisateur est explicitement dirigé vers `agent-vm setup` (création de la VM de base, une fois) AVANT `agent-vm opencode` ; en suivant les instructions il ne rencontre jamais `Base VM not found`. Bonus : détection en Phase A si la VM de base manque.
+**Validé le :** 2026-07-02, `./install.sh --dry-run` depuis un dossier projet de test : Phase A affiche `! VM de base absente — lance agent-vm setup une fois avant agent-vm opencode.` (via `limactl list -q`) puis propose `agent-vm setup` via `confirm()` (auto-répond « non » en dry-run, aucune VM créée) ; « Prochaines étapes » liste `1. agent-vm setup`, `2. agent-vm opencode`, `3. Parle en français à l'assistant`.
 
 ## Critères d'acceptation v1 (Definition of Done globale)
-- [x] S1, S2, S3, S6, S7, S12, S13, S14 ✅.
+- [x] S1, S2, S3, S6, S7, S12, S13, S14, S15, S16, S17 ✅.
 - [ ] S4, S5, S11 (idempotence runtime VM / skills au boot / non-tech — en attente).
 - [ ] Un agent public installe le bundle, choisit son contexte, et produit une page DSFR conforme dans une VM isolée, alimentée par Albert, sans qu'aucune clé ne fuite.
 - [x] Un utilisateur beta.gouv n'a jamais de convention IAE, et inversement. (validé S7)

@@ -8,7 +8,7 @@
 #
 # Usage :
 #   ./install.sh                          # depuis le dépôt albert-code (Phase A)
-#   ~/albert-code/install.sh              # depuis un dossier projet (A + B)
+#   <chemin-du-dépôt>/install.sh          # depuis un dossier projet (A + B)
 #
 # Non-destructif : ne réinstalle rien déjà présent, n'écrase aucune config
 # existante (globale ou projet). Portée projet pour opencode.json.
@@ -123,8 +123,27 @@ phase_a() {
     info "Hors VM, installe-le : npm i -g opencode-ai"
   fi
 
+  # A.8 VM de base agent-vm (préalable obligatoire à `agent-vm opencode`)
+  check_base_vm
+
   echo
   ok "Phase A terminée — ton poste est prêt."
+}
+
+# --- A.8 Détection de la VM de base --------------------------------------------
+check_base_vm() {
+  if ! command -v limactl >/dev/null 2>&1; then
+    return 0
+  fi
+  if limactl list -q 2>/dev/null | grep -q '^agent-vm-base$'; then
+    ok "VM de base agent-vm déjà créée"
+    return 0
+  fi
+  echo
+  warn "VM de base absente — lance %s une fois avant %s." "agent-vm setup" "agent-vm opencode"
+  if confirm "Créer la VM de base maintenant (agent-vm setup, ~plusieurs minutes) ?"; then
+    apply "créer la VM de base (agent-vm setup)" agent-vm setup
+  fi
 }
 
 # --- A.4 Installation d'agent-vm (idempotente) --------------------------------
@@ -287,7 +306,7 @@ phase_b() {
     echo
     info "Tu es dans le dépôt albert-code. Pour scaffold un projet :"
     info "  mkdir -p ~/mon-projet && cd ~/mon-projet"
-    info "  ~/albert-code/install.sh"
+    info "  $SELF_DIR/install.sh"
     return 0
   fi
 
@@ -331,10 +350,10 @@ phase_b() {
   ok "Projet configuré pour le contexte « $context »."
   echo
   title "Prochaines étapes"
-  info "1. Ouvre la bulle isolée :  agent-vm opencode"
-  info "2. Parle en français à l'assistant."
+  info "1. Crée la VM de base (une seule fois) :  agent-vm setup"
+  info "2. Ouvre la bulle isolée :  agent-vm opencode"
+  info "3. Parle en français à l'assistant."
   echo
-  info "Au 1er lancement, agent-vm crée la VM (~quelques minutes)."
   info "Les skills se synchronisent automatiquement au démarrage."
 }
 copy_template() {
