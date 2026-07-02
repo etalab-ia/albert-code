@@ -26,6 +26,7 @@
 | AC-R009 | 🎛️ | 🟡 | L'installeur signale « OpenCode absent du PATH » et suggère un contournement hors-VM (`npm i -g opencode-ai`). Contraire à la doctrine Albert Code = usage **exclusivement** via `agent-vm` (bulle isolée) ; ne pas proposer de bypass de l'isolation. Redondance en prime (« absent du PATH » ×2). | Dogfood 2026-07-02 | ✅ traité | `BACKLOG.md` T-FIX-15 |
 | AC-R010 | ⚙️ | 🟠 | Ressources VM par défaut d'agent-vm trop justes pour du code (`1 CPU / 3 GiB / 10 GiB`). En usage réel il faut ~`4 CPU / 8 GiB / 30 GiB`. agent-vm n'a pas de défaut configurable par env → Albert Code doit fixer une taille adaptée (disque au `setup`, cpu/mémoire au lancement) sans sur-allouer sur petite machine. | Dogfood 2026-07-02 | ✅ traité | `BACKLOG.md` T1.4 · `TESTS.md` S20 |
 | AC-R011 | 🎛️ | 🟡 | `context7` est `enabled: true` en dur dans `opencode.template.json` alors qu'il exige `CONTEXT7_API_KEY` → pour un utilisateur **sans clé**, le MCP échoue (401 / bearer vide) au démarrage dans la VM et s'affiche « cassé ». T1.1 notait « rendre le MCP optionnel/skippable si pas de clé » — pas encore fait. | Revue config dogfood 2026-07-02 | 📥 backlogué | `BACKLOG.md` T1.5 |
+| AC-R012 | 🎛️ | 🟠 | Scaffold dans un repo ayant DÉJÀ un `opencode.json` : le fichier est conservé (non-destructif) → le provider `albert` n'est pas ajouté → Albert ne se connecte pas dans la VM, et l'installeur affiche seulement « conservé » sans avertir que le merge n'a pas eu lieu. Footgun silencieux. | Dogfood 2026-07-02 | 📥 backlogué | `BACKLOG.md` T1.6 |
 
 ---
 

@@ -8,6 +8,8 @@
 
 # Albert Code
 
+⚠️ PROJET EXPÉRIMENTAL ⚠️
+
 **Stack d'agentic coding souveraine pour l'État, en une commande : OpenCode + agent-vm + Albert API + skills de l'État + MCP.**
 
 Albert Code assemble des briques existantes pour coder avec une IA souveraine, isolée, avec les standards de l'administration embarqués :
@@ -20,7 +22,7 @@ Albert Code assemble des briques existantes pour coder avec une IA souveraine, i
 
 Ce n'est pas un IDE ni un fork : de l'orchestration mince (scripts + config) au-dessus d'OpenCode.
 
-> Statut : v1, en test avec des early adopters. Retours et issues bienvenus.
+> Statut : v1, validé en dogfood bout en bout le 2026-07-02. En test avec des early adopters. Retours et issues bienvenus.
 
 ## Prérequis
 
@@ -71,6 +73,8 @@ Dans la bulle, l'agent tourne en mode autonome (`--dangerously-skip-permissions`
 
 Les commandes exactes (avec tes valeurs) s'affichent à la fin de `install.sh`, sous « Prochaines étapes ».
 
+> Si ton projet a déjà un `opencode.json`, il est **conservé** (non-destructif) — vérifie qu'il contient bien le provider Albert, sinon Albert ne sera pas câblé. Voir [Dépannage](#dépannage) si besoin.
+
 ### Ressources de la VM
 
 Les défauts d'agent-vm (1 CPU / 3 GiB / 10 GiB) sont trop justes pour un agent de code. Albert Code applique par défaut `4 CPU / 8 GiB / 32 GiB`, surchargeables par variable d'environnement :
@@ -98,10 +102,18 @@ AC_VM_CPUS=8 AC_VM_MEMORY=16 AC_VM_DISK=64 ./install.sh
 - **Harness** : OpenCode uniquement. Provider Albert via `@ai-sdk/openai-compatible` (`model` = `Mistral-Medium-3.5-128B`, `small_model` = `DeepSeek-V4-Flash`).
 - **Config** : `opencode.json` de **portée projet** (jamais le global de l'utilisateur, qui peut avoir d'autres providers).
 - **Skills** : `etalab-ia/skills` cloné dans un cache (`~/.config/opencode/.albert-skills-cache`) et symliqué dans le dossier scanné par OpenCode, mis à jour à chaque démarrage de VM. Les skills perso existantes ne sont jamais écrasées.
-- **MCP** : `data-gouv` (remote), `context7` (remote, **clé API requise** via https://context7.com/plans), `playwright` et `chrome-devtools` (local).
+- **MCP** : `data-gouv` (remote), `context7` (remote, **optionnel** — sans `CONTEXT7_API_KEY` on peut l'ignorer ; clé API via https://context7.com/plans si besoin), `playwright` et `chrome-devtools` (local).
+  Note : sans clé, le MCP context7 s'affiche en erreur dans la VM → le désactiver dans `opencode.json` si gênant.
 - **Conventions** : `AGENTS.md` par profil (OpenCode lit `AGENTS.md`, ignore `CLAUDE.md`). Isolation physique, aucun merge.
 
 Docs : [OpenCode](https://opencode.ai/docs/fr) · [Albert API](https://doc.incubateur.net/alliance/albert-api) · [agent-vm](https://github.com/sylvinus/agent-vm) · [Skills État](https://github.com/etalab-ia/skills)
+
+## Dépannage
+
+- **`agent-vm: command not found` juste après l'install** → le shim est posé sur le PATH. Si vraiment absent, ouvre un nouveau terminal pour recharger le PATH.
+- **`Base VM not found. Run 'agent-vm setup' first.`** → lance `agent-vm setup --disk 32` une seule fois (l'install le propose aussi automatiquement).
+- **Je suis dans OpenCode mais pas connecté à Albert (pas de `/models`, `/mcp`, `/skills`)** → tu as lancé `agent-vm opencode` dans un dossier **sans `opencode.json`** (ex. le dépôt albert-code lui-même, ou un projet jamais scaffoldé). Scaffolde d'abord : `cd <ton-projet> && ~/albert-code/install.sh` (Phase B), puis relance `agent-vm opencode`.
+- **Mon projet a déjà un `opencode.json`** → il est **conservé** (non-destructif). Vérifie qu'il contient le provider albert ; sinon Albert n'est pas câblé — ajoute à la main le bloc `provider.albert` + `model`/`small_model`.
 
 ## Désinstallation
 
@@ -114,6 +126,8 @@ Retire le bloc albert-code du runtime VM, le cache et les symlinks skills. Prés
 ## Contribuer
 
 Issues et PR bienvenues. Le dépôt suit ses propres conventions dans [`AGENTS.md`](AGENTS.md) ; le contexte et les décisions sont dans [`docs/PLAN.md`](docs/PLAN.md).
+
+> **Développer Albert Code lui-même** : `cp config/opencode.template.json opencode.json` (déjà gitignoré) puis `agent-vm opencode` — `install.sh` ne scaffolde pas son propre dépôt.
 
 ---
 
