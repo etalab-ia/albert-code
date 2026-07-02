@@ -108,6 +108,14 @@ et le bloc marqueur a disparu.
 
 ---
 
+## S15 — Shim agent-vm résolution immédiate ☐ (shim créé, test sur machine sans agent-vm à confirmer)
+**Préconditions :** agent-vm PAS installé, `agent-vm` introuvable (`command -v agent-vm` exit 1).
+**Étapes :**
+1. Lancer `./install.sh` (Phase A complète).
+2. Sans sourcer de fichier ni ouvrir de nouveau terminal, lancer `command -v agent-vm`.
+3. Lancer `agent-vm help` (ou `agent-vm list` si une VM existe).
+**Attendu :** `command -v agent-vm` retourne un chemin exécutable (ex. `/opt/homebrew/bin/agent-vm`) ; la commande `agent-vm` fonctionne immédiatement, sans `source` ni nouveau terminal.
+
 ## Critères d'acceptation v1 (Definition of Done globale)
 - [x] S1, S2, S3, S6, S7, S12, S13, S14 ✅.
 - [ ] S4, S5, S11 (idempotence runtime VM / skills au boot / non-tech — en attente).

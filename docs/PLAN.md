@@ -36,7 +36,7 @@ Agents publics : devs en ministère, PM/CPO prototypeurs, équipes incubées (AL
 
 | Brique | Choix | Notes |
 |---|---|---|
-| Sandbox | [agent-vm](https://github.com/sylvinus/agent-vm) (Lima) | Code sous `~/Dev/` (chemin sans espace requis). Clé Albert persistée dans `~/.zshenv` |
+| Sandbox | [agent-vm](https://github.com/sylvinus/agent-vm) (Lima) | Chemin du dépôt sans espace requis (contrainte agent-vm/Lima). Clé Albert persistée dans `~/.zshenv` |
 | Harness | **OpenCode uniquement** | Pas de Vibe, pas de Claude Code |
 | Provider | Albert API via `@ai-sdk/openai-compatible` | `model` = `Mistral-Medium-3.5-128B`, `small_model` = `DeepSeek-V4-Flash` |
 | Skills | [etalab-ia/skills](https://github.com/etalab-ia/skills) | Dossiers locaux scannés (voir Synchro des skills) |

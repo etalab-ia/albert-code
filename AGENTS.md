@@ -40,16 +40,19 @@ Les documents du dépôt forment un système. **Respecte cette boucle :**
 | `BACKLOG.md` | Le **quoi faire** : epics → tickets ordonnés (🔴🟠🟡) avec Definition of Done | Choisir le prochain ticket ici |
 | `TESTS.md` | Le **comment valider** : scénarios (préconditions → étapes → attendu) | Avant de clore un ticket |
 | `README.md` | Le **livrable utilisateur** (onboarding non-tech) | À tenir à jour quand le comportement change |
+| `FEEDBACK.md` | Le **pourquoi** : registre des retours utilisateurs codifiés (`AC-R###`) | Consulter pour la genèse d'un ticket / y consigner un nouveau retour |
 | `docs/PLAN.md` | Le **contexte complet** (décisions, analyses, références) | Pour comprendre l'historique du projet |
 
 **Boucle de travail attendue de l'agent :**
 1. Lire `docs/PLAN.md` pour avoir l'historique complet
 2. Lire `BACKLOG.md`, prendre le **prochain ticket non fait** dans l'ordre (commencer par l'EPIC 0).
 3. Lire les fichiers concernés avant d'éditer.
-4. Implémenter le ticket en respectant sa **DoD**.
-5. Valider avec le ou les **scénarios `TESTS.md`** référencés par le ticket (passer le statut ☐ → ✅).
-6. Mettre à jour `README.md` si le comportement utilisateur change.
-7. Commit atomique (Conventional Commits, cf. §6).
+4. Tout nouveau retour utilisateur identifié pendant le build est d'abord consigné dans `FEEDBACK.md` (`AC-R###`, 🆕) avant d'être éventuellement backlogué.
+5. Implémenter le ticket en respectant sa **DoD**.
+6. Valider avec le ou les **scénarios `TESTS.md`** référencés par le ticket (passer le statut ☐ → ✅).
+7. Si le ticket porte un renvoi `<- AC-R###`, mettre à jour le finding correspondant dans `FEEDBACK.md` (Statut → ✅ traité, colonne Renvoi vers le ticket).
+8. Mettre à jour `README.md` si le comportement utilisateur change.
+9. Commit atomique (Conventional Commits, cf. §6).
 
 > Ne traite pas un ticket sans avoir vérifié sa DoD ET son scénario de test. Si un ticket est ambigu, demande avant de coder.
 
@@ -65,6 +68,7 @@ albert-code/
 ├── AGENTS.md                      # Ce fichier (FAIT)
 ├── BACKLOG.md                     # Tickets de construction (FAIT)
 ├── TESTS.md                       # Scénarios de validation (FAIT)
+├── FEEDBACK.md                    # Registre des retours utilisateurs (FAIT)
 ├── LICENSE                        # MIT
 ├── docs/
 │   └── PLAN.md                     # Contexte & décisions (FAIT)
@@ -107,6 +111,7 @@ albert-code/
 4. **Idempotence obligatoire.** Tout script (`install.sh`, `runtime/agent-vm.runtime.sh`) doit être relançable sans casser : tester l'état (`command -v`, `dpkg -s`, présence de fichier) avant chaque action. Référence : `datagouv/apistration#70`.
 5. **Souveraineté.** Préférer libre + souverain. Signaler toute dépendance propriétaire/non-souveraine ajoutée.
 6. **Le test fait foi.** Un ticket n'est « fait » que si son scénario `TESTS.md` passe.
+7. **Retours utilisateurs → `FEEDBACK.md` d'abord.** Tout retour identifié pendant le build est consigné dans `FEEDBACK.md` (anonymisé, `AC-R###`, 🆕) avant d'être backlogué. Un ticket issu d'un retour cite son finding via `<- AC-R###`. Ne jamais mettre de nom complet, verbatim nominatif ou URL Tchap interne dans le dépôt.
 
 ---
 

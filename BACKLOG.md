@@ -2,6 +2,7 @@
 
 > Tickets de construction du bundle, ordonnés. À dérouler avec OpenCode.
 > Convention : chaque ticket a un **but**, une **définition de done (DoD)** et un renvoi aux scénarios de `TESTS.md`.
+> Un ticket issu d'un retour utilisateur cite son finding via `<- AC-R###` (registre `FEEDBACK.md`).
 > 🔴 bloquant v1 · 🟠 important · 🟡 nice-to-have
 
 ---
@@ -127,6 +128,16 @@ Config MCP de référence :
 ### T-FIX-4 🟠 Test désinstallation ✅ implémenté
 **But :** valider la désinstallation complète.
 **DoD :** S14 — après install puis uninstall, aucune clé ne subsiste dans `~/.agent-vm/runtime.sh` ni `~/.zshenv`, et le bloc marqueur a disparu.
+
+### T-FIX-5 🔴 `agent-vm` résolu immédiatement après install ✅ implémenté `<- AC-R001, AC-R002`
+**But :** `agent-vm` est une fonction shell (sourcée) ; après `./install.sh`, elle n'est pas chargée dans le terminal courant → « command not found », y compris après relance.
+**Tâches :** shim exécutable `agent-vm` posé dans un dossier déjà présent dans `$PATH` (source `agent-vm.sh` + dispatch) ; atténuer les messages « déjà sourcé » trompeurs ; vérif finale `command -v agent-vm`.
+**DoD :** `agent-vm` résout dans le même terminal juste après install, sans réouverture. → `TESTS.md` S15.
+
+### T-FIX-6 🟡 Retirer les chemins `~/Dev` en dur `<- AC-R003` ✅ implémenté
+**But :** `~/Dev` est une convention personnelle ; ne doit pas apparaître en dur dans le code, le README ni la doc.
+**Tâches :** défauts `AGENT_VM_DIR`/`ALBERT_CODE_REPO` → emplacement neutre (XDG / `SELF_DIR`), identiques install/uninstall ; placeholders neutres sans espace dans README/doc ; grep de contrôle 0 hit.
+**DoD :** `grep -rE '\$HOME/Dev|~/Dev'` (hors `.git`) ne renvoie rien ; `--dry-run` cohérent install/uninstall.
 
 ---
 

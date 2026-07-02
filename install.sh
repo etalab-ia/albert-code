@@ -8,7 +8,7 @@
 #
 # Usage :
 #   ./install.sh                          # depuis le dépôt albert-code (Phase A)
-#   ~/Dev/albert-code/install.sh          # depuis un dossier projet (A + B)
+#   ~/albert-code/install.sh              # depuis un dossier projet (A + B)
 #
 # Non-destructif : ne réinstalle rien déjà présent, n'écrase aucune config
 # existante (globale ou projet). Portée projet pour opencode.json.
@@ -32,8 +32,7 @@ while [ $# -gt 0 ]; do
   shift
 done
 
-ALBERT_CODE_REPO="${ALBERT_CODE_REPO:-$HOME/Dev/albert-code}"
-AGENT_VM_DIR="${AGENT_VM_DIR:-$HOME/Dev/agent-vm}"
+AGENT_VM_DIR="${AGENT_VM_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/agent-vm}"
 AGENT_VM_REPO="https://github.com/sylvinus/agent-vm.git"
 RUNTIME_VM_FILE="$HOME/.agent-vm/runtime.sh"
 ZSHENV="$HOME/.zshenv"
@@ -134,6 +133,15 @@ install_agent_vm() {
     ok "agent-vm déjà installé"
     return 0
   fi
+
+  local shim_file="" _d="" _ifs_save="$IFS"
+  IFS=':'
+  for _d in /opt/homebrew/bin /usr/local/bin $PATH; do
+    [ -z "$_d" ] && continue
+    [ -f "$_d/agent-vm" ] && [ -x "$_d/agent-vm" ] && { shim_file="$_d/agent-vm"; break; }
+  done
+  IFS="$_ifs_save"
+  [ -n "$shim_file" ] && ok "shim agent-vm déjà présent"
   if [ -f "$AGENT_VM_DIR/agent-vm.sh" ]; then
     ok "agent-vm déjà cloné dans $AGENT_VM_DIR"
   else
@@ -142,7 +150,7 @@ install_agent_vm() {
     apply "cloner agent-vm depuis $AGENT_VM_REPO" git clone --depth 1 --quiet "$AGENT_VM_REPO" "$AGENT_VM_DIR"
     [ "$DRY_RUN" -eq 0 ] && ok "agent-vm cloné dans $AGENT_VM_DIR" || true
   fi
-  # Sourcing dans le shell rc (idempotent)
+  # Sourcing dans le shell rc (idempotent) — utile pour complétion et usage interactif
   local rc=""
   case "${SHELL##*/}" in
     zsh)  rc="$HOME/.zshrc" ;;
@@ -150,20 +158,24 @@ install_agent_vm() {
     *)    rc="$HOME/.profile" ;;
   esac
   apply_touch "créer $rc si absent" "$rc"
-  if file_contains "$rc" "agent-vm.sh"; then
-    ok "agent-vm déjà sourcé dans $rc"
-  else
+  if ! file_contains "$rc" "agent-vm.sh"; then
     apply_append "sourcer agent-vm dans $rc" "$rc" \
       "# Albert Code — agent-vm"
     apply_append "sourcer agent-vm dans $rc (ligne source)" "$rc" \
       "[ -f \"$AGENT_VM_DIR/agent-vm.sh\" ] && source \"$AGENT_VM_DIR/agent-vm.sh\""
-    [ "$DRY_RUN" -eq 0 ] && ok "agent-vm sourcé dans $rc" || true
-    warn "Ouvre un nouveau terminal (ou « source %s ») pour activer agent-vm." "$rc"
   fi
-  # Activation pour la session courante (pas en dry-run)
+  # Shim exécutable sur le PATH (résolution immédiate dans le même terminal)
+  install_shim "agent-vm" "$AGENT_VM_DIR/agent-vm.sh"
+
+  # Vérification finale : la commande doit être trouvée maintenant
   if [ "$DRY_RUN" -eq 0 ]; then
-    # shellcheck disable=SC1090
-    [ -f "$AGENT_VM_DIR/agent-vm.sh" ] && source "$AGENT_VM_DIR/agent-vm.sh" 2>/dev/null || true
+    if command -v agent-vm >/dev/null 2>&1; then
+      ok "agent-vm utilisable (shim sur le PATH)"
+    else
+      if [ "$SHIM_PATH_ADDED" -eq 1 ]; then
+        warn "~/.local/bin a été ajouté au PATH — ouvre un nouveau terminal ou source ~/.zshenv."
+      fi
+    fi
   fi
 }
 
@@ -274,8 +286,8 @@ phase_b() {
   if [ "$PWD" = "$SELF_DIR" ]; then
     echo
     info "Tu es dans le dépôt albert-code. Pour scaffold un projet :"
-    info "  mkdir -p ~/Dev/mon-projet && cd ~/Dev/mon-projet"
-    info "  ~/Dev/albert-code/install.sh"
+    info "  mkdir -p ~/mon-projet && cd ~/mon-projet"
+    info "  ~/albert-code/install.sh"
     return 0
   fi
 

@@ -23,7 +23,7 @@ SKILLS_DIR="$HOME/.config/opencode/skills"
 SKILLS_CACHE="$HOME/.config/opencode/.albert-skills-cache"
 RUNTIME_VM_FILE="$HOME/.agent-vm/runtime.sh"
 ZSHENV="$HOME/.zshenv"
-AGENT_VM_DIR="${AGENT_VM_DIR:-$HOME/Dev/agent-vm}"
+AGENT_VM_DIR="${AGENT_VM_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/agent-vm}"
 AC_MARKER="# --- albert-code : clés VM ---"
 
 banner
@@ -103,12 +103,17 @@ if [ -f "$rc" ] && file_contains "$rc" "agent-vm.sh"; then
   fi
 fi
 
-# 5. agent-vm (clone + VMs) — optionnel, lourd
+# 5. agent-vm (clone + VMs + shim) — optionnel, lourd
 if [ -d "$AGENT_VM_DIR" ] && confirm "Supprimer agent-vm ($AGENT_VM_DIR) et ses VMs ?"; then
-  command -v agent-vm >/dev/null 2>&1 && agent-vm destroy-all 2>/dev/null || true
+  # Retirer le shim d'abord (avant que la fonction disparaisse)
+  if command -v agent-vm >/dev/null 2>&1; then
+    agent-vm destroy-all 2>/dev/null || true
+  fi
+  remove_shim "agent-vm" 2>/dev/null || true
   rm -rf "$AGENT_VM_DIR"
-  ok "agent-vm supprimé"
+  ok "agent-vm supprimé (code + shim)"
 fi
+
 
 # 6. Fichiers projet (dans le dossier courant)
 echo

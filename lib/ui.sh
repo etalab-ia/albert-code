@@ -58,6 +58,83 @@ apply_chmod()  { local desc="$1" mode="$2" file="$3"; _dry_gate "$desc" || retur
 # apply_symlink <desc> <target> <link> — crée un lien symbolique (ne remplace pas un fichier/répertoire existant).
 apply_symlink() { local desc="$1" target="$2" link="$3"; _dry_gate "$desc" || return 0; ln -sf "$target" "$link" 2>/dev/null || true; }
 
+# install_shim <name> <source_script> : crée un shim exécutable sur le PATH
+# pour une commande qui est en réalité une fonction shell définie par source.
+# Cherche un dossier writable dans $PATH dans cet ordre :
+#   /opt/homebrew/bin (Apple Silicon), /usr/local/bin, ~/.local/bin
+# Si seulement ~/.local/bin est trouvé, l'ajoute à ~/.zshenv si absent.
+# Retourne 0 si le shim est posé, 1 si aucun dossier writable trouvé (avertit).
+# Variables lues : DRY_RUN (pour _dry_gate).
+SHIM_PATH_ADDED="${SHIM_PATH_ADDED:-0}"
+install_shim() {
+  local name="$1" source_script="$2"
+  local shim_dir="" _dir="" _old_ifs=""
+
+  # 1. Trouver le premier dossier dans $PATH qui est writable
+  _old_ifs="$IFS"
+  IFS=':'
+  for _dir in /opt/homebrew/bin /usr/local/bin $PATH; do
+    [ -z "$_dir" ] && continue
+    if [ -d "$_dir" ] && [ -w "$_dir" ]; then
+      shim_dir="$_dir"
+      break
+    fi
+  done
+  IFS="$_old_ifs"
+
+  # 2. Si rien trouvé, utiliser ~/.local/bin
+  if [ -z "$shim_dir" ]; then
+    shim_dir="$HOME/.local/bin"
+    if [ ! -d "$shim_dir" ]; then
+      apply_mkdir "créer $shim_dir" "$shim_dir"
+    fi
+    # Ajouter au PATH via ~/.zshenv si pas déjà
+    if ! file_contains "$HOME/.zshenv" "\.local/bin"; then
+      apply_append "ajouter ~/.local/bin au PATH dans ~/.zshenv" "$HOME/.zshenv" \
+        "export PATH=\"\$HOME/.local/bin:\$PATH\""
+      SHIM_PATH_ADDED=1
+    fi
+  fi
+
+  shim_path="$shim_dir/$name"
+  shim_content="#!/usr/bin/env bash
+# Shim pour $name (généré par Albert Code)
+source \"$source_script\" 2>/dev/null || true
+$name \"\$@\""
+
+  if [ -f "$shim_path" ]; then
+    ok "shim $name déjà présent dans $shim_path"
+    return 0
+  fi
+  apply_write "créer le shim $name dans $shim_path" "$shim_path" "$shim_content"
+  apply_chmod "chmod +x 755 $shim_path" 755 "$shim_path"
+  [ "$DRY_RUN" -eq 0 ] && ok "shim $name installé dans $shim_path"
+  return 0
+}
+
+# remove_shim <name> : supprime un shim du PATH.
+remove_shim() {
+  local name="$1" _dir="" _old_ifs=""
+  _old_ifs="$IFS"
+  IFS=':'
+  for _dir in $PATH; do
+    [ -z "$_dir" ] && continue
+    local shim_path="$_dir/$name"
+    if [ -f "$shim_path" ] && [ -x "$shim_path" ]; then
+      # Vérifie que c'est bien notre shim (contient la signature)
+      if head -3 "$shim_path" 2>/dev/null | grep -q "Shim pour $name"; then
+        rm -f "$shim_path"
+        IFS="$_old_ifs"
+        ok "shim $name retiré de $shim_path"
+        return 0
+      fi
+    fi
+  done
+  IFS="$_old_ifs"
+  warn "aucun shim $name trouvé sur le PATH"
+  return 1
+}
+
 # --- Skills État (cache + symlinks) -------------------------------------------
 # SKILLS_CACHE : dépôt git cloné de etalab-ia/skills (vrai .git, updatable).
 # Les skills sont symlinkées dans OPENCODE_CONFIG_DIR/skills/<nom> → cache/skills/<nom>.
@@ -269,8 +346,7 @@ Options:
 Variables d'environnement (sandbox) :
   HOME                   Redirige ~/.zshenv, ~/.config/opencode, etc.
   OPENCODE_CONFIG_DIR     Dossier de config OpenCode (défaut: ~/.config/opencode).
-  ALBERT_CODE_REPO        Chemin du dépôt albert-code (défaut: ~/Dev/albert-code).
-  AGENT_VM_DIR            Dossier d'installation d'agent-vm (défaut: ~/Dev/agent-vm).
+  AGENT_VM_DIR            Dossier d'installation d'agent-vm (défaut: \${XDG_DATA_HOME:-~/.local/share}/agent-vm).
 
 Exemple (test non-destructif) :
   mkdir -p /tmp/ac-test

@@ -33,8 +33,8 @@ Ce n'est pas un IDE ni un fork : de l'orchestration mince (scripts + config) au-
 ## Installation
 
 ```bash
-git clone https://github.com/etalab-ia/albert-code.git ~/Dev/albert-code
-cd ~/Dev/albert-code
+git clone https://github.com/etalab-ia/albert-code.git ~/albert-code
+cd ~/albert-code
 ./install.sh
 ```
 
@@ -61,8 +61,8 @@ Au scaffold d'un projet, le script demande le contexte et applique **uniquement*
 ## Utilisation
 
 ```bash
-mkdir -p ~/Dev/mon-projet && cd ~/Dev/mon-projet
-~/Dev/albert-code/install.sh   # Phase B : choix du profil + config projet
+mkdir -p ~/mon-projet && cd ~/mon-projet
+~/albert-code/install.sh   # Phase B : choix du profil + config projet
 agent-vm opencode              # ouvre la bulle isolée + OpenCode
 ```
 
