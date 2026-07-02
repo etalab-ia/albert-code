@@ -1,0 +1,28 @@
+name: hygiene
+
+# Garde-fous de propreté du dépôt PUBLIC albert-code (pas les templates livrés
+# aux projets utilisateurs, cf. BACKLOG.md T4.5).
+on:
+  push:
+  pull_request:
+
+jobs:
+  hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Garde-fou anti-fuite chemin personnel / username (T4.5 <- AC-R008)
+        run: bash tests/check_no_personal_paths.sh
+
+      - name: Vérification syntaxique des scripts bash
+        run: |
+          for f in install.sh uninstall.sh lib/*.sh runtime/*.sh tests/*.sh; do
+            [ -f "$f" ] || continue
+            echo "bash -n $f"
+            bash -n "$f"
+          done
+
+      - name: Test S15 — shim agent-vm (sandbox jetable, non-destructif)
+        run: bash tests/s15_shim.sh

@@ -22,6 +22,10 @@
 | AC-R005 | ❓ | 🟡 | Certaines skills ne se déclenchent pas dans OpenCode/Vibe (`/skill` → l'agent ne fait rien) : question de harness/compatibilité vs Claude Code. | Crash test 2026-07-02, profil dev power user | 🆕 à trier | — |
 | AC-R006 | 🎛️ | 🟠 | Le hint de scaffold (`phase_b`) affiche un chemin hardcodé `~/albert-code/install.sh` au lieu du chemin réel (`$SELF_DIR`) → copier-coller cassé si le dépôt est cloné ailleurs (ex. `~/Dev/albert-code`). Régression de T-FIX-12. | Dogfood 2026-07-02 | ✅ traité | `BACKLOG.md` T-FIX-13 · `TESTS.md` S16 |
 | AC-R007 | 🐛 | 🔴 | Après une install fraîche, `agent-vm opencode` échoue (`Base VM not found. Run 'agent-vm setup' first.`) : `install.sh` ne crée pas la VM de base et le message « Prochaines étapes » ne mentionne pas `agent-vm setup`. Onboarding cassé pour tout nouvel utilisateur. | Dogfood 2026-07-02 | ✅ traité | `BACKLOG.md` T-FIX-14 · `TESTS.md` S17 |
+| AC-R008 | ⚙️ | 🟠 | Des notes de validation / sorties de dry-run collées dans le dépôt public fuitent le chemin home absolu personnel (`/Users/<name>/…`) et le username. Même classe que AC-R003 mais autre vecteur (docs, pas code). Instance neutralisée au pré-vol (note S16), mais rien n'empêche la récidive. | Pré-vol commit 2026-07-02 | ✅ traité | `BACKLOG.md` T4.5 · `TESTS.md` S18 |
+| AC-R009 | 🎛️ | 🟡 | L'installeur signale « OpenCode absent du PATH » et suggère un contournement hors-VM (`npm i -g opencode-ai`). Contraire à la doctrine Albert Code = usage **exclusivement** via `agent-vm` (bulle isolée) ; ne pas proposer de bypass de l'isolation. Redondance en prime (« absent du PATH » ×2). | Dogfood 2026-07-02 | ✅ traité | `BACKLOG.md` T-FIX-15 |
+| AC-R010 | ⚙️ | 🟠 | Ressources VM par défaut d'agent-vm trop justes pour du code (`1 CPU / 3 GiB / 10 GiB`). En usage réel il faut ~`4 CPU / 8 GiB / 30 GiB`. agent-vm n'a pas de défaut configurable par env → Albert Code doit fixer une taille adaptée (disque au `setup`, cpu/mémoire au lancement) sans sur-allouer sur petite machine. | Dogfood 2026-07-02 | ✅ traité | `BACKLOG.md` T1.4 · `TESTS.md` S20 |
+| AC-R011 | 🎛️ | 🟡 | `context7` est `enabled: true` en dur dans `opencode.template.json` alors qu'il exige `CONTEXT7_API_KEY` → pour un utilisateur **sans clé**, le MCP échoue (401 / bearer vide) au démarrage dans la VM et s'affiche « cassé ». T1.1 notait « rendre le MCP optionnel/skippable si pas de clé » — pas encore fait. | Revue config dogfood 2026-07-02 | 📥 backlogué | `BACKLOG.md` T1.5 |
 
 ---
 
@@ -29,4 +33,5 @@
 
 - **AC-R004 (prompt caching)** : à instruire avant tout scaling. Vérifier si Albert API expose du caching sur `chat/completions` ; sinon, arbitrer l'infra d'inférence. vLLM implémente le caching nativement.
 - **AC-R005 (harness skills)** : investiguer le déclenchement des skills selon le harness (OpenCode / Vibe / Claude Code). Impacte la portabilité du bundle hors Claude Code.
-- **AC-R006 / AC-R007** : détectés en dogfood (réinstall complète sur machine remise à zéro le 2026-07-02). R007 est bloquant onboarding (le « next step » affiché échoue). Fixes en cours via Mistral Vibe, validés par S16 / S17.
+- **AC-R006 / AC-R007** : détectés en dogfood (réinstall complète sur machine remise à zéro le 2026-07-02). R007 est bloquant onboarding (le « next step » affiché échoue). Fixes validés par S16 / S17.
+- **AC-R008** : fuite récurrente de chemin absolu / username dans un dépôt public. L'instance (note S16) a été neutralisée au pré-vol du commit `7f84d9a` ; le fix durable est un **garde-fou CI** (T4.5), pas un edit ponctuel — sinon ça reviendra.

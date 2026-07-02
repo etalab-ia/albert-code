@@ -129,6 +129,7 @@ albert-code/
 - **Jamais** de données réelles dans des exemples/fixtures.
 - gitleaks recommandé en pre-commit ; ne jamais contourner avec `--no-verify`.
 - `chmod 600` sur tout fichier contenant une clé (`~/.zshenv`, `~/.agent-vm/runtime.sh`).
+- **Notes de validation** (`TESTS.md`, tickets, commits) : anonymiser les chemins absolus / username ; ne jamais coller de sortie brute contenant `/Users/<toi>` ou `/home/<toi>`. Un garde-fou CI (`tests/check_no_personal_paths.sh`, T4.5) le vérifie à chaque push/PR.
 
 ### Git
 - Commits **Conventional Commits** : `type(scope): message` (`feat|fix|docs|refactor|chore|test`). Message qui explique le *pourquoi*. Squash des commits intermédiaires avant push.

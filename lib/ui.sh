@@ -363,6 +363,14 @@ Variables d'environnement (sandbox) :
   SHIM_BIN_DIR            Dossier du shim agent-vm (défaut: sonde /opt/homebrew/bin,
                           /usr/local/bin puis \$PATH, sinon ~/.local/bin).
 
+Ressources VM (surchargeables) :
+  AC_VM_CPUS              CPU alloués à la VM (défaut: 4).
+  AC_VM_MEMORY             RAM en GiB allouée à la VM (défaut: 8).
+  AC_VM_DISK               Disque en GiB de la VM, fixé au 1er `agent-vm setup`,
+                          ne peut que grandir ensuite (défaut: 32).
+                          Garde-fou : CPU/RAM effectifs jamais > ~moitié des
+                          ressources hôte détectées (sysctl/nproc, lecture seule).
+
 Exemple (test non-destructif) :
   mkdir -p /tmp/ac-test
   HOME=/tmp/ac-test ./install.sh --dry-run

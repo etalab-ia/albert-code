@@ -64,6 +64,21 @@ Config MCP de référence :
 **But :** garantir des skills toujours fraîches (réponse au « pas de maj auto »).
 **DoD :** ajouter une skill dans le repo distant → après reboot VM, elle apparaît dans OpenCode sans action manuelle. → `TESTS.md` S5.
 
+### T1.4 🟠 Ressources VM par défaut adaptées au code `<- AC-R010` ✅ implémenté
+**But :** les défauts d'agent-vm (`1 CPU / 3 GiB / 10 GiB`) sont trop justes pour un agent de code ; en usage réel on tourne à `4 CPU / 8 GiB / 30 GiB`. agent-vm ne lit aucune variable d'env pour ses défauts (ressources uniquement via `--cpus/--memory/--disk`), et le **disque se fige à la création du template** (`agent-vm setup`) — il ne peut que grandir.
+**Config proposée (surchargeable par env) :** `AC_VM_CPUS=4`, `AC_VM_MEMORY=8`, `AC_VM_DISK=32`.
+**Tâches :**
+- Définir ces défauts (env-overridables) en tête d'`install.sh`.
+- `check_base_vm()` : `agent-vm setup --disk ${AC_VM_DISK}` (dimensionner le disque de base d'emblée).
+- « Prochaines étapes » + README : recommander le 1er lancement dimensionné `agent-vm --cpus ${AC_VM_CPUS} --memory ${AC_VM_MEMORY} opencode` (cpu/mémoire s'appliquent au run et persistent au clone du projet).
+- Garde-fou hôte : ne pas allouer plus que ~la moitié de la RAM/CPU de la machine (détecter `sysctl`/`nproc`, capper) — éviter 8 GiB sur un Mac 8 Go.
+**DoD :** une install fraîche produit une VM ≥ `4 CPU / 8 GiB / ≥30 GiB` sans réglage manuel ; valeurs surchargeables par env ; pas de sur-allocation sur petite machine. → `TESTS.md` S20.
+
+### T1.5 🟡 context7 conditionnel selon présence de la clé `<- AC-R011`
+**But :** `context7` est `enabled: true` en dur dans `config/opencode.template.json` ; sans `CONTEXT7_API_KEY`, le MCP échoue au démarrage dans la VM (401 / bearer vide) et s'affiche « cassé ». Répond à la note de T1.1 restée ouverte.
+**Tâches :** au scaffold (Phase B, pose de `opencode.json`), fixer `context7.enabled` selon la présence de `CONTEXT7_API_KEY` (env ou `~/.zshenv`) — `false` (ou MCP retiré) si absente ; `true` si présente. Post-patch du fichier posé (sed/jq) ou template conditionnel. Documenter le comportement.
+**DoD :** install **sans** clé context7 → `opencode.json` posé a `context7.enabled: false` → aucun MCP en erreur dans la VM ; **avec** clé → `enabled: true`. → `TESTS.md` S21.
+
 ---
 
 ## EPIC 2 — Profils & bootstrap (séparation des conventions)
@@ -151,6 +166,11 @@ Config MCP de référence :
 **Tâches :** « Prochaines étapes » → lister `agent-vm setup` comme étape 1 (avant `agent-vm opencode`) ; en Phase A, détecter l'absence de VM de base et prévenir (option : proposer de lancer `agent-vm setup` avec confirmation — pas d'auto-run silencieux, c'est long).
 **DoD :** un nouvel utilisateur qui suit les instructions ne rencontre jamais `Base VM not found`. → `TESTS.md` S17.
 
+### T-FIX-15 🟡 Retirer le contournement OpenCode hors-VM `<- AC-R009` ✅ implémenté
+**But :** Albert Code s'utilise **exclusivement** via `agent-vm` (bulle isolée). L'installeur ne doit ni signaler l'absence d'OpenCode sur le PATH hôte, ni suggérer `npm i -g opencode-ai` (bypass de l'isolation).
+**Tâches :** dans `install.sh` (A.7), retirer le check host-opencode + les warns « absent du PATH » (×2) + l'info `npm i -g opencode-ai`. Optionnel : une seule ligne positive « OpenCode s'exécute dans la bulle agent-vm — rien à installer sur ton poste ». Vérifier qu'aucun message n'oriente vers une exécution d'OpenCode hors VM.
+**DoD :** `grep -n 'opencode-ai\|absent du PATH' install.sh` ne renvoie rien ; l'install ne mentionne plus d'OpenCode hôte.
+
 ---
 
 ### T4.1 🟠 Skill `conventions-iae` (dans etalab-ia/skills)
@@ -173,6 +193,14 @@ Config MCP de référence :
 - `tests/s15_shim.sh` : sandbox jetable (`HOME` / `SHIM_BIN_DIR` / `XDG_DATA_HOME` sous `mktemp -d`), stub `agent-vm.sh` (`agent-vm(){ echo "STUB OK $*"; }`), PATH minimal ; asserter précondition `command -v agent-vm` introuvable → `install_shim` → `command -v agent-vm` = `$SHIM_BIN_DIR/agent-vm` + exécution du stub ; vérifier non-pollution de `/opt/homebrew/bin` et du vrai `$HOME` ; cleanup `trap EXIT`.
 **DoD :** `tests/s15_shim.sh` exit 0 sans écrire hors de la sandbox ; intégrable en CI. → `TESTS.md` S15 (variante automatisée).
 
+### T4.5 🟠 Garde-fou CI anti-fuite chemin perso / username `<- AC-R008` ✅ implémenté
+**But :** empêcher qu'un chemin home absolu (`/Users/<name>`, `/home/<name>`) ou un username perso ne soit committé dans ce dépôt **public**. Fuite récurrente : défauts `~/Dev` en code (T-FIX-12), puis chemin absolu dans une note de validation `TESTS.md` (attrapé au pré-vol du commit `7f84d9a`).
+**Tâches :**
+- Ajouter un check (workflow CI du dépôt, ou script de conformité `templates/`) : `git grep -nE '/Users/[^/ ]+|/home/[^/ ]+'` sur les fichiers suivis → **échec si hit**. Tolérer les placeholders documentés (`<chemin-du-dépôt>`, `$SELF_DIR`, `$HOME`, `~/...`) et exclure `*.lock`.
+- Documenter la règle dans `AGENTS.md` (« notes de validation : anonymiser les chemins absolus / username ; ne jamais coller de sortie brute contenant `/Users/<toi>` »).
+- Créer le scénario `TESTS.md` S18.
+**DoD :** un commit contenant `/Users/<qqn>/…` dans un fichier tracké fait échouer la CI ; les placeholders légitimes passent. → `TESTS.md` S18.
+
 ---
 
 ## EPIC 5 — Distribution
@@ -182,8 +210,8 @@ Config MCP de référence :
 **DoD :** un non-tech installe et lance un premier projet sans aide. → `TESTS.md` S11.
 
 ### T5.2 🟠 Test sur machine vierge + early adopters
-**But :** valider hors poste de Benoit.
-**DoD :** install réussie par ≥1 early adopter (Thomas / Simon / Eric / Chaïb / Julien).
+**But :** valider hors du poste de développement habituel (machine vierge).
+**DoD :** install réussie par ≥1 early adopter externe.
 
 ### T5.3 🟡 Publication `etalab-ia/albert-code`
 **DoD :** repo public, LICENSE MIT, CI verte.

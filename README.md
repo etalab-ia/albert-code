@@ -62,11 +62,30 @@ Au scaffold d'un projet, le script demande le contexte et applique **uniquement*
 
 ```bash
 mkdir -p ~/mon-projet && cd ~/mon-projet
-~/albert-code/install.sh   # Phase B : choix du profil + config projet
-agent-vm opencode              # ouvre la bulle isolée + OpenCode
+~/albert-code/install.sh                                  # Phase B : choix du profil + config projet
+agent-vm setup --disk 32                                  # 1 seule fois : crée la VM de base
+agent-vm --cpus 4 --memory 8 --disk 32 opencode            # ouvre la bulle isolée + OpenCode
 ```
 
 Dans la bulle, l'agent tourne en mode autonome (`--dangerously-skip-permissions`), sûr parce que tout est confiné dans la VM. Tu peux lui parler en français.
+
+Les commandes exactes (avec tes valeurs) s'affichent à la fin de `install.sh`, sous « Prochaines étapes ».
+
+### Ressources de la VM
+
+Les défauts d'agent-vm (1 CPU / 3 GiB / 10 GiB) sont trop justes pour un agent de code. Albert Code applique par défaut `4 CPU / 8 GiB / 32 GiB`, surchargeables par variable d'environnement :
+
+```bash
+AC_VM_CPUS=8 AC_VM_MEMORY=16 AC_VM_DISK=64 ./install.sh
+```
+
+| Variable | Défaut | Rôle |
+|---|---|---|
+| `AC_VM_CPUS` | `4` | CPU alloués (s'applique au lancement `agent-vm opencode`). |
+| `AC_VM_MEMORY` | `8` (GiB) | RAM allouée (s'applique au lancement). |
+| `AC_VM_DISK` | `32` (GiB) | Disque, fixé au 1er `agent-vm setup`, ne peut ensuite que grandir. |
+
+**Garde-fou hôte** (lecture seule, macOS + Linux) : `install.sh` détecte les ressources de ta machine (`sysctl`/`nproc`) et ne propose jamais plus de ~la moitié du CPU/RAM hôte, même si `AC_VM_*` demande plus — pour ne pas sur-allouer sur un petit poste. Le disque n'est jamais rogné (sparse : alloué à l'usage, pas d'un coup) ; un avertissement s'affiche si l'espace libre est insuffisant.
 
 ## Sécurité
 

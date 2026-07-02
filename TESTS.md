@@ -132,8 +132,30 @@ et le bloc marqueur a disparu.
 **Attendu :** l'utilisateur est explicitement dirigé vers `agent-vm setup` (création de la VM de base, une fois) AVANT `agent-vm opencode` ; en suivant les instructions il ne rencontre jamais `Base VM not found`. Bonus : détection en Phase A si la VM de base manque.
 **Validé le :** 2026-07-02, `./install.sh --dry-run` depuis un dossier projet de test : Phase A affiche `! VM de base absente — lance agent-vm setup une fois avant agent-vm opencode.` (via `limactl list -q`) puis propose `agent-vm setup` via `confirm()` (auto-répond « non » en dry-run, aucune VM créée) ; « Prochaines étapes » liste `1. agent-vm setup`, `2. agent-vm opencode`, `3. Parle en français à l'assistant`.
 
+## S18 — Garde-fou CI anti-fuite chemin personnel / username ☑ (AC-R008)
+**Préconditions :** dépôt propre (aucune fuite résiduelle) ; `tests/check_no_personal_paths.sh` présent et exécutable.
+**Étapes :**
+1. Lancer `bash tests/check_no_personal_paths.sh` sur l'arbre du dépôt tel quel.
+2. Créer un fichier tracké contenant un chemin personnel réel (ex. `/Users/<nom>/x`), `git add -N` pour le rendre visible à `git ls-files`, relancer le script.
+3. Répéter avec les placeholders documentés (`<chemin-du-dépôt>`, `$SELF_DIR`, `$HOME`, `~/...`, `/Users/username`, `/Users/user`, `/home/user`).
+4. Vérifier que le workflow `.github/workflows/hygiene.yml` exécute bien ce script sur push et pull_request.
+**Attendu :** (1) exit 0, aucun hit. (2) exit 1, `fichier:ligne: /Users/<nom>` affiché. (3) exit 0, les placeholders ne déclenchent rien. (4) la CI échoue si un chemin personnel est commité, passe sinon.
+**Validé le :** 2026-07-02 — `bash tests/check_no_personal_paths.sh` sur l'arbre actuel → exit 0 (« Aucun chemin personnel / username détecté »). Test négatif : fichier tracké avec `/Users/<nom>/x` → exit 1, `fichier:2: /Users/<nom>` affiché ; fichier retiré ensuite. Test placeholders (`<chemin-du-dépôt>`, `$SELF_DIR`, `$HOME`, `~/mon-projet`, `/Users/username`, `/Users/user`, `/home/user`) → exit 0. Faux positif résiduel corrigé au passage : `tests/s15_shim.sh` utilisait `$SB/home` comme nom de dossier sandbox, qui matchait accidentellement `/home/[A-Za-z0-9._-]+` (aucun rapport avec un vrai chemin perso) → renommé en `$SB/sandbox-home`.
+
+## S20 — Ressources VM par défaut + garde-fou hôte ☑ (AC-R010)
+**Préconditions :** dossier projet de test (hors dépôt albert-code, pour déclencher Phase B).
+**Étapes :**
+1. `./install.sh --dry-run` depuis le dossier projet, valeurs par défaut (aucune variable `AC_VM_*`).
+2. `AC_VM_MEMORY=2 AC_VM_CPUS=1 ./install.sh --dry-run` (surcharge explicite).
+3. Simuler un hôte modeste (2 CPU / 4 GiB, via un `sysctl` de test) avec les défauts `AC_VM_CPUS=4`/`AC_VM_MEMORY=8`.
+**Attendu :**
+(1) Phase A affiche les ressources hôte détectées ; « Prochaines étapes » liste `agent-vm setup --disk 32` puis `agent-vm --cpus 4 --memory 8 --disk 32 opencode` (valeurs concrètes, pas de variables affichées).
+(2) les mêmes emplacements affichent `--cpus 1 --memory 2` partout (disque inchangé à 32, non raboté).
+(3) le garde-fou ne propose jamais plus de ~la moitié des ressources hôte détectées (ici : 1 CPU / 2 GiB, avec un message « Hôte limité… » explicite), sans planter si la détection échoue.
+**Validé le :** 2026-07-02 — (1) dry-run par défaut : `Ressources hôte détectées : 14 CPU / 36 GiB RAM.` puis `1. agent-vm setup --disk 32` / `2. agent-vm --cpus 4 --memory 8 --disk 32 opencode` (hôte assez large, pas de rabot). (2) `AC_VM_MEMORY=2 AC_VM_CPUS=1` → `agent-vm --cpus 1 --memory 2 --disk 32 opencode`. (3) hôte simulé à 2 CPU / 4 GiB (fake `sysctl` en tête de `PATH`) avec défauts 4 CPU / 8 GiB → `Hôte limité (2 CPU / 4 GiB) → VM à 1 CPU / 2 GiB (au lieu de 4 CPU / 8 GiB demandés).` et « Prochaines étapes » reflète bien `--cpus 1 --memory 2`. Bonus vérifié : quand la VM de base existe déjà, l'étape « crée la VM de base » disparaît de la liste (numérotation qui se resserre).
+
 ## Critères d'acceptation v1 (Definition of Done globale)
-- [x] S1, S2, S3, S6, S7, S12, S13, S14, S15, S16, S17 ✅.
+- [x] S1, S2, S3, S6, S7, S12, S13, S14, S15, S16, S17, S18, S20 ✅.
 - [ ] S4, S5, S11 (idempotence runtime VM / skills au boot / non-tech — en attente).
 - [ ] Un agent public installe le bundle, choisit son contexte, et produit une page DSFR conforme dans une VM isolée, alimentée par Albert, sans qu'aucune clé ne fuite.
 - [x] Un utilisateur beta.gouv n'a jamais de convention IAE, et inversement. (validé S7)

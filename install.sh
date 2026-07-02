@@ -37,6 +37,85 @@ AGENT_VM_REPO="https://github.com/sylvinus/agent-vm.git"
 RUNTIME_VM_FILE="$HOME/.agent-vm/runtime.sh"
 ZSHENV="$HOME/.zshenv"
 
+# --- Ressources VM (surchargeables par env) -------------------------------------
+# Défauts d'agent-vm (1 CPU / 3 GiB / 10 GiB) trop justes pour un agent de code.
+# Le disque se fige à la création du template (`agent-vm setup`) et ne peut que
+# grandir → dimensionné dès le setup. CPU/mémoire s'appliquent au lancement.
+AC_VM_CPUS="${AC_VM_CPUS:-4}"
+AC_VM_MEMORY="${AC_VM_MEMORY:-8}"   # GiB
+AC_VM_DISK="${AC_VM_DISK:-32}"      # GiB
+
+# --- Détection ressources hôte (LECTURE SEULE) ----------------------------------
+# detect_host_cpus : nombre de CPU hôte, macOS (sysctl) puis Linux (nproc). Vide
+# si indétectable (jamais d'échec bloquant).
+detect_host_cpus() {
+  local n
+  if n="$(sysctl -n hw.ncpu 2>/dev/null)" && [ -n "$n" ]; then
+    printf '%s' "$n"
+  elif n="$(nproc 2>/dev/null)" && [ -n "$n" ]; then
+    printf '%s' "$n"
+  fi
+}
+
+# detect_host_ram_gib : RAM hôte en GiB, macOS (sysctl hw.memsize) puis Linux
+# (/proc/meminfo MemTotal). Vide si indétectable.
+detect_host_ram_gib() {
+  local bytes kib
+  if bytes="$(sysctl -n hw.memsize 2>/dev/null)" && [ -n "$bytes" ]; then
+    printf '%s' "$(( bytes / 1073741824 ))"
+  elif [ -f /proc/meminfo ] && kib="$(awk '/^MemTotal:/ { print $2; exit }' /proc/meminfo 2>/dev/null)" && [ -n "$kib" ]; then
+    printf '%s' "$(( kib / 1024 / 1024 ))"
+  fi
+}
+
+# compute_effective_vm_resources : EFF_CPUS/EFF_MEM = AC_VM_* rabotés à ~la
+# moitié des ressources hôte (jamais plus, jamais moins de 1 CPU / 2 GiB).
+# Détection impossible → retombe sur AC_VM_* tel quel, sans planter.
+compute_effective_vm_resources() {
+  local host_cpus host_ram cap_cpus cap_mem
+  host_cpus="$(detect_host_cpus)"
+  host_ram="$(detect_host_ram_gib)"
+
+  EFF_CPUS="$AC_VM_CPUS"
+  EFF_MEM="$AC_VM_MEMORY"
+
+  if [ -n "$host_cpus" ]; then
+    cap_cpus=$(( host_cpus / 2 ))
+    [ "$cap_cpus" -lt 1 ] && cap_cpus=1
+    [ "$AC_VM_CPUS" -gt "$cap_cpus" ] && EFF_CPUS="$cap_cpus"
+  fi
+
+  if [ -n "$host_ram" ]; then
+    cap_mem=$(( host_ram / 2 ))
+    [ "$cap_mem" -lt 2 ] && cap_mem=2
+    [ "$AC_VM_MEMORY" -gt "$cap_mem" ] && EFF_MEM="$cap_mem"
+  fi
+
+  if [ -n "$host_cpus" ] || [ -n "$host_ram" ]; then
+    info "Ressources hôte détectées : %s CPU / %s GiB RAM." "${host_cpus:-?}" "${host_ram:-?}"
+  fi
+
+  if [ "$EFF_CPUS" != "$AC_VM_CPUS" ] || [ "$EFF_MEM" != "$AC_VM_MEMORY" ]; then
+    info "Hôte limité (%s CPU / %s GiB) → VM à %s CPU / %s GiB (au lieu de %s CPU / %s GiB demandés)." \
+      "${host_cpus:-?}" "${host_ram:-?}" "$EFF_CPUS" "$EFF_MEM" "$AC_VM_CPUS" "$AC_VM_MEMORY"
+  fi
+}
+
+# check_disk_space_warning : avertit (sans bloquer) si l'espace libre est
+# inférieur au disque VM demandé. Le disque est sparse (alloué à l'usage).
+check_disk_space_warning() {
+  local avail_kib avail_gib
+  avail_kib="$(df -Pk "$HOME" 2>/dev/null | awk 'NR==2 {print $4}')"
+  case "$avail_kib" in
+    ''|*[!0-9]*) return 0 ;;
+  esac
+  avail_gib=$(( avail_kib / 1024 / 1024 ))
+  if [ "$avail_gib" -lt "$AC_VM_DISK" ]; then
+    warn "Espace disque libre limité (~%s GiB) pour un disque VM de %s GiB (sparse : alloué à l'usage, pas d'un coup)." \
+      "$avail_gib" "$AC_VM_DISK"
+  fi
+}
+
 # =============================================================================
 # Phase A — Bootstrap hôte (idempotent)
 # =============================================================================
@@ -115,34 +194,39 @@ phase_a() {
   # A.6 Skills État (côté hôte, pour OpenCode hors VM)
   sync_skills_host
 
-  # A.7 OpenCode
-  if check_cmd "opencode" 2>/dev/null; then
-    :
-  else
-    warn "OpenCode absent du PATH. Il est préinstallé dans la VM agent-vm."
-    info "Hors VM, installe-le : npm i -g opencode-ai"
-  fi
+  # A.7 OpenCode s'exécute exclusivement dans la bulle agent-vm — rien à
+  # vérifier ni installer sur le poste hôte (pas de bypass de l'isolation).
+  info "OpenCode s'exécute dans la bulle agent-vm — rien à installer sur ton poste."
 
-  # A.8 VM de base agent-vm (préalable obligatoire à `agent-vm opencode`)
+  # A.8 Ressources VM (détection hôte + garde-fou, lecture seule)
+  compute_effective_vm_resources
+  check_disk_space_warning
+
+  # A.9 VM de base agent-vm (préalable obligatoire à `agent-vm opencode`)
   check_base_vm
 
   echo
   ok "Phase A terminée — ton poste est prêt."
 }
 
-# --- A.8 Détection de la VM de base --------------------------------------------
+# --- A.9 Détection de la VM de base --------------------------------------------
+# base_vm_exists : 0 si la VM de base agent-vm existe déjà (limactl absent = non).
+base_vm_exists() {
+  command -v limactl >/dev/null 2>&1 && limactl list -q 2>/dev/null | grep -q '^agent-vm-base$'
+}
+
 check_base_vm() {
   if ! command -v limactl >/dev/null 2>&1; then
     return 0
   fi
-  if limactl list -q 2>/dev/null | grep -q '^agent-vm-base$'; then
+  if base_vm_exists; then
     ok "VM de base agent-vm déjà créée"
     return 0
   fi
   echo
-  warn "VM de base absente — lance %s une fois avant %s." "agent-vm setup" "agent-vm opencode"
-  if confirm "Créer la VM de base maintenant (agent-vm setup, ~plusieurs minutes) ?"; then
-    apply "créer la VM de base (agent-vm setup)" agent-vm setup
+  warn "VM de base absente — lance %s une fois avant %s." "agent-vm setup --disk ${AC_VM_DISK}" "agent-vm opencode"
+  if confirm "Créer la VM de base maintenant (agent-vm setup --disk ${AC_VM_DISK}, ~plusieurs minutes) ?"; then
+    apply "créer la VM de base (agent-vm setup --disk ${AC_VM_DISK})" agent-vm setup --disk "${AC_VM_DISK}"
   fi
 }
 
@@ -350,9 +434,15 @@ phase_b() {
   ok "Projet configuré pour le contexte « $context »."
   echo
   title "Prochaines étapes"
-  info "1. Crée la VM de base (une seule fois) :  agent-vm setup"
-  info "2. Ouvre la bulle isolée :  agent-vm opencode"
-  info "3. Parle en français à l'assistant."
+  local step=1
+  if ! base_vm_exists; then
+    info "%s. Crée la VM de base (une seule fois) :  agent-vm setup --disk %s" "$step" "$AC_VM_DISK"
+    step=$((step + 1))
+  fi
+  info "%s. Ouvre la bulle isolée :  agent-vm --cpus %s --memory %s --disk %s opencode" \
+    "$step" "$EFF_CPUS" "$EFF_MEM" "$AC_VM_DISK"
+  step=$((step + 1))
+  info "%s. Parle en français à l'assistant." "$step"
   echo
   info "Les skills se synchronisent automatiquement au démarrage."
 }

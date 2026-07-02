@@ -22,8 +22,8 @@ REAL_ZSHENV_BEFORE=""
 
 # --- Sandbox jetable -------------------------------------------------------------
 SB="$(mktemp -d)"
-export HOME="$SB/home" SHIM_BIN_DIR="$SB/bin" XDG_DATA_HOME="$SB/home/.local/share"
-mkdir -p "$SB/home" "$SB/bin"
+export HOME="$SB/sandbox-home" SHIM_BIN_DIR="$SB/bin" XDG_DATA_HOME="$SB/sandbox-home/.local/share"
+mkdir -p "$SB/sandbox-home" "$SB/bin"
 trap 'rm -rf "$SB"' EXIT
 
 # --- Stub agent-vm (fonction shell sourcée, comme le vrai agent-vm) -------------
