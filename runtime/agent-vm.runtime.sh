@@ -141,6 +141,10 @@ setup_github_auth() {
 
 # -----------------------------------------------------------------------------
 # sync_skills — clone ou met à jour les skills État (cache + symlinks).
+# Si le projet courant a un fichier .albert-code/skills.txt, seules les skills
+# listées sont symlinkées (et les non-sélectionnées sont retirées du dossier
+# global skills/). Sans manifeste, toutes les skills sont installées (rétrocompat).
+# Les skills perso (non-symlinks) ne sont JAMAIS touchées.
 # -----------------------------------------------------------------------------
 sync_skills() {
   # 1. Cache repo
@@ -160,25 +164,81 @@ sync_skills() {
     fi
   fi
 
-  # 2. Symlink chaque skill du cache vers le dossier skills (sans collision)
+  # 2. Déterminer la liste des skills à installer
+  local manifest="$PWD/.albert-code/skills.txt"
+  local use_manifest=0
+  local selected_skills=""
+  if [ -f "$manifest" ]; then
+    selected_skills="$(grep -v '^[[:space:]]*$' "$manifest" 2>/dev/null || true)"
+    if [ -n "$selected_skills" ]; then
+      use_manifest=1
+      _info "Skills sélectionnées via .albert-code/skills.txt"
+    fi
+  fi
+
+  # 3. Symlink les skills sélectionnées (ou toutes si pas de manifeste),
+  #    et réconcilier : retirer les symlinks albert-code non sélectionnés.
   _apply_mkdir "créer $SKILLS_TARGET" "$SKILLS_TARGET"
   if [ -d "$SKILLS_CACHE/skills" ]; then
-    local linked=0 skipped=0
+    local linked=0 skipped=0 removed=0
+
+    # Construire la liste des noms disponibles dans le cache
+    local all_skills=""
     for _entry in "$SKILLS_CACHE/skills"/*/; do
       [ -d "$_entry" ] || continue
       local name
       name="$(basename "$_entry")"
       case "$name" in .*|.experimental|.git) continue ;; esac
-      local link_path="$SKILLS_TARGET/$name"
-      if [ -e "$link_path" ] && [ ! -L "$link_path" ]; then
-        [ "$DRY_RUN" -eq 0 ] && _warn "skill « ${name} » déjà présente (perso) — conservée" || true
-        skipped=$((skipped + 1))
+      all_skills="${all_skills} ${name}"
+
+      if [ "$use_manifest" -eq 1 ]; then
+        # Vérifier si la skill est dans la sélection
+        if echo "$selected_skills" | grep -qFx "$name"; then
+          local link_path="$SKILLS_TARGET/$name"
+          if [ -e "$link_path" ] && [ ! -L "$link_path" ]; then
+            [ "$DRY_RUN" -eq 0 ] && _warn "skill « ${name} » déjà présente (perso) — conservée" || true
+            skipped=$((skipped + 1))
+          else
+            _apply_symlink "symlink $name" "$_entry" "$link_path"
+            linked=$((linked + 1))
+          fi
+        fi
+        # else : skill non sélectionnée → ne pas symlinker
       else
-        _apply_symlink "symlink $name" "$_entry" "$link_path"
-        linked=$((linked + 1))
+        # Rétrocompat : toutes les skills
+        local link_path="$SKILLS_TARGET/$name"
+        if [ -e "$link_path" ] && [ ! -L "$link_path" ]; then
+          [ "$DRY_RUN" -eq 0 ] && _warn "skill « ${name} » déjà présente (perso) — conservée" || true
+          skipped=$((skipped + 1))
+        else
+          _apply_symlink "symlink $name" "$_entry" "$link_path"
+          linked=$((linked + 1))
+        fi
       fi
     done
-    [ "$DRY_RUN" -eq 0 ] && _ok "${linked} skills liées, ${skipped} ignorées (existantes)" || true
+
+    # 4. Réconciliation : retirer les symlinks orphelins (skills État non sélectionnées)
+    if [ "$use_manifest" -eq 1 ]; then
+      for _existing in "$SKILLS_TARGET"/*/; do
+        [ -L "$_existing" ] || continue
+        local ename
+        ename="$(basename "$_existing")"
+        # Ne retirer QUE les symlinks vers le cache skills État
+        local resolved
+        resolved="$(readlink "$_existing" 2>/dev/null || true)"
+        case "$resolved" in
+          */etalab-ia/*|*/skills/*) ;;
+          *) continue ;; # pas une skill État, on laisse
+        esac
+        # Si la skill n'est plus dans la sélection
+        if ! echo "$selected_skills" | grep -qFx "$ename"; then
+          _apply "retirer symlink obsolète $ename" rm "$_existing"
+          removed=$((removed + 1))
+        fi
+      done
+    fi
+
+    [ "$DRY_RUN" -eq 0 ] && _ok "${linked} skills liées, ${skipped} ignorées (existantes), ${removed} retirées (non sélectionnées)" || true
   fi
 }
 
