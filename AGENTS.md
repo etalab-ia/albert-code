@@ -140,7 +140,7 @@ albert-code/
 ## 7. Spécificités OpenCode (à connaître pour builder juste)
 
 - **Config** : `opencode.json` (racine projet) + `~/.config/opencode/opencode.json` (global), fusionnés. `$schema: https://opencode.ai/config.json`. Substitution `{env:VAR}` / `{file:path}`.
-- **Provider Albert** : `provider.albert.npm = "@ai-sdk/openai-compatible"`, `options.baseURL = "https://albert.api.etalab.gouv.fr/v1"`, `options.apiKey = "{env:ALBERT_API_KEY}"`, `models` listant `Mistral-Medium-3.5-128B` et `DeepSeek-V4-Flash`. Puis `model = "albert/Mistral-Medium-3.5-128B"`, `small_model = "albert/DeepSeek-V4-Flash"`.
+- **Provider Albert** : `provider.albert.npm = "@ai-sdk/openai-compatible"`, `options.baseURL = "https://albert.api.etalab.gouv.fr/v1"`, `options.apiKey = "{env:ALBERT_API_KEY}"`, `models` listant `Mistral-Medium-3.5-128B`, `DeepSeek-V4-Flash` et `Qwen/Qwen3.6-27B` (multimodal, disponible mais non défaut). Puis `model = "albert/Mistral-Medium-3.5-128B"`, `small_model = "albert/DeepSeek-V4-Flash"`.
 - **Règles** : OpenCode lit `AGENTS.md`. La clé `instructions` accepte fichiers, globs ET URLs (timeout 5 s).
 - **MCP** : clé `mcp.<nom>` type `local` (`command`) ou `remote` (`url`+`headers`). data.gouv = remote `https://mcp.data.gouv.fr/mcp` (lecture publique). **context7 = remote nécessitant une clé API** (https://context7.com/plans → `CONTEXT7_API_KEY` dans `~/.zshenv`, passée en header) ; rendre ce MCP optionnel si pas de clé. playwright = local. chrome-devtools = local (`npx chrome-devtools-mcp@latest`) — déjà préinstallé dans agent-vm mais à déclarer côté OpenCode.
 - **Skills = dossiers locaux scannés uniquement.** Chemins : `.opencode/skills/`, `.agents/skills/`, `.claude/skills/` (projet) ; `~/.config/opencode/skills/` (global). Format `SKILL.md` + frontmatter (`name` kebab = dossier, `description`). **La clé `skills` / chargement par URL n'existe PAS dans OpenCode** → ne pas l'utiliser (contrairement au repo DNUM-MI).
@@ -172,7 +172,7 @@ Source des profils existants : `etalab-ia/skills/templates/instructions/` (`beta
 
 - Ne pas supporter d'autre harness que **OpenCode** (ni Vibe, ni Claude Code).
 - **Ne pas écraser une config OpenCode / agent-vm existante.** La config provider du bundle est de **portée projet** (`opencode.json` à la racine du projet cible), jamais le global perso de l'utilisateur (qui peut contenir d'autres providers, ex. Scaleway). Écritures globales (dossier skills, `~/.zshenv`) = **additives + idempotentes** (détecter avant d'écrire).
-- Ne pas utiliser de modèle Albert autre que `Mistral-Medium-3.5-128B` (principal) et `DeepSeek-V4-Flash` (small).
+- Ne pas utiliser de modèle Albert autre que `Mistral-Medium-3.5-128B` (principal), `DeepSeek-V4-Flash` (small) et `Qwen/Qwen3.6-27B` (disponible, multimodal, tool calling validé le 06/07/2026).
 - Ne pas créer de défaut implicite de profil ni merger les conventions de deux contextes.
 - Ne pas s'appuyer sur la clé `skills`/`skills.urls` (non documentée OpenCode).
 
