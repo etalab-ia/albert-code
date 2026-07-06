@@ -264,3 +264,24 @@ et le bloc marqueur a disparu.
 4. Vérifier que `git status` avant commit ne montre que des fichiers source (pas node_modules, pas .env).
 5. (Négatif) Sans `.gitignore`, `git status` montre des dossiers inattendus → l'agent s'arrête et crée `.gitignore`.
 **Attendu :** `.gitignore` adapté à Node, PR sans dépendances ni secrets.
+
+## S35 — Dérivation noreply : sed match correct de la réponse JSON GitHub (T6.6, AC-R019) ☐
+**Préconditions :** un PAT GitHub valide (scope `repo`), `curl` disponible.
+**Étapes :**
+1. Lancer `bash -c 'source lib/ui.sh; source lib/phases.sh'` dans un dossier sandbox.
+2. Simuler la réponse de l'API : `curl -fsS -H "Authorization: Bearer $PAT" https://api.github.com/user`
+3. Vérifier que le login et l'id sont extraits correctement avec les patterns sed corrigés.
+4. Tester que `gh_login` contient l'id numérique, `gh_id` contient le login.
+5. Vérifier l'email final = `{id}+{login}@users.noreply.github.com`.
+**Attendu :** pas de fallback « Introuvable automatiquement » avec un PAT valide. L'email dérivé est correct.
+
+## S36 — `install_shim` réécrit un shim obsolète + sortie sync_skills propre (T6.12, T6.13) ☐
+**Préconditions :** dossier sandbox `/tmp/ac-test`, `install.sh` disponible.
+**Étapes (install_shim) :**
+1. Lancer `HOME=/tmp/ac-test SHIM_BIN_DIR=/tmp/ac-test/bin ./install.sh --dry-run` (crée shim vide).
+2. Modifier le contenu attendu du shim (forcer une différence).
+3. Relancer l'install → vérifier que le shim est réécrit (pas « déjà présent »).
+**Étapes (sync_skills) :**
+4. Simuler un boot VM : `bash runtime/agent-vm.runtime.sh --dry-run` dans un dossier projet scaffoldé.
+5. Inspecter la sortie de `sync_skills` pour les lignes commençant par « name= ».
+**Attendu :** (3) shim réécrit lors d'un changement de contenu, pas besoin de `rm` manuel. (5) aucun « name= » dans la sortie, seulement des `_ok`/`_info`/`_warn`.

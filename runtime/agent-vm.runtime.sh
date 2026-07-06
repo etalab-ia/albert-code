@@ -186,8 +186,7 @@ sync_skills() {
     local all_skills=""
     for _entry in "$SKILLS_CACHE/skills"/*/; do
       [ -d "$_entry" ] || continue
-      local name
-      name="$(basename "$_entry")"
+      local name="$(basename "$_entry")"
       case "$name" in .*|.experimental|.git) continue ;; esac
       all_skills="${all_skills} ${name}"
 
@@ -221,11 +220,9 @@ sync_skills() {
     if [ "$use_manifest" -eq 1 ]; then
       for _existing in "$SKILLS_TARGET"/*/; do
         [ -L "$_existing" ] || continue
-        local ename
-        ename="$(basename "$_existing")"
+        local ename="$(basename "$_existing")"
         # Ne retirer QUE les symlinks vers le cache skills État
-        local resolved
-        resolved="$(readlink "$_existing" 2>/dev/null || true)"
+        local resolved="$(readlink "$_existing" 2>/dev/null || true)"
         case "$resolved" in
           */etalab-ia/*|*/skills/*) ;;
           *) continue ;; # pas une skill État, on laisse

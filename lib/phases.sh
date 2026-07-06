@@ -110,8 +110,8 @@ phase_a() {
         _raw="$(printf '%s' "$_raw" | sed '$d')"
       fi
       if [ "${_http_code:-0}" -ge 200 ] 2>/dev/null && [ "${_http_code:-0}" -lt 300 ] 2>/dev/null && [ -n "$_raw" ]; then
-        gh_id="$(printf '%s' "$_raw" | sed -n 's/.*"login[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')"
-        gh_login="$(printf '%s' "$_raw" | sed -n 's/.*"id[[:space:]]*:[[:space:]]*\([0-9]*\).*/\1/p')"
+        gh_id="$(printf '%s' "$_raw" | sed -n 's/.*"login"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')"
+        gh_login="$(printf '%s' "$_raw" | sed -n 's/.*"id"[[:space:]]*:[[:space:]]*\([0-9]*\).*/\1/p')"
         if [ -n "$gh_id" ] && [ -n "$gh_login" ]; then
           git_name="$gh_id"
           git_email_def="${gh_login}+${gh_id}@users.noreply.github.com"

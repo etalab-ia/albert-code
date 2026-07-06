@@ -132,8 +132,12 @@ $name \"\$@\""
   fi
 
   if [ -f "$shim_path" ]; then
-    ok "shim $name déjà présent dans $shim_path"
-    return 0
+    local _existing
+    _existing="$(head -3 "$shim_path" 2>/dev/null || true)"
+    if [ "$_existing" = "$(printf '%s' "$shim_content" | head -3)" ]; then
+      ok "shim $name déjà présent et à jour dans $shim_path"
+      return 0
+    fi
   fi
   apply_write "créer le shim $name dans $shim_path" "$shim_path" "$shim_content"
   apply_chmod "chmod +x 755 $shim_path" 755 "$shim_path"
