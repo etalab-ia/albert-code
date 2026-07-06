@@ -341,3 +341,13 @@ Option : ajouter un paramètre `install_shim` pour mode "exec" vs "source", ou d
 - Préciser que `chrome-devtools` peut apparaître dans OpenCode même si non coché au setup : il est préinstallé par agent-vm (pas par Albert Code).
 - Documenter ce MCP dans la liste du README avec sa source (agent-vm). À investir avec Sylvain : le désactiver côté runtime quand non sélectionné, ou le documenter clairement.
 **DoD :** le README mentionne chrome-devtools comme venant d'agent-vm. Investigation documentée.
+
+### T6.12 🟠 `install_shim` idempotent : réécrire si contenu changé `<- AC-R025` ✅ implémenté
+**But :** `install_shim` fait « si le fichier shim existe → return 0 » → quand le contenu du shim évolue (ex. fix exec d'AC-R022), une réinstall ne repose PAS le nouveau shim. Il faut `rm` manuel.
+**Tâches :** dans `install_shim` (`lib/ui.sh`), avant de skip un shim existant, comparer les 3 premières lignes du fichier existant avec le `shim_content` attendu. Si différent : réécrire. Si identique : skip.
+**DoD :** après un changement de contenu du shim, `./install.sh` réécrit le fichier (au lieu de « déjà présent »). → `TESTS.md` S36.
+
+### T6.13 🟡 Bruit de debug « name= » dans sync_skills `<- AC-R026` ✅ implémenté
+**But :** au boot VM (`runtime/agent-vm.runtime.sh`, sync_skills), des lignes « name=<skill> » parasites apparaissent dans la sortie (ex. name=datagouv-apis). Bruit dû aux variables `local name` + `name=$(basename …)` en bash 3.2.
+**Tâches :** remplacer les déclarations `local name` puis `name="$(basename …)"` par `local name="$(basename …)"` (fusion local+assignation), et idem pour `local ename`, `local resolved`. Supprime la source probable du bruit.
+**DoD :** la sortie de sync_skills n'affiche que les messages _ok/_info/_warn, plus de lignes « name= ». → `TESTS.md` S36 (vérification sortie propre).
