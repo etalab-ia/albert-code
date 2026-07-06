@@ -164,7 +164,7 @@ et le bloc marqueur a disparu.
 **Attendu :** (1) no-op + warning. (2) 4 actions gated affichées. (3) gh authentifié, identité et helper posés. (4) commit signé de la bonne identité, push OK, PR ouverte depuis la bulle. Le token n'apparaît dans aucun log.
 **Validé le :** 2026-07-06 — (1)(2) dry-run host : sans `GH_TOKEN` → warning « GH_TOKEN absent » ; avec token/identité factices → 4 actions gated (persist, user.name, user.email, `gh auth setup-git`). (3) VM `agent-vm-albert-code` : `gh auth status` → « Logged in … account benoitvx (GH_TOKEN) », credential helper HTTPS posé. (4) **dogfood réel** : la branche `feat/github-auth-vm` a été **commitée (auteur = noreply), poussée et ouverte en PR ([#2](https://github.com/etalab-ia/albert-code/pull/2)) intégralement depuis la VM**, sans fallback hôte. Piège relevé au passage : `AC_GIT_USER_EMAIL` mal saisi (gmail) posait l'identité globale sur l'email perso → override local noreply a protégé le commit ; corrigé côté VM + `~/.agent-vm/runtime.sh`.
 
-## S24 — Auth GitHub intégrée à l'installeur (T1.8) ☐ à valider
+## S24 — Auth GitHub intégrée à l'installeur (T1.8) ☑ validé partiellement (2026-07-06)
 **Préconditions :** un `HOME` de test isolé (ne pas polluer le vrai `~/.zshenv` / `~/.agent-vm/runtime.sh`).
 **Étapes :**
 1. `GH_TOKEN='CANARI' bash install.sh --dry-run` → vérifier que la valeur `CANARI` **n'apparaît nulle part** dans la sortie ; les 6 lignes GitHub (`persist`/`export` × GH_TOKEN/NAME/EMAIL) sont affichées gated ; « Prochaines étapes » indique « Push et PR GitHub configurés ».
@@ -172,7 +172,7 @@ et le bloc marqueur a disparu.
 3. Install réelle dans un `HOME` de test, répondre « oui » + coller un token + un email **non-noreply** (ex. `x@gmail.com`) → l'installeur **refuse et redemande** (3 fois), puis accepte en avertissant.
 4. Relancer l'install (idempotence) → le bloc `# --- albert-code : clés VM ---` n'est pas dupliqué, les 3 vars GitHub apparaissent une seule fois.
 **Attendu :** (1) zéro fuite du token, 6 lignes gated, next-steps OK. (2) confirm=non, rien de persisté. (3) garde-fou email actif. (4) bloc unique, non dupliqué.
-**Validé le :** _(à compléter)_
+**Validé le :** 2026-07-06 — **(1) et (2) exécutés** : `GH_TOKEN='CANARI' install.sh --dry-run` → 0 occurrence du canari dans la sortie, 6 lignes GitHub gated, next-steps « Push et PR configurés » ; sans `GH_TOKEN` → `confirm → non`, rien persisté. **(3) et (4) revus par lecture de code seulement** (pas exécutés : un `install.sh` non-dry clone agent-vm et ne s'isole pas proprement hors VM vierge). Idempotence (4) reposant sur le mécanisme delete-then-rewrite déjà validé en S12 ; garde-fou email (3) = boucle `case`/3 tentatives dans le diff. **À confirmer sur une install vierge réelle** (early adopter T5.2).
 
 ## Critères d'acceptation v1 (Definition of Done globale)
 - [x] S1, S2, S3, S6, S7, S12, S13, S14, S15, S16, S17, S18, S20 ✅.
