@@ -104,11 +104,11 @@ AC_VM_CPUS=8 AC_VM_MEMORY=16 AC_VM_DISK=64 ./install.sh
 
   | Modèle | Rôle | Usage type | Contexte |
   |---|---|---|---|
-  | `Mistral-Medium-3.5-128B` | **`model`** (défaut) | Cheval de trait agentique : édition multi-fichiers, refacto, tool calling. | 128k |
+  | `Mistral-Medium-3.5-128B` | **`model`** (défaut) | Usage agentique principal : édition multi-fichiers, refacto, tool calling. | 128k |
   | `DeepSeek-V4-Flash` | **`small_model`** | Tâches légères et rapides (titres, résumés, sous-étapes). | 384k |
   | `Qwen/Qwen3.6-27B` | disponible (non défaut) | **Multimodal (vision)** : lire un screenshot, une maquette DSFR, un rendu d'UI. Sélection : `albert/Qwen/Qwen3.6-27B`. | 256k |
 
-  Tous gratuits (hébergés Albert API). Pour changer le modèle par défaut d'un projet, édite `model` dans son `opencode.json`.
+  Pour changer le modèle par défaut d'un projet, édite `model` dans son `opencode.json`.
 - **Config** : `opencode.json` de **portée projet** (jamais le global de l'utilisateur, qui peut avoir d'autres providers).
 - **Skills** : `etalab-ia/skills` cloné dans un cache (`~/.config/opencode/.albert-skills-cache`) et symliqué dans le dossier scanné par OpenCode, mis à jour à chaque démarrage de VM. Les skills perso existantes ne sont jamais écrasées.
 - **MCP** : `data-gouv` (remote), `context7` (remote, **optionnel** — sans `CONTEXT7_API_KEY` on peut l'ignorer ; clé API via https://context7.com/plans si besoin), `playwright` et `chrome-devtools` (local).
