@@ -17,8 +17,8 @@ Albert Code assemble des briques existantes pour coder avec une IA souveraine, i
 - **[Albert API](https://albert.api.etalab.gouv.fr)** : modèles souverains de l'État (hébergement SecNumCloud), provider OpenAI-compatible.
 - **[agent-vm](https://github.com/sylvinus/agent-vm)** : sandbox Lima jetable. L'agent tourne en autonomie sans accès à l'hôte.
 - **[OpenCode](https://opencode.ai)** : le harness (assistant de code en terminal).
-- **[Skills de l'État](https://github.com/etalab-ia/skills)** : DSFR, accessibilité (RGAA), sécurité, data.gouv.
-- **MCP** : data.gouv, context7, playwright, chrome-devtools.
+- **[Skills de l'État](https://github.com/etalab-ia/skills)** : DSFR, accessibilité (RGAA), sécurité, data.gouv (à la carte, choisis au setup).
+- **MCP** : data.gouv, context7, playwright, chrome-devtools (à la carte, choisis au setup).
 
 Ce n'est pas un IDE ni un fork : de l'orchestration mince (scripts + config) au-dessus d'OpenCode.
 
@@ -128,9 +128,8 @@ Par défaut, l'agent peut **committer** dans la VM mais **ni pusher ni ouvrir de
 
   Pour changer le modèle par défaut d'un projet, édite `model` dans son `opencode.json`.
 - **Config** : `opencode.json` de **portée projet** (jamais le global de l'utilisateur, qui peut avoir d'autres providers).
-- **Skills** : `etalab-ia/skills` cloné dans un cache (`~/.config/opencode/.albert-skills-cache`) et symliqué dans le dossier scanné par OpenCode, mis à jour à chaque démarrage de VM. Les skills perso existantes ne sont jamais écrasées.
-- **MCP** : `data-gouv` (remote), `context7` (remote, **optionnel** — sans `CONTEXT7_API_KEY` on peut l'ignorer ; clé API via https://context7.com/plans si besoin), `playwright` et `chrome-devtools` (local).
-  Note : sans clé, le MCP context7 s'affiche en erreur dans la VM → le désactiver dans `opencode.json` si gênant.
+- **Skills** : `etalab-ia/skills` cloné dans un cache (`~/.config/opencode/.albert-skills-cache`) et symliqué dans le dossier scanné par OpenCode. Au `setup`, chaque skill est proposée en Y/N avec son objectif. La sélection est écrite dans `.albert-code/skills.txt` à la racine du projet. Au boot de la VM, `sync_skills` ne symlinke que les skills sélectionnées puis réconcilie (retire les symlinks des skills non sélectionnées, sans jamais toucher les skills perso). Sans manifeste `.albert-code/skills.txt`, toutes les skills sont installées (rétrocompat). Mise à jour à chaque démarrage de VM.
+- **MCP** : les 4 connecteurs sont désormais **tous opt-in**. Au `setup`, chaque MCP est proposé en Y/N avec son objectif : `data-gouv` (accès aux données publiques), `context7` (doc à jour des librairies, clé API requise via https://context7.com/plans), `playwright` (navigateur headless), `chrome-devtools` (debug navigateur). Seuls les MCP acceptés sont écrits dans `opencode.json` du projet (`enabled:false` par défaut).
 - **Conventions** : `AGENTS.md` depuis `templates/AGENTS.default.md` (sécurité, plan mode, task management, code quality, git, accessibilité). Si le projet a déjà son `AGENTS.md`, il est conservé.
 
 Docs : [OpenCode](https://opencode.ai/docs/fr) · [Albert API](https://doc.incubateur.net/alliance/albert-api) · [agent-vm](https://github.com/sylvinus/agent-vm) · [Skills État](https://github.com/etalab-ia/skills)
