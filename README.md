@@ -91,6 +91,30 @@ AC_VM_CPUS=8 AC_VM_MEMORY=16 AC_VM_DISK=64 ./install.sh
 
 **Garde-fou hôte** (lecture seule, macOS + Linux) : `install.sh` détecte les ressources de ta machine (`sysctl`/`nproc`) et ne propose jamais plus de ~la moitié du CPU/RAM hôte, même si `AC_VM_*` demande plus — pour ne pas sur-allouer sur un petit poste. Le disque n'est jamais rogné (sparse : alloué à l'usage, pas d'un coup) ; un avertissement s'affiche si l'espace libre est insuffisant.
 
+### Push & PR depuis la VM
+
+Par défaut, l'agent peut **committer** dans la VM mais **ni pusher ni ouvrir de PR** : agent-vm isole la bulle de tes credentials hôte (aucun SSH, aucun token). Pour l'autoriser, fournis un **token GitHub dédié**.
+
+1. **Crée un PAT fine-grained** sur [github.com/settings/personal-access-tokens](https://github.com/settings/personal-access-tokens) :
+   - *Repository access* → seulement les dépôts que l'agent doit toucher (pas « All repositories »).
+   - *Permissions* → **Contents: Read and write** + **Pull requests: Read and write** (Metadata: read est ajouté d'office).
+   - Expiration courte, à renouveler. **Token dédié et révocable** (pas ton token maître).
+2. **Pose-le dans ton runtime perso** `~/.agent-vm/runtime.sh` (hôte, hors de tout dépôt, `chmod 600`) — jamais dans un `opencode.json` ni un fichier versionné :
+   ```bash
+   # --- albert-code : auth GitHub VM ---
+   grep -q 'GH_TOKEN'          ~/.zshenv 2>/dev/null || echo "export GH_TOKEN='github_pat_XXXXXXXX'"                 >> ~/.zshenv
+   export GH_TOKEN='github_pat_XXXXXXXX'
+   grep -q 'AC_GIT_USER_NAME'  ~/.zshenv 2>/dev/null || echo "export AC_GIT_USER_NAME='Prénom Nom'"                  >> ~/.zshenv
+   export AC_GIT_USER_NAME='Prénom Nom'
+   grep -q 'AC_GIT_USER_EMAIL' ~/.zshenv 2>/dev/null || echo "export AC_GIT_USER_EMAIL='ton-id@users.noreply.github.com'" >> ~/.zshenv
+   export AC_GIT_USER_EMAIL='ton-id@users.noreply.github.com'
+   # --- /albert-code ---
+   ```
+   Utilise ton **email noreply GitHub** ([settings/emails](https://github.com/settings/emails)) pour ne pas exposer ton email perso dans l'historique git.
+3. **Relance la bulle** (`agent-vm opencode`). Le runtime du bundle branche alors automatiquement le credential helper (`gh auth setup-git`) et pose l'identité git. `git push` et `gh pr create` marchent depuis la VM.
+
+> Le token vit dans une bulle exposée au prompt-injection : garde-le **fine-grained, scopé, révocable**, et **relis chaque PR avant merge**. Un contenu malveillant pourrait pousser l'agent à en abuser dans la limite de sa portée — d'où les permissions minimales.
+
 ## Sécurité
 
 - **Isolation noyau (Lima)** : l'agent n'a aucun accès à tes clés SSH, credentials, cookies ou sessions de l'hôte. La VM est jetable (`agent-vm rm`).

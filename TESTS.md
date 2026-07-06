@@ -154,6 +154,16 @@ et le bloc marqueur a disparu.
 (3) le garde-fou ne propose jamais plus de ~la moitié des ressources hôte détectées (ici : 1 CPU / 2 GiB, avec un message « Hôte limité… » explicite), sans planter si la détection échoue.
 **Validé le :** 2026-07-02 — (1) dry-run par défaut : `Ressources hôte détectées : 14 CPU / 36 GiB RAM.` puis `1. agent-vm setup --disk 32` / `2. agent-vm --cpus 4 --memory 8 --disk 32 opencode` (hôte assez large, pas de rabot). (2) `AC_VM_MEMORY=2 AC_VM_CPUS=1` → `agent-vm --cpus 1 --memory 2 --disk 32 opencode`. (3) hôte simulé à 2 CPU / 4 GiB (fake `sysctl` en tête de `PATH`) avec défauts 4 CPU / 8 GiB → `Hôte limité (2 CPU / 4 GiB) → VM à 1 CPU / 2 GiB (au lieu de 4 CPU / 8 GiB demandés).` et « Prochaines étapes » reflète bien `--cpus 1 --memory 2`. Bonus vérifié : quand la VM de base existe déjà, l'étape « crée la VM de base » disparaît de la liste (numérotation qui se resserre).
 
+## S23 — Auth GitHub de la VM : identité + push + PR (T1.7) ☐ à valider
+**Préconditions :** un `GH_TOKEN` fine-grained (scopes Contents + Pull requests: RW) + `AC_GIT_USER_NAME`/`AC_GIT_USER_EMAIL` posés dans `~/.agent-vm/runtime.sh` (cf. README § Push & PR depuis la VM). Aucune identité git placeholder ne doit subsister dans le `.git/config` local du repo de test.
+**Étapes :**
+1. `bash runtime/agent-vm.runtime.sh --dry-run` **sans** `GH_TOKEN` → doit afficher l'avertissement « GH_TOKEN absent » et ne rien muter côté auth.
+2. Idem **avec** `GH_TOKEN`/`AC_GIT_USER_*` factices en dry-run → doit lister (gated) : persist GH_TOKEN, `user.name`, `user.email`, `gh auth setup-git`.
+3. Dans une VM (`agent-vm opencode`) avec le token réel : vérifier `gh auth status` (authentifié), `git config --global user.email` (= email noreply), `git config --global credential.https://github.com.helper` (= `!gh auth git-credential`).
+4. Depuis la VM, sur une branche jetable : `git commit` (identité correcte) → `git push` → `gh pr create` → tout passe sans fallback hôte.
+**Attendu :** (1) no-op + warning. (2) 4 actions gated affichées. (3) gh authentifié, identité et helper posés. (4) commit signé de la bonne identité, push OK, PR ouverte depuis la bulle. Le token n'apparaît dans aucun log.
+**Validé le :** _(à compléter)_
+
 ## Critères d'acceptation v1 (Definition of Done globale)
 - [x] S1, S2, S3, S6, S7, S12, S13, S14, S15, S16, S17, S18, S20 ✅.
 - [ ] S4, S5, S11 (idempotence runtime VM / skills au boot / non-tech — en attente).
