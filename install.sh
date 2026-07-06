@@ -48,11 +48,60 @@ AGENT_VM_REPO="https://github.com/sylvinus/agent-vm.git"
 RUNTIME_VM_FILE="$HOME/.agent-vm/runtime.sh"
 ZSHENV="$HOME/.zshenv"
 
-# --- Exécution (Phase A + shim, rétrocompat) ----------------------------------
+# --- Détection ancien installeur (albert-code() dans shell rc) -----------------
+_detect_old_albert_code_function() {
+  local rc_file="$1"
+  [ -f "$rc_file" ] || return 1
+  grep -qE '^[[:space:]]*(function[[:space:]]+)?albert-code[[:space:]]*\(\s*\{?' "$rc_file" 2>/dev/null
+}
+
+_remove_old_albert_code_function() {
+  local rc_file="$1"
+  info "Ancienne fonction albert-code() détectée dans %s — elle surcharge la nouvelle commande." "$rc_file"
+  if confirm "Retirer l'ancienne fonction albert-code() de $rc_file ?"; then
+    _tmp="$(mktemp)"
+    if grep -qE '^function albert-code\s*\{?' "$rc_file" 2>/dev/null; then
+      # Function-style: `function albert-code {` or `function albert-code{`
+      awk '/^function albert-code[[:space:]]*\{/ {skip=1; next}
+           skip && /\{/ { depth++ }
+           skip && /\}/ { depth--; if(depth<=0) {skip=0} next }
+           !skip { print }' "$rc_file" > "$_tmp"
+    else
+      # Brace-style: `albert-code() {`
+      awk '/^[[:space:]]*albert-code\(\)/ {skip=1; next}
+           skip && /\{/ { depth++ }
+           skip && /\}/ { depth--; if(depth<=0) {skip=0} next }
+           !skip { print }' "$rc_file" > "$_tmp"
+    fi
+    mv "$_tmp" "$rc_file"
+    ok "Fonction albert-code() retirée de $rc_file"
+  fi
+}
+
+# --- Exécution (shim + Phase A, rétrocompat) ----------------------------------
+# Le shim doit être posé AVANT la VM de base (fragile). Si agent-vm setup
+# échoue (429, réseau, etc.), la commande `albert-code` est quand même
+# disponible pour un essai ultérieur. Cf. AC-R021.
 banner
-phase_a
 echo
 install_shim "albert-code" "$SELF_DIR/bin/albert-code"
+echo
+phase_a
+
+# Migration ancien installeur : détecter `albert-code()` dans shell rc
+RC_FILE="$HOME/.zshrc"
+case "${SHELL##*/}" in
+  zsh)  RC_FILE="$HOME/.zshrc" ;;
+  bash) RC_FILE="$HOME/.bashrc" ;;
+  *)    RC_FILE="$HOME/.profile" ;;
+esac
+for _check_rc in "$RC_FILE" "$HOME/.zshenv"; do
+  if _detect_old_albert_code_function "$_check_rc"; then
+    _remove_old_albert_code_function "$_check_rc"
+    break
+  fi
+done
+
 echo
 title "C'est prêt. Bon code avec Albert."
 echo

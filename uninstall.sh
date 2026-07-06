@@ -87,7 +87,51 @@ for var in ALBERT_API_KEY CONTEXT7_API_KEY; do
   fi
 done
 
-# 4. Sourcing agent-vm dans le shell rc
+# 4. Ancien installeur : fonction `albert-code()` dans shell rc (surcharge le shim)
+_detect_old_albert_code_function() {
+  local rc_file="$1"
+  [ -f "$rc_file" ] || return 1
+  grep -qE '^[[:space:]]*(function[[:space:]]+)?albert-code[[:space:]]*\(\s*\{?' "$rc_file" 2>/dev/null
+}
+
+_remove_old_albert_code_function() {
+  local rc_file="$1"
+  info "Ancienne fonction albert-code() détectée dans %s" "$rc_file"
+  if confirm "Retirer l'ancienne fonction albert-code() de $rc_file ?"; then
+    local _tmp
+    _tmp="$(mktemp)"
+    if grep -qE '^function albert-code\s*\{?' "$rc_file" 2>/dev/null; then
+      # Function-style: `function albert-code {`
+      awk '/^function albert-code[[:space:]]*\{/ {skip=1; next}
+           skip && /\{/ { depth++ }
+           skip && /\}/ { depth--; if(depth<=0) {skip=0} next }
+           !skip { print }' "$rc_file" > "$_tmp"
+    else
+      # Brace-style: `albert-code() {`
+      awk '/^[[:space:]]*albert-code\(\)/ {skip=1; next}
+           skip && /\{/ { depth++ }
+           skip && /\}/ { depth--; if(depth<=0) {skip=0} next }
+           !skip { print }' "$rc_file" > "$_tmp"
+    fi
+    mv "$_tmp" "$rc_file"
+    ok "Fonction albert-code() retirée de $rc_file"
+  fi
+}
+
+RC_FILE_ALBERT=""
+case "${SHELL##*/}" in
+  zsh)  RC_FILE_ALBERT="$HOME/.zshrc" ;;
+  bash) RC_FILE_ALBERT="$HOME/.bashrc" ;;
+  *)    RC_FILE_ALBERT="$HOME/.profile" ;;
+esac
+for _check_rc in "$RC_FILE_ALBERT" "$HOME/.zshenv"; do
+  if _detect_old_albert_code_function "$_check_rc"; then
+    _remove_old_albert_code_function "$_check_rc"
+    break
+  fi
+done
+
+# 5. Sourcing agent-vm dans le shell rc
 rc=""
 case "${SHELL##*/}" in
   zsh)  rc="$HOME/.zshrc" ;;
@@ -103,7 +147,7 @@ if [ -f "$rc" ] && file_contains "$rc" "agent-vm.sh"; then
   fi
 fi
 
-# 5. agent-vm (clone + VMs + shim) — optionnel, lourd
+# 6. agent-vm (clone + VMs + shim) — optionnel, lourd
 if [ -d "$AGENT_VM_DIR" ] && confirm "Supprimer agent-vm ($AGENT_VM_DIR) et ses VMs ?"; then
   # Retirer le shim d'abord (avant que la fonction disparaisse)
   if command -v agent-vm >/dev/null 2>&1; then
@@ -115,7 +159,7 @@ if [ -d "$AGENT_VM_DIR" ] && confirm "Supprimer agent-vm ($AGENT_VM_DIR) et ses 
 fi
 
 
-# 6. Fichiers projet (dans le dossier courant)
+# 7. Fichiers projet (dans le dossier courant)
 echo
 title "Fichiers du projet courant ($PWD)"
 for f in opencode.json .agent-vm.runtime.sh AGENTS.md; do

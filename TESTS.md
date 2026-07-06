@@ -213,3 +213,54 @@ et le bloc marqueur a disparu.
 - [ ] Un agent public installe le bundle et produit une page DSFR conforme dans une VM isolée, alimentée par Albert, sans qu'aucune clé ne fuite.
 - [ ] Les skills se rafraîchissent au reboot de la VM.
 - [ ] S25, S27, S28, S29 (3 verbes, re-setup non-destructif, choix Y/N).
+
+## S30 — Encart FR de transition avant wizard agent-vm (T6.5, AC-R018) ☐
+**Préconditions :** machine sans VM de base agent-vm ; `install.sh` ou `bin/albert-code install` disponible.
+**Étapes :**
+1. Lancer `./install.sh --dry-run`.
+2. Observer la sortie vers la fin de Phase A (avant `agent-vm setup`).
+3. Dans `phase_run()`, répondre « oui » à la création de la VM (dry-run).
+**Attendu :** un encart `info` en français s'affiche avant `agent-vm setup`, mentionnant que le wizard est en anglais, expliquant ce qu'est agent-vm, et conseillant de valider les logiciels par défaut. Sortie identique en `check_base_vm` et `phase_run`.
+
+## S31 — Dérivation automatique email noreply GitHub (T6.6, AC-R019) ☐
+**Préconditions :** un PAT GitHub valide (scope `repo`) ; `curl` disponible.
+**Étapes :**
+1. Lancer `./install.sh` (ou `albert-code install`).
+2. Répondre « oui » à l'activation push/PR GitHub.
+3. Coller le PAT.
+4. Vérifier que le prompt « Email noreply GitHub » affiche le noreply dérivé (ex. `12345+username@users.noreply.github.com`).
+5. Faire Entrée.
+6. Vérifier `~/.zshenv` : `AC_GIT_USER_EMAIL` = noreply GitHub.
+7. (Fallback) Simuler l'absence de réseau : sans `curl` ou PAT invalide, vérifier que le message FR d'aide s'affiche.
+**Attendu :** (4) le noreply est pré-rempli, l'utilisateur fait Entrée ; (6) email noreply persisté ; (7) message FR d'aide clair avec lien GitHub. Le PAT n'apparaît dans aucun log.
+
+## S32 — Shim avant VM + migration ancien `albert-code()` (T6.8, AC-R021) ☐
+**Préconditions :** `install.sh` ou `bin/albert-code install` ; `albert-code()` dans un shell rc (ex. `~/.zshrc`).
+**Étapes :**
+1. Poser une fonction bidon dans `~/.zshrc` : `albert-code() { echo "OLD"; }`.
+2. Lancer `./install.sh` (ou `albert-code install`).
+3. Vérifier que le shim `albert-code` est posé sur le PATH AVANT la fin de la Phase A.
+4. Vérifier que le script détecte l'ancienne fonction et propose de la retirer.
+5. Répondre « oui » → `albert-code()` absente de `~/.zshrc`.
+6. Lancer `albert-code setup` via le shim → doit utiliser le nouveau dispatcher, pas « OLD ».
+**Attendu :** (3) shim existant même si VM absente ; (4) détection + prompt ; (5) fonction retirée correctement ; (6) dispatcher fonctionnel.
+
+## S33 — Shim `albert-code` préserve les prompts interactifs (T6.9, AC-R022) ☐
+**Préconditions :** shim `albert-code` installé via cette PR (qui utilise `exec`).
+**Étapes :**
+1. Exécuter `albert-code setup` **via le shim** (pas `bin/albert-code` direct) dans un dossier projet vierge.
+2. Observer les prompts MCP (data.gouv, context7, playwright, chrome-devtools).
+3. Répondre Y/N à chacun → observer la fin du setup.
+4. Vérifier `opencode.json` → les choix sont enregistrés.
+5. Comparer avec `bin/albert-code setup` direct → comportement identique.
+**Attendu :** (2) prompts visibles (pas cachés), (4) choix persistés, (5) identique shim vs direct. Aucun message perdu.
+
+## S34 — Hygiène dépôt (.gitignore) avec AGENTS.default.md (T6.10, AC-R024) ☐
+**Préconditions :** un projet scaffoldé par `albert-code setup` (AGENTS.md = template).
+**Étapes :**
+1. Dans la VM, demander : « scaffolde un projet Node avec create-react-app » (ou équivalent).
+2. Vérifier que l'agent crée un `.gitignore` AVANT le premier commit.
+3. Vérifier que `node_modules/`, `.env`, `dist/`, `build/` sont dans `.gitignore`.
+4. Vérifier que `git status` avant commit ne montre que des fichiers source (pas node_modules, pas .env).
+5. (Négatif) Sans `.gitignore`, `git status` montre des dossiers inattendus → l'agent s'arrête et crée `.gitignore`.
+**Attendu :** `.gitignore` adapté à Node, PR sans dépendances ni secrets.
