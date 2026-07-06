@@ -39,12 +39,12 @@
     "data-gouv": {
       "type": "remote",
       "url": "https://mcp.data.gouv.fr/mcp",
-      "enabled": true
+      "enabled": false
     },
     "context7": {
       "type": "remote",
       "url": "https://mcp.context7.com/mcp",
-      "enabled": true,
+      "enabled": false,
       "headers": {
         "Authorization": "Bearer {env:CONTEXT7_API_KEY}"
       }
@@ -52,12 +52,12 @@
     "playwright": {
       "type": "local",
       "command": ["npx", "-y", "@playwright/mcp@latest"],
-      "enabled": true
+      "enabled": false
     },
     "chrome-devtools": {
       "type": "local",
       "command": ["npx", "-y", "chrome-devtools-mcp@latest"],
-      "enabled": true
+      "enabled": false
     }
   },
   "permission": {

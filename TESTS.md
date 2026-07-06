@@ -41,24 +41,15 @@
 **Attendu :** la nouvelle skill apparaît **sans action manuelle** après reboot. Le mécanisme cache+symlinks
 préserve les skills perso si elles existent déjà (testé avec collision react-dsfr/mon-outil-perso ✅).
 
-## S6 — Isolation des profils (T2.1, T2.3) ✅
-**Étapes :** ouvrir chaque `profiles/<contexte>/AGENTS.md`.
-**Attendu :**
-- beta.gouv : commits **FR**, **pnpm**, **DSFR**. Aucune mention gitmoji/yarn/uv/Django.
-- lasuite : commits **gitmoji EN**, **yarn**, **UI Kit**, **Django REST**. Aucune mention pnpm/DSFR-par-défaut.
-- iae : **uv**, **Ruff**, **FastAPI**, **Alembic**. Aucune mention pnpm/yarn.
-- Socle commun (anglais code / FR UI, RGAA, ANSSI, RGPD, secrets, souveraineté) présent dans les 3.
-
-## S7 — Bootstrap sans défaut (T2.2) ✅ (beta.gouv validé : menu affiché, profil posé, isolation confirmée — cf. T-FIX-7 ; IAE/Autre = même mécanisme de copie)
+## S6 — AGENTS.default.md unique (T6.3) ☐ (profils supprimés)
+**Préconditions :** profils `profiles/beta.gouv`, `profiles/lasuite`, `profiles/iae` supprimés.
 **Étapes :**
-1. Lancer `install.sh` et choisir **beta.gouv**.
-2. Inspecter le projet généré.
-3. Recommencer dans un autre dossier en choisissant **IAE**, puis **Autre**.
+1. Lancer `albert-code setup` dans un dossier projet.
+2. Inspecter `./AGENTS.md`.
 **Attendu :**
-- Projet beta.gouv : `AGENTS.md` = profil beta.gouv uniquement ; **zéro** convention IAE (pas de `uv`/Ruff/gitmoji).
-- Projet IAE : l'inverse.
-- Choix **Autre** : **aucun** `AGENTS.md` de profil posé (Albert Code neutre).
-- Si on ne choisit aucun contexte → le script **refuse de continuer** (pas de profil par défaut, pas de merge).
+- Plus de prompt de contexte ; l'`AGENTS.md` posé correspond au contenu de `templates/AGENTS.default.md`.
+- Si le projet a déjà un `AGENTS.md`, il est **conservé** (non écrasé).
+- Les dossiers `profiles/` n'existent plus.
 
 ## S9 — Skills standards (T4.1, T4.2) ☐
 **Étapes :**
@@ -164,19 +155,61 @@ et le bloc marqueur a disparu.
 **Attendu :** (1) no-op + warning. (2) 4 actions gated affichées. (3) gh authentifié, identité et helper posés. (4) commit signé de la bonne identité, push OK, PR ouverte depuis la bulle. Le token n'apparaît dans aucun log.
 **Validé le :** 2026-07-06 — (1)(2) dry-run host : sans `GH_TOKEN` → warning « GH_TOKEN absent » ; avec token/identité factices → 4 actions gated (persist, user.name, user.email, `gh auth setup-git`). (3) VM `agent-vm-albert-code` : `gh auth status` → « Logged in … account benoitvx (GH_TOKEN) », credential helper HTTPS posé. (4) **dogfood réel** : la branche `feat/github-auth-vm` a été **commitée (auteur = noreply), poussée et ouverte en PR ([#2](https://github.com/etalab-ia/albert-code/pull/2)) intégralement depuis la VM**, sans fallback hôte. Piège relevé au passage : `AC_GIT_USER_EMAIL` mal saisi (gmail) posait l'identité globale sur l'email perso → override local noreply a protégé le commit ; corrigé côté VM + `~/.agent-vm/runtime.sh`.
 
-## S24 — Auth GitHub intégrée à l'installeur (T1.8) ☑ validé partiellement (2026-07-06)
-**Préconditions :** un `HOME` de test isolé (ne pas polluer le vrai `~/.zshenv` / `~/.agent-vm/runtime.sh`).
+## S25 — Commande `albert-code` à 3 verbes (T6.1) ☐
+**Préconditions :** dépôt albert-code disponible, `install.sh` exécutable.
 **Étapes :**
-1. `GH_TOKEN='CANARI' bash install.sh --dry-run` → vérifier que la valeur `CANARI` **n'apparaît nulle part** dans la sortie ; les 6 lignes GitHub (`persist`/`export` × GH_TOKEN/NAME/EMAIL) sont affichées gated ; « Prochaines étapes » indique « Push et PR GitHub configurés ».
-2. `bash install.sh --dry-run` **sans** `GH_TOKEN` → le `confirm` GitHub s'affiche `→ non`, aucune ligne GH persistée ; next-steps renvoie au README.
-3. Install réelle dans un `HOME` de test, répondre « oui » + coller un token + un email **non-noreply** (ex. `x@gmail.com`) → l'installeur **refuse et redemande** (3 fois), puis accepte en avertissant.
-4. Relancer l'install (idempotence) → le bloc `# --- albert-code : clés VM ---` n'est pas dupliqué, les 3 vars GitHub apparaissent une seule fois.
-**Attendu :** (1) zéro fuite du token, 6 lignes gated, next-steps OK. (2) confirm=non, rien de persisté. (3) garde-fou email actif. (4) bloc unique, non dupliqué.
-**Validé le :** 2026-07-06 — **(1) et (2) exécutés** : `GH_TOKEN='CANARI' install.sh --dry-run` → 0 occurrence du canari dans la sortie, 6 lignes GitHub gated, next-steps « Push et PR configurés » ; sans `GH_TOKEN` → `confirm → non`, rien persisté. **(3) et (4) revus par lecture de code seulement** (pas exécutés : un `install.sh` non-dry clone agent-vm et ne s'isole pas proprement hors VM vierge). Idempotence (4) reposant sur le mécanisme delete-then-rewrite déjà validé en S12 ; garde-fou email (3) = boucle `case`/3 tentatives dans le diff. **À confirmer sur une install vierge réelle** (early adopter T5.2).
+1. `./install.sh --dry-run` → vérifier que la sortie mentionne « Phase A » et « shim albert-code ».
+2. `bash bin/albert-code --help --dry-run` → vérifier les 3 verbes documentés.
+3. `bash bin/albert-code install --dry-run` → même comportement que `./install.sh --dry-run` (Phase A, finit par la pose du shim).
+4. `bash bin/albert-code setup --dry-run` (depuis un dossier hors dépôt) → Phase B : pose AGENTS.md, pose opencode.json, pose .agent-vm.runtime.sh, sans prompt interactif (dry-run → défauts non).
+5. `bash bin/albert-code run --dry-run` (depuis un dossier projet) → détecte VM de base, calcule les ressources, affiche la commande de lancement.
+**Attendu :** (1) Phase A + shim affichés. (2) 3 verbes documentés dans `--help`. (3) idem (1). (4) 3 fichiers posés, sans erreur. (5) ressources affichées, VM de base non créée (dry-run). Aucun échec bash (exit 0).
+**Validé le :** — (non exécuté).
+
+## S26 — Pédagogie agent-vm (T6.2) ☐
+**Préconditions :** `install.sh` ou `bin/albert-code install` disponible.
+**Étapes :**
+1. Lancer `./install.sh --dry-run`.
+2. Observer les messages avant le `confirm` Lima.
+**Attendu :** un encart `title` + `info` explique ce qu'est l'isolation (VM légère, ne touche qu'au code, mode YOLO). Le `confirm` pour installer Lima arrive après cet encart.
+**Validé le :** — (non exécuté).
+
+## S27 — Re-setup non-destructif (T6.3) ☐
+**Préconditions :** dossier projet avec `AGENTS.md` et `opencode.json` déjà posés (par un premier `albert-code setup`).
+**Étapes :**
+1. Lancer `bash bin/albert-code setup --dry-run` (ou `HOME=<sandbox> ...`).
+2. Noter les messages : `AGENTS.md`, `opencode.json`, `.agent-vm.runtime.sh`.
+**Attendu :** les 3 fichiers sont signalés « existe déjà — conservé (non écrasé) ». Aucun fichier n'est réécrit.
+**Validé le :** — (non exécuté).
+
+## S28 — Choix Y/N skills + MCP (T6.4) ☐
+**Étapes :**
+1. Lancer `bash bin/albert-code setup` (depuis un dossier projet vierge).
+2. Répondre « non » à tous les MCP → vérifier que `opencode.json` n'a **aucun** bloc `mcp` (ou tous `enabled: false`).
+3. Répondre « oui » à data.gouv seulement → vérifier qu'un seul MCP est activé dans `opencode.json`.
+4. Vérifier que `.albert-code/skills.txt` existe après l'étape skills (réponses « oui/non »).
+5. Relancer `albert-code setup` sur le même projet → vérifier que `opencode.json` et `AGENTS.md` sont conservés.
+**Attendu :** (2) aucun MCP activé. (3) seul data.gouv activé. (4) skills sélectionnées listées. (5) fichiers conservés (non écrasés). Exit 0.
+**Validé le :** — (non exécuté).
+
+## S29 — Description skills : formats `>-`, `|`, inline (T6.4) ☐
+**Préconditions :** fonctions bash chargées (`lib/phases.sh`).
+**Étapes :**
+1. Créer 3 fichiers SKILL.md de test : un avec `description: >-` (block replié), un avec `description: |` (block littéral), un avec `description: texte inline`.
+2. Tester la fonction `extract_skill_description()` sur chaque fichier.
+**Attendu :**
+- `description: >-` → retourne le texte concaténé (pas « >- ») des lignes indentées suivantes.
+- `description: |` → retourne le texte concaténé (pas « | ») des lignes indentées suivantes.
+- `description: texte inline` → retourne « texte inline ».
+- Les descriptions longues (>200 caractères) sont tronquées avec « … ».
+- Une description absente retourne chaîne vide (l'afficheur utilise « (aucune description) »).
+**Validé le :** — (non exécuté).
+
+---
 
 ## Critères d'acceptation v1 (Definition of Done globale)
-- [x] S1, S2, S3, S6, S7, S12, S13, S14, S15, S16, S17, S18, S20 ✅.
+- [x] S1, S2, S3, S6, S12, S13, S14, S15, S16, S17, S18, S20 ✅.
 - [ ] S4, S5, S11 (idempotence runtime VM / skills au boot / non-tech — en attente).
-- [ ] Un agent public installe le bundle, choisit son contexte, et produit une page DSFR conforme dans une VM isolée, alimentée par Albert, sans qu'aucune clé ne fuite.
-- [x] Un utilisateur beta.gouv n'a jamais de convention IAE, et inversement. (validé S7)
+- [ ] Un agent public installe le bundle et produit une page DSFR conforme dans une VM isolée, alimentée par Albert, sans qu'aucune clé ne fuite.
 - [ ] Les skills se rafraîchissent au reboot de la VM.
+- [ ] S25, S27, S28, S29 (3 verbes, re-setup non-destructif, choix Y/N).

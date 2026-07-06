@@ -245,3 +245,46 @@ Config MCP de référence :
 
 ### T5.3 🟡 Publication `etalab-ia/albert-code`
 **DoD :** repo public, LICENSE MIT, CI verte.
+
+---
+
+## EPIC 6 — Interface 3 verbes & simplification profils `<- AC-R014, AC-R015, AC-R016, AC-R017`
+
+### T6.1 🔴 Commande `albert-code` à 3 verbes `<- AC-R014`
+**But :** une commande unique `albert-code` avec 3 verbes : `install` (bootstrap poste), `setup` (scaffold projet), `run` (lancement VM) — au lieu de mémoriser `install.sh` + `agent-vm setup` + `agent-vm opencode`.
+**Tâches :**
+- Créer `bin/albert-code` : dispatcher en `case "$1" in install|setup|run|--help)`.
+- Extraire `phase_a` / `phase_b` / `phase_run` de `install.sh` vers `lib/phases.sh`, sourçable par `bin/albert-code` ET par `install.sh`.
+- `install.sh` devient l'amorçage : joue `phase_a` PUIS pose le shim via `install_shim "albert-code" "$SELF_DIR/bin/albert-code"`.
+- `phase_run` : reprend le bloc « Prochaines étapes » (créer la VM de base si absente, puis `agent-vm --cpus "$EFF_CPUS" --memory "$EFF_MEM" --disk "$AC_VM_DISK" opencode`).
+- Mettre à jour `usage_install` et `README.md` pour documenter les 3 verbes.
+**DoD :** `albert-code install` = Phase A ; `albert-code setup` = Phase B ; `albert-code run` = lance la VM ; `albert-code --help` documente tout. install.sh devient mince. → `TESTS.md` S25.
+
+### T6.2 🟡 Pédagogie agent-vm en phase A `<- AC-R015`
+**But :** avant d'installer Lima/agent-vm, afficher un encart en français simple expliquant ce qu'est cette VM et pourquoi c'est indispensable.
+**Tâches :**
+- Dans `phase_a`, avant le `confirm` Lima, afficher un encart `title` + `info` : « une bulle isolée (VM légère Lima) où l'assistant tourne sans accès à tes fichiers perso, clés SSH, cookies. Permet de le laisser tourner en autonomie. Installe : Lima, agent-vm, clé Albert révocable. »
+- Garder le `confirm` avant d'installer Lima.
+**DoD :** un non-dev comprend pourquoi on installe une VM avant le premier `confirm`. → `TESTS.md` S26.
+
+### T6.3 🔴 Supprimer les profils → un seul AGENTS.md par défaut `<- AC-R016`
+**But :** remplacer le choix de profil (beta.gouv / La Suite / IAE) par un unique `templates/AGENTS.default.md` avec sécurité, conventions de code et accessibilité — neutre, applicable à tout projet.
+**Tâches :**
+- Supprimer `profiles/beta.gouv/`, `profiles/lasuite/`, `profiles/iae/`.
+- Retirer le `prompt_choice` de contexte et le `case` profils dans `phase_b`.
+- Créer `templates/AGENTS.default.md` avec le contenu fourni (sécurité, plan mode, task management, self-improvement, bug fixing, code quality, git, accessibilité).
+- `phase_b` copie `templates/AGENTS.default.md` vers `./AGENTS.md` via `copy_template` (n'écrase jamais un AGENTS.md existant).
+- Nettoyer les références aux profils dans `README.md`, `AGENTS.md` (repo), `BACKLOG.md`, `TESTS.md` (retirer S7, S6).
+**DoD :** plus de menu contexte ; un seul AGENTS.md par défaut ; profils physiquement supprimés du dépôt ; re-setup non-destructif (AGENTS.md conservé). → `TESTS.md` S27.
+
+### T6.4 🟠 Choix Y/N skills + MCP au `setup` (phase_b) `<- AC-R017`
+**But :** au lieu d'activer toutes les skills et MCP en aveugle, demander à l'utilisateur ce qu'il veut brancher.
+**MCP (par projet, dans opencode.json) :**
+- Passe les 4 MCP de `config/opencode.template.json` en `enabled: false` par défaut.
+- Dans `phase_b`, pour chaque MCP : `confirm` « Brancher le MCP <nom> (objectif : <desc>) ? » → `enabled: true` seulement si oui. Génère le bloc MCP en bash (PAS de dépendance jq).
+- Objectifs : `data.gouv` = "accès aux données publiques (lecture)" ; `context7` = "doc à jour des librairies (clé requise)" ; `playwright` = "piloter un navigateur / agir dans une page" ; `chrome-devtools` = "debug navigateur".
+**Skills (choisies au setup, manifeste projet lu par le runtime) :**
+- `phase_b` rafraîchit le cache `etalab-ia/skills`, énumère chaque skill (lit `description` du `SKILL.md` de chaque dossier) et demande `confirm` « Installer la skill <nom> (objectif : <description>) ? ».
+- Écrit la sélection dans `./.albert-code/skills.txt` (une skill par ligne).
+- Modifie `sync_skills` du runtime : au boot, ne symlinke QUE les skills listées dans `./.albert-code/skills.txt` du projet courant ; réconcilie le dossier global skills/ (retire les symlinks albert-code non sélectionnés, JAMAIS les skills perso). Si aucun manifeste → comportement actuel (toutes) pour rétrocompat.
+**DoD :** un « non » à un MCP/skill ne l'écrit pas ; re-setup conserve les choix ; skills perso jamais touchées par la réconciliation. → `TESTS.md` S28.

@@ -19,7 +19,7 @@ Ce n'est **pas un IDE ni un fork** : c'est de l'**orchestration mince** (scripts
 | **Albert API** | Provider LLM souverain (OpenAI-compatible) | `albert.api.etalab.gouv.fr` |
 | **Skills État** | Connaissances métier (DSFR, RGAA, sécurité, data.gouv) | `github.com/etalab-ia/skills` |
 | **MCP** | Connecteurs clés : data.gouv, context7, playwright, chrome-devtools | — |
-| **Profils** | Conventions par contexte (beta.gouv / La Suite / IAE / autre) | `profiles/` |
+| **AGENTS.md par défaut** | Règles sécurité + conventions universelles | `templates/AGENTS.default.md` |
 
 ### Pour qui
 Agents publics : devs en ministère, prototypeurs, équipes de startup d'état. Le bundle doit marcher **autant pour un dev confirmé que pour un non-tech** (cf. `README.md`).
@@ -72,18 +72,19 @@ albert-code/
 ├── LICENSE                        # MIT
 ├── docs/
 │   └── PLAN.md                     # Contexte & décisions (FAIT)
-├── install.sh                     # Wizard d'installation (point d'entrée unique)
+├── bin/
+│   └── albert-code                # Dispatcher à 3 verbes : install|setup|run
+├── install.sh                     # Amorçage (Phase A + pose du shim)
 ├── uninstall.sh                   # Désinstallation propre
-├── lib/                           # Fonctions bash partagées (banner, ui, checks)
+├── lib/                           # Fonctions bash partagées (banner, ui, checks, phases)
+│   ├── ui.sh
+│   └── phases.sh
 ├── config/
 │   └── opencode.template.json     # Config OpenCode : provider Albert + MCP + permissions
 ├── runtime/
 │   └── agent-vm.runtime.sh        # Runtime de référence (provider + sync skills + MCP), idempotent
-├── profiles/                      # Un dossier par contexte — isolation physique
-│   ├── beta.gouv/AGENTS.md
-│   ├── lasuite/AGENTS.md
-│   └── iae/AGENTS.md
 └── templates/
+    ├── AGENTS.default.md          # Règles sécurité + conventions universelles
     ├── PULL_REQUEST_TEMPLATE.md   # Fusion DoD OpenGateLLM + checklist beta
     └── .github/workflows/         # CI réutilisable : semgrep, trivy, codeql
 ```
@@ -96,7 +97,7 @@ albert-code/
 
 | Élément | Choix |
 |---|---|
-| Langage principal | **Bash** (bootstrap/runtime), **JSON/JSONC** (config OpenCode), **Markdown** (profils, docs) |
+| Langage principal | **Bash** (bootstrap/runtime), **JSON/JSONC** (config OpenCode), **Markdown** (docs) |
 | Cible OS | macOS + Linux (parc agents). Pas de Windows en v1 |
 | Dépendances hôte | Lima (via agent-vm), Node (pour `npx`/MCP), git |
 | Pas de | build step, framework applicatif, dépendance propriétaire |
@@ -155,16 +156,9 @@ Les skills ne se mettent **PAS** à jour toutes seules. Mécanisme retenu : **cl
 
 ---
 
-## 9. Profils (séparation des conventions — NON négociable)
+## 9. AGENTS.md par défaut
 
-Un utilisateur **ne doit jamais hériter du mauvais jeu de conventions**. Isolation **physique** : `profiles/<contexte>/AGENTS.md`, un fichier par contexte, **aucun merge, aucun défaut implicite**. Le bootstrap **demande le contexte** et copie le bon profil.
-
-- `profiles/beta.gouv/` — commits FR, pnpm, DSFR, skills react-dsfr/rgaa/securite-developpement/datagouv-apis.
-- `profiles/lasuite/` — commits gitmoji EN, yarn, La Suite UI Kit, Django REST.
-- `profiles/iae/` — house style OpenGateLLM (uv, Ruff, FastAPI, pytest, Alembic), skill conventions-iae.
-- **`autre`** — **aucune convention imposée** : ne copie aucun `AGENTS.md` de profil. L'utilisateur fournit le sien (ou aucun). Albert Code reste neutre.
-
-Source des profils existants : `etalab-ia/skills/templates/instructions/` (`beta.gouv.md`, `LaSuite.md`).
+Le bundle pose un `AGENTS.md` de référence (`templates/AGENTS.default.md`) avec les règles de sécurité, plan mode, task management, code quality, git et accessibilité — applicable à tout projet, neutre par nature. Si le projet a déjà son `AGENTS.md`, il est conservé (non-destructif).
 
 ---
 
@@ -173,7 +167,7 @@ Source des profils existants : `etalab-ia/skills/templates/instructions/` (`beta
 - Ne pas supporter d'autre harness que **OpenCode** (ni Vibe, ni Claude Code).
 - **Ne pas écraser une config OpenCode / agent-vm existante.** La config provider du bundle est de **portée projet** (`opencode.json` à la racine du projet cible), jamais le global perso de l'utilisateur (qui peut contenir d'autres providers, ex. Scaleway). Écritures globales (dossier skills, `~/.zshenv`) = **additives + idempotentes** (détecter avant d'écrire).
 - Ne pas utiliser de modèle Albert autre que `Mistral-Medium-3.5-128B` (principal), `DeepSeek-V4-Flash` (small) et `Qwen/Qwen3.6-27B` (disponible, multimodal, tool calling validé le 06/07/2026).
-- Ne pas créer de défaut implicite de profil ni merger les conventions de deux contextes.
+- Ne pas créer de défaut implicite de profil ni merger les conventions de deux contextes. (Les profils ont été supprimés dans T6.3 — un seul `AGENTS.default.md` neutre.)
 - Ne pas s'appuyer sur la clé `skills`/`skills.urls` (non documentée OpenCode).
 
 ---

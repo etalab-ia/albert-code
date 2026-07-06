@@ -42,36 +42,30 @@ cd ~/albert-code
 
 > Le chemin d'installation ne doit **pas contenir d'espace** (contrainte agent-vm/Lima, qui monte le répertoire de travail dans la VM).
 
-`install.sh` est **idempotent** et **non-destructif** : il ne réinstalle rien de déjà présent et n'écrase aucune config existante. Deux phases :
+Après installation, tu disposes de la commande `albert-code` à 3 verbes :
 
-- **Phase A (bootstrap poste)** : Lima + agent-vm, provider Albert, skills de l'État, connecteurs MCP, clés dans la VM. Lancée quand tu exécutes le script depuis le dépôt.
-- **Phase B (scaffold projet)** : lancée quand tu exécutes le script depuis un répertoire projet. Te demande ton contexte, puis pose l'`AGENTS.md` du profil + un `opencode.json` de **portée projet**.
+| Verbe | Action |
+|---|---|
+| `albert-code install` | **1ʳᵉ fois** : bootstrap le poste (Lima, agent-vm, clés, skills). |
+| `albert-code setup` | **Par projet** : configure un projet (AGENTS.md + opencode.json + choix skills/MCP). |
+| `albert-code run` | **Lancement** : crée la VM de base si absente, puis ouvre la bulle agent-vm. |
+
+`install.sh` est **idempotent** et **non-destructif** : il amorce le poste (Phase A) et pose le shim `albert-code`. Ensuite, c'est `albert-code setup` puis `albert-code run`.
 
 Flags : `--dry-run` (simule sans rien écrire), `--help`.
-
-### Profils de conventions
-
-Au scaffold d'un projet, le script demande le contexte et applique **uniquement** ses conventions (aucun défaut, aucun mélange) :
-
-| Profil | Conventions |
-|---|---|
-| `beta.gouv` | DSFR, pnpm, commits FR, Next.js / FastAPI |
-| `La Suite` | UI Kit La Suite, yarn, commits gitmoji, Django |
-| `IAE / Albert` | FastAPI, uv, Ruff (house style OpenGateLLM) |
-| `Autre` | aucune convention imposée (tu fournis ton `AGENTS.md`) |
 
 ## Utilisation
 
 ```bash
+albert-code install                                      # 1ʳᵉ fois : bootstrap ton poste
 mkdir -p ~/mon-projet && cd ~/mon-projet
-~/albert-code/install.sh                                  # Phase B : choix du profil + config projet
-agent-vm setup --disk 32                                  # 1 seule fois : crée la VM de base
-agent-vm --cpus 4 --memory 8 --disk 32 opencode            # ouvre la bulle isolée + OpenCode
+albert-code setup                                        # configure le projet (AGENTS.md + MCP + skills)
+albert-code run                                          # ouvre la bulle isolée + OpenCode
 ```
 
 Dans la bulle, l'agent tourne en mode autonome (`--dangerously-skip-permissions`), sûr parce que tout est confiné dans la VM. Tu peux lui parler en français.
 
-Les commandes exactes (avec tes valeurs) s'affichent à la fin de `install.sh`, sous « Prochaines étapes ».
+Les commandes exactes (avec tes valeurs) s'affichent à la fin de `albert-code setup`, sous « Prochaines étapes ».
 
 > Si ton projet a déjà un `opencode.json`, il est **conservé** (non-destructif) — vérifie qu'il contient bien le provider Albert, sinon Albert ne sera pas câblé. Voir [Dépannage](#dépannage) si besoin.
 
@@ -137,7 +131,7 @@ Par défaut, l'agent peut **committer** dans la VM mais **ni pusher ni ouvrir de
 - **Skills** : `etalab-ia/skills` cloné dans un cache (`~/.config/opencode/.albert-skills-cache`) et symliqué dans le dossier scanné par OpenCode, mis à jour à chaque démarrage de VM. Les skills perso existantes ne sont jamais écrasées.
 - **MCP** : `data-gouv` (remote), `context7` (remote, **optionnel** — sans `CONTEXT7_API_KEY` on peut l'ignorer ; clé API via https://context7.com/plans si besoin), `playwright` et `chrome-devtools` (local).
   Note : sans clé, le MCP context7 s'affiche en erreur dans la VM → le désactiver dans `opencode.json` si gênant.
-- **Conventions** : `AGENTS.md` par profil (OpenCode lit `AGENTS.md`, ignore `CLAUDE.md`). Isolation physique, aucun merge.
+- **Conventions** : `AGENTS.md` depuis `templates/AGENTS.default.md` (sécurité, plan mode, task management, code quality, git, accessibilité). Si le projet a déjà son `AGENTS.md`, il est conservé.
 
 Docs : [OpenCode](https://opencode.ai/docs/fr) · [Albert API](https://doc.incubateur.net/alliance/albert-api) · [agent-vm](https://github.com/sylvinus/agent-vm) · [Skills État](https://github.com/etalab-ia/skills)
 
@@ -145,7 +139,7 @@ Docs : [OpenCode](https://opencode.ai/docs/fr) · [Albert API](https://doc.incub
 
 - **`agent-vm: command not found` juste après l'install** → le shim est posé sur le PATH. Si vraiment absent, ouvre un nouveau terminal pour recharger le PATH.
 - **`Base VM not found. Run 'agent-vm setup' first.`** → lance `agent-vm setup --disk 32` une seule fois (l'install le propose aussi automatiquement).
-- **Je suis dans OpenCode mais pas connecté à Albert (pas de `/models`, `/mcp`, `/skills`)** → tu as lancé `agent-vm opencode` dans un dossier **sans `opencode.json`** (ex. le dépôt albert-code lui-même, ou un projet jamais scaffoldé). Scaffolde d'abord : `cd <ton-projet> && ~/albert-code/install.sh` (Phase B), puis relance `agent-vm opencode`.
+- **Je suis dans OpenCode mais pas connecté à Albert (pas de `/models`, `/mcp`, `/skills`)** → tu as lancé `agent-vm opencode` (ou `albert-code run`) dans un dossier **sans `opencode.json`** (ex. le dépôt albert-code lui-même, ou un projet jamais scaffoldé). Scaffolde d'abord : `cd <ton-projet> && albert-code setup`, puis relance `albert-code run`.
 - **Mon projet a déjà un `opencode.json`** → il est **conservé** (non-destructif). Vérifie qu'il contient le provider albert ; sinon Albert n'est pas câblé — ajoute à la main le bloc `provider.albert` + `model`/`small_model`.
 
 ## Désinstallation
