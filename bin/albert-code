@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# =============================================================================
+# Albert Code — dispatcher à 3 verbes
+# -----------------------------------------------------------------------------
+# Usage :
+#   albert-code install   → Phase A (bootstrap poste)
+#   albert-code setup     → Phase B (scaffold projet)
+#   albert-code run       → Phase run (lancement VM)
+#   albert-code --help    → Cette aide
+# =============================================================================
+set -euo pipefail
+
+SELF_DIR="$(cd "$(dirname "$(dirname "${BASH_SOURCE[0]}")")" && pwd)"
+LIB_DIR="$SELF_DIR/lib"
+
+source "$LIB_DIR/ui.sh"
+source "$LIB_DIR/phases.sh"
+
+# --- Ressources VM (surchargeables) -------------------------------------------
+AC_VM_CPUS="${AC_VM_CPUS:-4}"
+AC_VM_MEMORY="${AC_VM_MEMORY:-8}"
+AC_VM_DISK="${AC_VM_DISK:-32}"
+
+AGENT_VM_DIR="${AGENT_VM_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/agent-vm}"
+AGENT_VM_REPO="https://github.com/sylvinus/agent-vm.git"
+RUNTIME_VM_FILE="$HOME/.agent-vm/runtime.sh"
+ZSHENV="$HOME/.zshenv"
+
+# --- Parsing des arguments -----------------------------------------------------
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --dry-run) DRY_RUN=1; export DRY_RUN ;;
+    --help|-h)
+      usage_albert_code
+      exit 0 ;;
+    install|setup|run) verb="$1" ;;
+    *) err "Verbe inconnu : $1"; usage_albert_code; exit 1 ;;
+  esac
+  shift
+done
+
+if [ -z "${verb:-}" ]; then
+  err "Usage : albert-code {install|setup|run}"
+  err "  albert-code --help  pour plus d'infos"
+  exit 1
+fi
+
+case "$verb" in
+  install)
+    banner
+    phase_a
+    echo
+    install_shim "albert-code" "$SELF_DIR/bin/albert-code"
+    echo
+    title "C'est prêt. Bon code avec Albert."
+    echo
+    info "Utilise « albert-code setup » pour configurer un projet,"
+    info "ou « albert-code run » pour lancer la bulle."
+    ;;
+  setup)
+    phase_b
+    ;;
+  run)
+    phase_run
+    ;;
+esac

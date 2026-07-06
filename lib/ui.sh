@@ -344,16 +344,21 @@ file_contains() {
 }
 
 # --- Usage / help --------------------------------------------------------------
-# usage_install : texte d'aide pour install.sh.
+# usage_install : texte d'aide pour install.sh (rétrocompat).
 usage_install() {
   cat <<'USAGE'
-Albert Code — installation
+Albert Code — installation (version legacy)
 
 Usage: ./install.sh [--dry-run] [--help]
 
-Options:
+Ce script amorce ton poste (Phase A) puis pose le shim « albert-code ».
+Après installation, utilise :
+
+  albert-code setup     → configurer un projet (Phase B)
+  albert-code run       → lancer la bulle agent-vm
+
+Options :
   --dry-run   Affiche chaque action sans l'exécuter. Aucun fichier n'est écrit.
-              Toutes les écritures passent par _dry_gate() → aucune ne peut être oubliée.
   --help      Affiche cette aide.
 
 Variables d'environnement (sandbox) :
@@ -370,10 +375,33 @@ Ressources VM (surchargeables) :
                           ne peut que grandir ensuite (défaut: 32).
                           Garde-fou : CPU/RAM effectifs jamais > ~moitié des
                           ressources hôte détectées (sysctl/nproc, lecture seule).
+USAGE
+}
 
-Exemple (test non-destructif) :
-  mkdir -p /tmp/ac-test
-  HOME=/tmp/ac-test ./install.sh --dry-run
+usage_albert_code() {
+  cat <<'USAGE'
+Albert Code — assistant de code IA souverain
+
+Usage :
+  albert-code install   → 1ʳᵉ fois : bootstrap ton poste (Lima, agent-vm, clés)
+  albert-code setup     → configure un projet (AGENTS.md + opencode.json + skills)
+  albert-code run       → lance la bulle isolée agent-vm
+  albert-code --help    → cette aide
+
+Options :
+  --dry-run   Simule les actions sans les exécuter (valable pour tous les verbes).
+
+Environnement (sandbox) :
+  HOME                   Redirige ~/.zshenv, ~/.config/opencode, etc.
+  OPENCODE_CONFIG_DIR     Dossier de config OpenCode (défaut: ~/.config/opencode).
+  SHIM_BIN_DIR            Dossier du shim (défaut: sonde PATH).
+  AC_VM_CPUS/AC_VM_MEMORY/AC_VM_DISK   Ressources VM (voir README).
+
+Exemple complet :
+  albert-code install          # 1ʳᵉ fois
+  cd ~/mon-projet
+  albert-code setup            # configure le projet
+  albert-code run              # démarre
 USAGE
 }
 
