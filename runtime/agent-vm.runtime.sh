@@ -101,6 +101,45 @@ persist_env_var() {
 }
 
 # -----------------------------------------------------------------------------
+# setup_github_auth — câble l'auth GitHub de la VM (push + ouverture de PR)
+#   SANS jamais contenir de secret : actif uniquement si GH_TOKEN est déjà dans
+#   l'environnement (posé par ~/.agent-vm/runtime.sh → ~/.zshenv de la VM).
+#   Rôles : (1) persister GH_TOKEN, (2) poser l'identité git globale
+#   (AC_GIT_USER_NAME / AC_GIT_USER_EMAIL), (3) brancher git sur le token via
+#   `gh auth setup-git` (credential helper HTTPS). Idempotent. Token jamais loggé.
+#   SSH ne suffirait pas : `gh pr create` exige un token, pas une clé SSH.
+# -----------------------------------------------------------------------------
+setup_github_auth() {
+  if [ -z "${GH_TOKEN:-}" ]; then
+    _warn "GH_TOKEN absent — push/PR depuis la VM non configurés (voir README § Push & PR depuis la VM)"
+    return 0
+  fi
+
+  # 1. Persister le token (shells non-interactifs + TUI).
+  persist_env_var "GH_TOKEN" "$GH_TOKEN"
+
+  # 2. Identité git globale (sinon commits sous une identité par défaut douteuse).
+  if [ -n "${AC_GIT_USER_NAME:-}" ] && [ -n "${AC_GIT_USER_EMAIL:-}" ]; then
+    _apply "identité git : user.name"  git config --global user.name  "$AC_GIT_USER_NAME"
+    _apply "identité git : user.email" git config --global user.email "$AC_GIT_USER_EMAIL"
+    [ "$DRY_RUN" -eq 0 ] && _ok "identité git posée (${AC_GIT_USER_NAME} <${AC_GIT_USER_EMAIL}>)" || true
+  else
+    _warn "AC_GIT_USER_NAME / AC_GIT_USER_EMAIL absents — identité git non posée"
+  fi
+
+  # 3. Brancher git sur le token pour le push HTTPS (idempotent).
+  if command -v gh >/dev/null 2>&1; then
+    if _apply "gh auth setup-git (credential helper HTTPS)" gh auth setup-git; then
+      [ "$DRY_RUN" -eq 0 ] && _ok "git branché sur le token — push + PR actifs" || true
+    else
+      _warn "gh auth setup-git a échoué (token invalide ou expiré ?)"
+    fi
+  else
+    _warn "gh CLI absent de la VM — credential helper non branché"
+  fi
+}
+
+# -----------------------------------------------------------------------------
 # sync_skills — clone ou met à jour les skills État (cache + symlinks).
 # -----------------------------------------------------------------------------
 sync_skills() {
@@ -164,10 +203,13 @@ _info "Runtime Albert Code — démarrage…"
 persist_env_var "ALBERT_API_KEY"  "${ALBERT_API_KEY:-}"
 persist_env_var "CONTEXT7_API_KEY" "${CONTEXT7_API_KEY:-}"
 
-# 2. Synchronisation des skills (fraîches à chaque boot).
+# 2. Auth GitHub (push + ouverture de PR depuis la VM) — actif si GH_TOKEN présent.
+setup_github_auth
+
+# 3. Synchronisation des skills (fraîches à chaque boot).
 sync_skills
 
-# 3. Vérification d'OpenCode.
+# 4. Vérification d'OpenCode.
 check_opencode
 
 _ok "Runtime Albert Code prêt. Lance « opencode » pour démarrer."
