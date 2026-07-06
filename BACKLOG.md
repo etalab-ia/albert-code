@@ -84,6 +84,19 @@ Config MCP de référence :
 **Tâches :** en Phase B, si `./opencode.json` existe déjà, détecter s'il contient le provider `albert` ; sinon → **avertir clairement** (« opencode.json existant sans provider Albert → Albert non câblé ») et proposer/documenter le merge du bloc `provider.albert` + `model`/`small_model` (jq/sed) sans écraser le reste. Ne jamais écraser silencieusement.
 **DoD :** scaffold dans un repo avec `opencode.json` sans `albert` → message explicite (+ option de merge) ; avec `albert` déjà présent → info « rien à faire ». → `TESTS.md` S22.
 
+### T1.7 🔴 Auth GitHub de la VM : commit OK, mais push + PR impossibles depuis la bulle `<- AC-R013`
+**But :** le README promet « l'agent pousse des PR depuis la VM », mais Albert Code ne configure dans la VM ni l'identité git (`user.name`/`user.email`), ni la clé SSH, ni de token `gh` → l'agent peut committer localement mais **ni pusher ni ouvrir la PR**. SSH = auth ≠ identité de commit.
+
+**⚠️ Confirmé en test réel (06/07/2026)** — lors de l'ajout du modèle Qwen 3.6 (branche `feat/add-qwen-3.6`, commit `b9eb1e9`). Séquence observée dans la VM agent-vm :
+- `git commit` → OK (l'identité était présente sur ce poste).
+- `git push` → échec : ni auth HTTPS, ni host key SSH.
+- `gh pr create` → échec : `gh` non authentifié (pas de `GH_TOKEN`).
+- Fallback navigateur (`chrome-devtools new_page` sur l'URL `pull/new/…`) → échec : pas de navigateur ouvrable dans le sandbox.
+- **Résultat : blocage total du push/PR côté VM.** Contournement utilisé : push + `gh pr create` **depuis l'hôte** (où `gh` est authentifié). → à documenter comme procédure intérimaire tant que T1.7 n'est pas implémenté.
+
+**Tâches :** au setup (`ensure_vm_runtime` / runtime VM), configurer l'identité git de la VM — reprendre le `git config --global user.name/email` de l'hôte s'il existe, sinon prompt (**recommander l'email _noreply_ GitHub**, pas l'email perso) ; **et** régler l'auth push par l'une des voies (à trancher) : (a) injecter un `GH_TOKEN` fine-grained scopé dans l'env VM (jamais loggé, jamais commité), ou (b) injecter la clé SSH GitHub (cf. `runtime.example.sh` d'agent-vm) + `url.insteadOf` pour forcer SSH. Documenter aussi le fallback hôte (commit VM → push/PR hôte) pour les postes non configurés.
+**DoD :** dans une VM fraîche, l'agent fait un commit de la bonne identité + push + `gh pr create` sans config manuelle. → `TESTS.md` S23.
+
 ---
 
 ## EPIC 2 — Profils & bootstrap (séparation des conventions)
