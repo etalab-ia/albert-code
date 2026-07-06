@@ -185,6 +185,39 @@ phase_a() {
 
   echo
 
+  # GitHub PAT (optionnel)
+  if confirm "Activer le push et les PR GitHub depuis la VM ? (nécessite un PAT GitHub)"; then
+    local gh_token
+    gh_token="$(prompt_secret "Colle ton PAT GitHub (scope repo ; Entrée pour passer)")"
+    if [ -n "$gh_token" ]; then
+      local git_name
+      git_name="$(prompt_input "Nom pour les commits" "$(git config --global user.name 2>/dev/null)")"
+      local git_email_def git_email email_attempts
+      git_email_def="$(git config --global user.email 2>/dev/null)"
+      email_attempts=0
+      while [ "$email_attempts" -lt 3 ]; do
+        git_email="$(prompt_input "Email noreply GitHub (doit finir en users.noreply.github.com)" "$git_email_def")"
+        case "$git_email" in
+          *users.noreply.github.com) break ;;
+        esac
+        email_attempts=$((email_attempts + 1))
+        if [ "$email_attempts" -lt 3 ]; then
+          warn "L'email doit finir par users.noreply.github.com. Réessaie (tentative $email_attempts/3)."
+        fi
+      done
+      if [ "$email_attempts" -ge 3 ]; then
+        warn "3 tentatives échouées — on accepte l'email tel quel."
+      fi
+      persist_zshenv "GH_TOKEN" "$gh_token"
+      persist_zshenv "AC_GIT_USER_NAME" "$git_name"
+      persist_zshenv "AC_GIT_USER_EMAIL" "$git_email"
+    else
+      warn "Pas de PAT GitHub — le push/PR depuis la VM restera inactif."
+    fi
+  fi
+
+  echo
+
   # A.4 agent-vm (clone + source dans le shell rc)
   install_agent_vm
 
@@ -299,9 +332,25 @@ ensure_vm_runtime() {
     ctx7_val="$(grep -E "^export CONTEXT7_API_KEY=" "$ZSHENV" | head -1 | sed -E "s/^export CONTEXT7_API_KEY=['\"]?//; s/['\"]?$//")"
   fi
 
-  local safe_albert="" safe_ctx=""
+  local gh_token_val="${GH_TOKEN:-}"
+  if [ -z "$gh_token_val" ] && file_contains "$ZSHENV" "GH_TOKEN"; then
+    gh_token_val="$(grep -E "^export GH_TOKEN=" "$ZSHENV" | head -1 | sed -E "s/^export GH_TOKEN=['\"]?//; s/['\"]?$//")"
+  fi
+  local git_name_val="${AC_GIT_USER_NAME:-}"
+  if [ -z "$git_name_val" ] && file_contains "$ZSHENV" "AC_GIT_USER_NAME"; then
+    git_name_val="$(grep -E "^export AC_GIT_USER_NAME=" "$ZSHENV" | head -1 | sed -E "s/^export AC_GIT_USER_NAME=['\"]?//; s/['\"]?$//")"
+  fi
+  local git_email_val="${AC_GIT_USER_EMAIL:-}"
+  if [ -z "$git_email_val" ] && file_contains "$ZSHENV" "AC_GIT_USER_EMAIL"; then
+    git_email_val="$(grep -E "^export AC_GIT_USER_EMAIL=" "$ZSHENV" | head -1 | sed -E "s/^export AC_GIT_USER_EMAIL=['\"]?//; s/['\"]?$//")"
+  fi
+
+  local safe_albert="" safe_ctx="" safe_gh="" safe_name="" safe_email=""
   [ -n "$albert_val" ] && safe_albert="${albert_val//\'/\'\"\'\"\'}"
   [ -n "$ctx7_val" ] && safe_ctx="${ctx7_val//\'/\'\"\'\"\'}"
+  [ -n "$gh_token_val" ] && safe_gh="${gh_token_val//\'/\'\"\'\"\'}"
+  [ -n "$git_name_val" ] && safe_name="${git_name_val//\'/\'\"\'\"\'}"
+  [ -n "$git_email_val" ] && safe_email="${git_email_val//\'/\'\"\'\"\'}"
 
   # Supprime TOUT bloc existant (ancien format export-only OU nouveau format)
   # → ne touche JAMAIS aux lignes hors du bloc (exports perso, etc.)
@@ -315,7 +364,7 @@ ensure_vm_runtime() {
       # au premier autre contenu (heuristic : préserve le contenu perso après le bloc).
       awk -v marker="$AC_MARKER" '
         $0 == marker { in_block=1; next }
-        in_block && $0 ~ /^export (ALBERT_API_KEY|CONTEXT7_API_KEY)=/ { next }
+        in_block && $0 ~ /^export (ALBERT_API_KEY|CONTEXT7_API_KEY|GH_TOKEN|AC_GIT_USER_NAME|AC_GIT_USER_EMAIL)=/ { next }
         in_block && $0 ~ /^[[:space:]]*$/ { next }
         in_block { in_block=0 }
         { print }
@@ -352,6 +401,27 @@ ensure_vm_runtime() {
         "grep -q 'CONTEXT7_API_KEY' ~/.zshenv 2>/dev/null || echo \"export CONTEXT7_API_KEY=''\" >> ~/.zshenv"
       apply_append "export CONTEXT7_API_KEY (vide) dans runtime.sh" "$RUNTIME_VM_FILE" \
         "export CONTEXT7_API_KEY=''"
+    fi
+    # GH_TOKEN
+    if [ -n "$gh_token_val" ]; then
+      apply_append "persist GH_TOKEN dans runtime.sh" "$RUNTIME_VM_FILE" \
+        "grep -q 'GH_TOKEN' ~/.zshenv 2>/dev/null || echo \"export GH_TOKEN='${safe_gh}'\" >> ~/.zshenv"
+      apply_append "export GH_TOKEN dans runtime.sh" "$RUNTIME_VM_FILE" \
+        "export GH_TOKEN='${safe_gh}'"
+    fi
+    # AC_GIT_USER_NAME
+    if [ -n "$git_name_val" ]; then
+      apply_append "persist AC_GIT_USER_NAME dans runtime.sh" "$RUNTIME_VM_FILE" \
+        "grep -q 'AC_GIT_USER_NAME' ~/.zshenv 2>/dev/null || echo \"export AC_GIT_USER_NAME='${safe_name}'\" >> ~/.zshenv"
+      apply_append "export AC_GIT_USER_NAME dans runtime.sh" "$RUNTIME_VM_FILE" \
+        "export AC_GIT_USER_NAME='${safe_name}'"
+    fi
+    # AC_GIT_USER_EMAIL
+    if [ -n "$git_email_val" ]; then
+      apply_append "persist AC_GIT_USER_EMAIL dans runtime.sh" "$RUNTIME_VM_FILE" \
+        "grep -q 'AC_GIT_USER_EMAIL' ~/.zshenv 2>/dev/null || echo \"export AC_GIT_USER_EMAIL='${safe_email}'\" >> ~/.zshenv"
+      apply_append "export AC_GIT_USER_EMAIL dans runtime.sh" "$RUNTIME_VM_FILE" \
+        "export AC_GIT_USER_EMAIL='${safe_email}'"
     fi
     apply_append "albert-code block end" "$RUNTIME_VM_FILE" "$AC_MARKER_END"
   fi
@@ -445,6 +515,11 @@ phase_b() {
   info "%s. Parle en français à l'assistant." "$step"
   echo
   info "Les skills se synchronisent automatiquement au démarrage."
+  if [ -n "${GH_TOKEN:-}" ] || file_contains "$ZSHENV" "GH_TOKEN"; then
+    ok "Push et PR GitHub configurés depuis la VM."
+  else
+    info "Push/PR GitHub non configuré — voir le § Push & PR depuis la VM du README."
+  fi
 }
 copy_template() {
   local src="$SELF_DIR/$1" dest="$2" label="$3"
