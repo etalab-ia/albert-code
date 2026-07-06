@@ -288,3 +288,56 @@ Config MCP de référence :
 - Écrit la sélection dans `./.albert-code/skills.txt` (une skill par ligne).
 - Modifie `sync_skills` du runtime : au boot, ne symlinke QUE les skills listées dans `./.albert-code/skills.txt` du projet courant ; réconcilie le dossier global skills/ (retire les symlinks albert-code non sélectionnés, JAMAIS les skills perso). Si aucun manifeste → comportement actuel (toutes) pour rétrocompat.
 **DoD :** un « non » à un MCP/skill ne l'écrit pas ; re-setup conserve les choix ; skills perso jamais touchées par la réconciliation. → `TESTS.md` S28.
+
+### T6.5 🟡 Encart FR de transition avant wizard agent-vm `<- AC-R018` ✅ implémenté
+**But :** quand `install.sh` passe la main à `agent-vm setup`, le wizard natif (en anglais) s'affiche sans prévenir. Déroutant pour un public non-tech francophone.
+**Tâches :** dans `check_base_vm()`, JUSTE AVANT l'appel à `agent-vm setup`, afficher un encart `info` court : « Tu entres maintenant dans le wizard agent-vm (en anglais). C'est normal : agent-vm est l'outil d'isolation open source sur lequel s'appuie Albert Code. Valide les logiciels proposés par défaut (Python, Node, Docker, Chromium, gh, OpenCode…). » Idem dans `phase_run()` si création VM.
+**DoD :** l'encart FR s'affiche avant la sortie anglaise d'agent-vm, en dry-run comme en réel. → `TESTS.md` S30.
+
+### T6.6 🔴 Dérivation automatique email noreply GitHub `<- AC-R019` ✅ implémenté
+**But :** l'utilisateur non-tech ne connaît pas son email noreply ni comment le trouver. Débuter le prompt avec le vrai email (qui échoue la validation) = blocage.
+**Tâches :** après avoir collé le PAT, appeler l'API GitHub pour dériver l'email noreply :
+- `curl -fsS -H "Authorization: Bearer <PAT>" https://api.github.com/user`
+- Parser `id` et `login` avec `grep`/`sed` (pas de jq)
+- Pré-remplir le prompt avec "`<id>+<login>@users.noreply.github.com`"
+- Fallback : si l'appel API échoue, garder le prompt manuel avec aide FR : « Introuvable automatiquement. Tu le trouves sur GitHub > Paramètres > Emails, ou sur https://github.com/settings/emails. Il est de la forme `<id>+<login>@users.noreply.github.com`. »
+- Ne jamais afficher le PAT en clair.
+**DoD :** avec un PAT valide, fait Entrée et l'email est correct ; sans réseau, le message FR d'aide s'affiche. → `TESTS.md` S31.
+
+### T6.7 🟠 Investiguer image de base minimale / tolérante à l'échec `<- AC-R020`
+**But :** `agent-vm setup` installe 4 harnais (Claude Code, OpenCode, Codex, Mistral Vibe). Un seul qui rate (429) = base non finalisée. Albert Code n'a besoin que d'OpenCode.
+**Tâches :** à investiguer avec Sylvain (upstream agent-vm) : (a) image de base minimale ne contenant que OpenCode, (b) mécanisme de tolérance à l'échec d'un installeur, (c) variable d'env pour sélectionner quels harnais installer. Documenter dans `docs/PLAN.md`.
+**DoD :** investigation terminée, décision documentée. Pas de changement de code dans albert-code.
+
+### T6.8 🟠 Fix commande albert-code : shim avant VM + migration ancien `albert-code()` `<- AC-R021` ✅ implémenté
+**But :** (a) `install.sh` pose le shim APRÈS la VM de base (fragile) ; échec VM = pas de shim = aucune commande. (b) ancien MVP écrivait `albert-code()` dans ~/.zshrc qui masque le nouveau shim.
+**Tâches :**
+- (a) Déplacer `install_shim "albert-code"` AVANT `check_base_vm` dans `install.sh`. Rendre la création VM non-fatale : en cas d'échec, warn + continue (pas exit). Le shim doit exister même si la VM échoue.
+- (b) Détecter un bloc `albert-code()` dans ~/.zshrc / ~/.bashrc / ~/.zshenv (~.profile) et proposer de le retirer (`confirm`, non-destructif, avec `grep -n` pour localiser). Idem dans `uninstall.sh`
+**DoD :** `install.sh` pose le shim avant la VM ; la VM échouant ne bloque pas le reste ; `albert-code` fonctionne post-echec-VM. Ancienne fonction détectée et retirée si confirmée. → `TESTS.md` S32.
+
+### T6.9 🔴 Corriger le shim exécutable : `exec` au lieu de `source+exec` `<- AC-R022` ✅ implémenté
+**But :** le shim `albert-code` source le script (`bin/albert-code`) avec `2>/dev/null` (avale les prompts interactifs) puis relance `$name "$@"` (double exécution possible). Résultat : `albert-code setup` figé (MCP/skills prompts invisibles).
+**Tâches :** dans `install_shim`, quand la source est un script exécutable (binaire) et non une fonction shell à sourcer, générer un shim minimal :
+```
+#!/usr/bin/env bash
+exec "/chemin/absolu/bin/albert-code" "$@"
+```
+Préserve stdin/stdout/stderr. Pas de `2>/dev/null`. Pas de double exécution.
+Option : ajouter un paramètre `install_shim` pour mode "exec" vs "source", ou détecter automatiquement (si source contient `#!/usr/bin/env bash` et est un script autonome).
+**DoD :** `albert-code setup` via le shim affiche bien les prompts MCP + skills et enregistre les choix. Pas de double exécution. `bin/albert-code --help` identique via shim ou direct. → `TESTS.md` S33.
+
+### T6.10 🟠 Hygiène dépôt : .gitignore par défaut dans AGENTS.default.md `<- AC-R024` ✅ implémenté
+**But :** sans .gitignore, l'agent commit `node_modules/` (41 659 fichiers) + risque `.env`. Règle forte manquante dans le template.
+**Tâches :** dans `templates/AGENTS.default.md`, ajouter une section « Hygiène de dépôt » :
+- « Avant le premier commit, toujours créer ou vérifier un `.gitignore` adapté au langage (Node : `node_modules`, `dist`/`build`/`.next`, `.env` ; Python : `__pycache__`, `.venv`, `.env`) »
+- « Ne JAMAIS committer : dépendances installées, artefacts de build, fichiers volumineux, secrets/.env »
+- « Vérifier `git status` avant de committer »
+**DoD :** un agent qui scaffold un projet et commit inclut un `.gitignore` et PR sans node_modules. → `TESTS.md` S34.
+
+### T6.11 🟡 chrome-devtools MCP injecté par agent-vm `<- AC-R023`
+**But :** chrome-devtools apparaît dans OpenCode (`/mcp`) même zéro MCP coché au setup, parce qu'agent-vm l'installe globalement dans la VM.
+**Tâches :** documenter dans README (section MCP) :
+- Préciser que `chrome-devtools` peut apparaître dans OpenCode même si non coché au setup : il est préinstallé par agent-vm (pas par Albert Code).
+- Documenter ce MCP dans la liste du README avec sa source (agent-vm). À investir avec Sylvain : le désactiver côté runtime quand non sélectionné, ou le documenter clairement.
+**DoD :** le README mentionne chrome-devtools comme venant d'agent-vm. Investigation documentée.

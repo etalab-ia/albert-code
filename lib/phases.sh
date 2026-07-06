@@ -100,12 +100,36 @@ phase_a() {
     gh_token="$(prompt_secret "Colle ton PAT GitHub (scope repo ; Entrée pour passer)")"
     if [ -n "$gh_token" ]; then
       local git_name
-      git_name="$(prompt_input "Nom pour les commits" "$(git config --global user.name 2>/dev/null)")"
-      local git_email_def git_email email_attempts
-      git_email_def="$(git config --global user.email 2>/dev/null)"
+      local git_email_def="" gh_id="" gh_login=""
+
+      # Dérive automatique du login, du nom et de l'email noreply via l'API GitHub
+      local _raw="" _http_code=""
+      _raw="$(curl -fsS -w "\n%{http_code}" -H "Authorization: Bearer ${gh_token}" -H "Accept: application/vnd.github+json" "https://api.github.com/user" 2>/dev/null)" || _raw=""
+      if [ -n "$_raw" ]; then
+        _http_code="$(printf '%s' "$_raw" | tail -1)"
+        _raw="$(printf '%s' "$_raw" | sed '$d')"
+      fi
+      if [ "${_http_code:-0}" -ge 200 ] 2>/dev/null && [ "${_http_code:-0}" -lt 300 ] 2>/dev/null && [ -n "$_raw" ]; then
+        gh_id="$(printf '%s' "$_raw" | sed -n 's/.*"login[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')"
+        gh_login="$(printf '%s' "$_raw" | sed -n 's/.*"id[[:space:]]*:[[:space:]]*\([0-9]*\).*/\1/p')"
+        if [ -n "$gh_id" ] && [ -n "$gh_login" ]; then
+          git_name="$gh_id"
+          git_email_def="${gh_login}+${gh_id}@users.noreply.github.com"
+          ok "Compte GitHub identifié : ${gh_id} (noreply : ${gh_email_def})"
+        fi
+      fi
+
+      git_name="$(prompt_input "Nom pour les commits" "${git_name:-$(git config --global user.name 2>/dev/null)}")"
+
+      local git_email email_attempts
       email_attempts=0
       while [ "$email_attempts" -lt 3 ]; do
-        git_email="$(prompt_input "Email noreply GitHub (doit finir en users.noreply.github.com)" "$git_email_def")"
+        if [ -n "$git_email_def" ]; then
+          git_email="$(prompt_input "Email noreply GitHub" "$git_email_def")"
+        else
+          warn "Introuvable automatiquement. Ton email noreply est de la forme <id>+<login>@users.noreply.github.com, visible sur GitHub > Paramètres > Emails (https://github.com/settings/emails)."
+          git_email="$(prompt_input "Email noreply GitHub (doit finir en users.noreply.github.com)" "$(git config --global user.email 2>/dev/null)")"
+        fi
         case "$git_email" in
           *users.noreply.github.com) break ;;
         esac
@@ -198,10 +222,19 @@ phase_run() {
   check_disk_space_warning
 
   # Créer la VM de base si nécessaire
-  if ! base_vm_exists; then
+   if ! base_vm_exists; then
     info "Création de la VM de base nécessaire…"
     if confirm "Créer la VM de base maintenant (agent-vm setup --disk ${AC_VM_DISK}) ?"; then
-      apply "créer la VM de base (agent-vm setup --disk ${AC_VM_DISK})" agent-vm setup --disk "${AC_VM_DISK}"
+      echo
+      info "Tu entres maintenant dans le wizard agent-vm (en anglais)."
+      info "C'est normal : agent-vm est l'outil d'isolation open source"
+      info "sur lequel s'appuie Albert Code. Valide les logiciels"
+      info "proposés par défaut (Python, Node, Docker, Chromium, gh, OpenCode)."
+      echo
+      apply "créer la VM de base (agent-vm setup --disk ${AC_VM_DISK})" agent-vm setup --disk "${AC_VM_DISK}" || {
+        warn "Création de la VM de base échouée — lance : agent-vm setup --disk ${AC_VM_DISK}"
+        return 1
+      }
     else
       warn "VM de base absente. Lance d'abord : agent-vm setup --disk ${AC_VM_DISK}"
       return 1
@@ -232,7 +265,15 @@ check_base_vm() {
   echo
   warn "VM de base absente — lance %s une fois avant %s." "agent-vm setup --disk ${AC_VM_DISK}" "agent-vm opencode"
   if confirm "Créer la VM de base maintenant (agent-vm setup --disk ${AC_VM_DISK}, ~plusieurs minutes) ?"; then
-    apply "créer la VM de base (agent-vm setup --disk ${AC_VM_DISK})" agent-vm setup --disk "${AC_VM_DISK}"
+    echo
+    info "Tu entres maintenant dans le wizard agent-vm (en anglais)."
+    info "C'est normal : agent-vm est l'outil d'isolation open source"
+    info "sur lequel s'appuie Albert Code. Valide les logiciels"
+    info "proposés par défaut (Python, Node, Docker, Chromium, gh, OpenCode)."
+    echo
+    apply "créer la VM de base (agent-vm setup --disk ${AC_VM_DISK})" agent-vm setup --disk "${AC_VM_DISK}" || {
+      warn "Création de la VM de base échouée — tu pourras la créer plus tard avec : agent-vm setup --disk ${AC_VM_DISK}"
+    }
   fi
 }
 

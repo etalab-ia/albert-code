@@ -59,3 +59,10 @@ Face à un bug : le corriger directement. Pointer les logs, erreurs et tests en 
 
 - Front public : viser la conformité RGAA (contraste, navigation clavier, alt).
 - Respect du RGPD : minimisation, pas de traceur tiers non consenti.
+
+### Hygiène de dépôt
+
+- Avant le premier commit, toujours créer ou vérifier un `.gitignore` adapté au langage.
+- Node : `node_modules`, `dist`, `build`, `.next`, `.env`. Python : `__pycache__`, `.venv`, `.env`.
+- Ne JAMAIS committer : dépendances installées (`node_modules/`, `.venv/`, `vendor/`), artefacts de build, fichiers volumineux, secrets ou `.env`.
+- Vérifier `git status` avant de committer ; si `node_modules/`, `.env`, ou un volume important de fichiers inattendus apparaît, créer un `.gitignore` et recommencer.

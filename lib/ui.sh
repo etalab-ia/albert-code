@@ -110,10 +110,26 @@ install_shim() {
   fi
 
   shim_path="$shim_dir/$name"
-  shim_content="#!/usr/bin/env bash
+
+  # -- Mode : fonction shell (source) ou script exécutable (exec) ------------
+  local shim_content=""
+  if [ -x "$source_script" ] && head -1 "$source_script" 2>/dev/null | grep -q '^#!'; then
+    # Script exécutable autonome : simple exec, préserve stdin/stdout/stderr
+    local abs_source="$source_script"
+    case "$abs_source" in
+      /*) ;; # déjà absolu
+      *) abs_source="$(cd "$(dirname "$source_script")" && pwd)/$(basename "$source_script")" ;;
+    esac
+    shim_content="#!/usr/bin/env bash
+# Shim pour $name (script exécutable, généré par Albert Code)
+exec \"${abs_source}\" \"\$@\""
+  else
+    # Fonction shell définie par source
+    shim_content="#!/usr/bin/env bash
 # Shim pour $name (généré par Albert Code)
 source \"$source_script\" 2>/dev/null || true
 $name \"\$@\""
+  fi
 
   if [ -f "$shim_path" ]; then
     ok "shim $name déjà présent dans $shim_path"
