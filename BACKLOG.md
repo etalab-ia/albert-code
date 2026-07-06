@@ -84,7 +84,7 @@ Config MCP de référence :
 **Tâches :** en Phase B, si `./opencode.json` existe déjà, détecter s'il contient le provider `albert` ; sinon → **avertir clairement** (« opencode.json existant sans provider Albert → Albert non câblé ») et proposer/documenter le merge du bloc `provider.albert` + `model`/`small_model` (jq/sed) sans écraser le reste. Ne jamais écraser silencieusement.
 **DoD :** scaffold dans un repo avec `opencode.json` sans `albert` → message explicite (+ option de merge) ; avec `albert` déjà présent → info « rien à faire ». → `TESTS.md` S22.
 
-### T1.7 🟡 Auth GitHub de la VM : commit OK, mais push + PR impossibles depuis la bulle `<- AC-R013` — implémenté (à tester)
+### T1.7 ✅ Auth GitHub de la VM : commit OK, mais push + PR impossibles depuis la bulle `<- AC-R013` — résolu (validé 06/07/2026)
 **But :** le README promet « l'agent pousse des PR depuis la VM », mais Albert Code ne configure dans la VM ni l'identité git (`user.name`/`user.email`), ni la clé SSH, ni de token `gh` → l'agent peut committer localement mais **ni pusher ni ouvrir la PR**. SSH = auth ≠ identité de commit.
 
 **⚠️ Confirmé en test réel (06/07/2026)** — lors de l'ajout du modèle Qwen 3.6 (branche `feat/add-qwen-3.6`, commit `b9eb1e9`). Séquence observée dans la VM agent-vm :
@@ -97,6 +97,16 @@ Config MCP de référence :
 **Tâches :** au setup (`ensure_vm_runtime` / runtime VM), configurer l'identité git de la VM — reprendre le `git config --global user.name/email` de l'hôte s'il existe, sinon prompt (**recommander l'email _noreply_ GitHub**, pas l'email perso) ; **et** régler l'auth push par l'une des voies (à trancher) : (a) injecter un `GH_TOKEN` fine-grained scopé dans l'env VM (jamais loggé, jamais commité), ou (b) injecter la clé SSH GitHub (cf. `runtime.example.sh` d'agent-vm) + `url.insteadOf` pour forcer SSH. Documenter aussi le fallback hôte (commit VM → push/PR hôte) pour les postes non configurés.
 **✅ Implémenté (06/07/2026, branche `feat/github-auth-vm`)** — voie (a) retenue : `GH_TOKEN` fine-grained (SSH écarté car `gh pr create` exige un token, pas une clé). Câblage générique **sans secret** dans `runtime/agent-vm.runtime.sh` (`setup_github_auth`) : si `GH_TOKEN` présent → persiste le token, pose l'identité git globale (`AC_GIT_USER_NAME`/`AC_GIT_USER_EMAIL`), `gh auth setup-git`. Le secret reste dans `~/.agent-vm/runtime.sh` (perso, hors dépôt). Doc utilisateur : README § « Push & PR depuis la VM ». Reste : **test end-to-end en VM fraîche** (DoD ci-dessous) + nettoyage de l'identité placeholder `albert-code-user` dans les `.git/config` locaux.
 **DoD :** dans une VM fraîche, l'agent fait un commit de la bonne identité + push + `gh pr create` sans config manuelle. → `TESTS.md` S23.
+**✅ Validé (06/07/2026)** — dogfood réel : la PR [#2](https://github.com/etalab-ia/albert-code/pull/2) (le câblage lui-même) a été commitée, poussée et ouverte **intégralement depuis la VM**. Voir `TESTS.md` S23. Suite → T1.8.
+
+### T1.8 🟠 Intégrer l'auth GitHub à l'installeur (zéro config manuelle) `<- T1.7`
+**But :** T1.7 a livré le *câblage* (`setup_github_auth` dans le runtime), mais l'utilisateur doit encore **créer un PAT et coller un bloc à la main** dans `~/.agent-vm/runtime.sh` (section README « Push & PR depuis la VM »). Sans cette étape, push/PR restent indisponibles (échec désormais *explicite* : « GH_TOKEN absent → voir README », plus silencieux). Objectif : rendre l'auth GitHub aussi transparente que les clés Albert, posées d'office par `install.sh`.
+**Tâches :**
+1. **Prompt token à l'install** (`ensure_vm_runtime`, Phase A) : proposer (optionnel, skippable) de saisir un `GH_TOKEN`, l'écrire dans le **bloc géré** `# --- albert-code : clés VM ---` aux côtés d'`ALBERT_API_KEY` (même pattern grep-guard + `chmod 600`, jamais loggé). Supprime la fragilité actuelle du **2ᵉ bloc manuel qui partage le marqueur de fin** `# --- /albert-code ---`.
+2. **Identité + garde-fou email** : demander/dériver `AC_GIT_USER_NAME` + `AC_GIT_USER_EMAIL`, avec **validation « doit finir en `users.noreply.github.com` »** (aurait attrapé le gmail saisi le 06/07). Proposer de dériver le noreply depuis le compte `gh` de l'hôte si dispo.
+3. **Gotcha de rotation** : documenter (README) + garde-fou — un `GH_TOKEN`/email déjà persisté dans le `~/.zshenv` de la VM n'est **pas** mis à jour par un changement côté hôte (grep-guard). Prévoir un chemin de mise à jour (réécrire la ligne `~/.zshenv` de la VM, ou `agent-vm rm` documenté).
+4. **Next-steps de l'install** : mentionner l'auth GitHub dans « Prochaines étapes » (actuellement absente).
+**DoD :** sur un poste vierge, `install.sh` propose l'auth GitHub ; après acceptation, une VM fraîche pushe + ouvre une PR sans aucune édition manuelle de `runtime.sh` ; un email non-noreply est refusé avec un message clair. → `TESTS.md` S24.
 
 ---
 
