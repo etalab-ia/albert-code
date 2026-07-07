@@ -117,60 +117,8 @@ phase_a() {
 
   echo
 
-  # GitHub PAT (optionnel)
-  if confirm "Activer le push et les PR GitHub depuis la VM ? (nécessite un PAT GitHub)"; then
-    local gh_token
-    gh_token="$(prompt_secret "Colle ton PAT GitHub (scope repo ; Entrée pour passer)")"
-    if [ -n "$gh_token" ]; then
-      local git_name
-      local git_email_def="" gh_id="" gh_login=""
-
-      # Dérive automatique du login, du nom et de l'email noreply via l'API GitHub
-      local _raw="" _http_code=""
-      _raw="$(curl -fsS -w "\n%{http_code}" -H "Authorization: Bearer ${gh_token}" -H "Accept: application/vnd.github+json" "https://api.github.com/user" 2>/dev/null)" || _raw=""
-      if [ -n "$_raw" ]; then
-        _http_code="$(printf '%s' "$_raw" | tail -1)"
-        _raw="$(printf '%s' "$_raw" | sed '$d')"
-      fi
-      if [ "${_http_code:-0}" -ge 200 ] 2>/dev/null && [ "${_http_code:-0}" -lt 300 ] 2>/dev/null && [ -n "$_raw" ]; then
-        gh_id="$(printf '%s' "$_raw" | sed -n 's/.*"login"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')"
-        gh_login="$(printf '%s' "$_raw" | sed -n 's/.*"id"[[:space:]]*:[[:space:]]*\([0-9]*\).*/\1/p')"
-        if [ -n "$gh_id" ] && [ -n "$gh_login" ]; then
-          git_name="$gh_id"
-          git_email_def="${gh_login}+${gh_id}@users.noreply.github.com"
-          ok "Compte GitHub identifié : ${gh_id} (noreply : ${git_email_def})"
-        fi
-      fi
-
-      git_name="$(prompt_input "Nom pour les commits" "${git_name:-$(git config --global user.name 2>/dev/null)}")"
-
-      local git_email email_attempts
-      email_attempts=0
-      while [ "$email_attempts" -lt 3 ]; do
-        if [ -n "$git_email_def" ]; then
-          git_email="$(prompt_input "Email noreply GitHub" "$git_email_def")"
-        else
-          warn "Introuvable automatiquement. Ton email noreply est de la forme <id>+<login>@users.noreply.github.com, visible sur GitHub > Paramètres > Emails (https://github.com/settings/emails)."
-          git_email="$(prompt_input "Email noreply GitHub (doit finir en users.noreply.github.com)" "$(git config --global user.email 2>/dev/null)")"
-        fi
-        case "$git_email" in
-          *users.noreply.github.com) break ;;
-        esac
-        email_attempts=$((email_attempts + 1))
-        if [ "$email_attempts" -lt 3 ]; then
-          warn "L'email doit finir par users.noreply.github.com. Réessaie (tentative $email_attempts/3)."
-        fi
-      done
-      if [ "$email_attempts" -ge 3 ]; then
-        warn "3 tentatives échouées — on accepte l'email tel quel."
-      fi
-      persist_zshenv "GH_TOKEN" "$gh_token"
-      persist_zshenv "AC_GIT_USER_NAME" "$git_name"
-      persist_zshenv "AC_GIT_USER_EMAIL" "$git_email"
-    else
-      warn "Pas de PAT GitHub — le push/PR depuis la VM restera inactif."
-    fi
-  fi
+  # GitHub PAT (optionnel) — gestions des 3 cas : activation, token, dérivation
+  _github_auth
 
   echo
 
@@ -482,6 +430,142 @@ persist_zshenv() {
   local safe="${val//\'/\'\"\'\"\'}"
   apply_append "ajouter $var à ~/.zshenv" "$ZSHENV" "export ${var}='${safe}'"
   [ "$DRY_RUN" -eq 0 ] && ok "$var ajoutée à ~/.zshenv" || true
+}
+
+# =============================================================================
+# _github_auth — config GitHub : activation, token, dérivation API, fallback.
+# =============================================================================
+_github_auth() {
+  local gh_token="" git_name="" git_email=""
+  local gh_id="" gh_login=""
+  local _attempt=0 _max_attempts=3
+
+  # Regex pour détecter un PAT collé (ghp_, github_pat_, gho_, ghs_, ghr_, >30 car.)
+  local _pat_regex='^(ghp_|github_pat_|gho_|ghs_|ghr_|.{31,}$)'
+
+  while [ "$_attempt" -lt "$_max_attempts" ]; do
+    echo
+    info "Étape suivante : colle ton PAT GitHub (scope repo) pour activer le push."
+
+    local _answer=""
+    printf '%sActiver le push et les PR GitHub depuis la VM ?%s [o/N] : ' "${C_BOLD}" "${C_RESET}" >&2
+    if [ "$DRY_RUN" -eq 1 ]; then
+      printf '%s[dry-run] confirm: Activer le push et les PR GitHub depuis la VM ? → non%s\n' "${C_GREY}" "${C_RESET}" >&2
+      _answer="n"
+    elif [ -t 0 ]; then
+      read -r _answer </dev/tty
+    else
+      read -r _answer
+    fi
+
+    case "$_answer" in
+      o|O|y|Y)
+        # Cas 1 : l'utilisateur dit oui — passer au prompt token
+        ;;
+      n|N|"")
+        # Cas 2 : non ou vide — pas de GitHub
+        warn "Pas de connexion GitHub — le push/PR depuis la VM restera inactif."
+        return 0
+        ;;
+      *)
+        # Cas 3 : on dirait un token collé à la mauvaise étape
+        if [[ "$_answer" =~ $_pat_regex ]]; then
+          warn "On dirait que tu as collé ton token à la mauvaise étape (il faut d'abord répondre o, puis coller le token)."
+          if confirm "Réessayer la connexion GitHub ?"; then
+            _attempt=$((_attempt + 1))
+            continue
+          fi
+          warn "GitHub non connecté."
+          return 0
+        fi
+        # Ni oui, ni non, ni token → redemander
+        if confirm "Réponse non reconnue. Réessayer ?"; then
+          _attempt=$((_attempt + 1))
+          continue
+        fi
+        warn "GitHub non connecté."
+        return 0
+        ;;
+    esac
+
+    # Étape token
+    gh_token="$(prompt_secret "Colle ton PAT GitHub (scope repo ; Entrée pour passer)")"
+    if [ -z "$gh_token" ]; then
+      warn "Pas de PAT GitHub — le push/PR depuis la VM restera inactif."
+      return 0
+    fi
+
+    # Validation du token via API GitHub
+    local _raw="" _http_code=""
+    _raw="$(curl -fsS -w "\n%{http_code}" -H "Authorization: Bearer ${gh_token}" -H "Accept: application/vnd.github+json" "https://api.github.com/user" 2>/dev/null)" || _raw=""
+    if [ -n "$_raw" ]; then
+      _http_code="$(printf '%s' "$_raw" | tail -1)"
+      _raw="$(printf '%s' "$_raw" | sed '$d')"
+    fi
+
+    if [ "${_http_code:-0}" -ge 200 ] 2>/dev/null && [ "${_http_code:-0}" -lt 300 ] 2>/dev/null && [ -n "$_raw" ]; then
+      # Dérivation réussie
+      gh_login="$(printf '%s' "$_raw" | sed -n 's/.*"login"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')"
+      gh_id="$(printf '%s' "$_raw" | sed -n 's/.*"id"[[:space:]]*:[[:space:]]*\([0-9]*\).*/\1/p')"
+
+      if [ -n "$gh_login" ] && [ -n "$gh_id" ]; then
+        # #1 : pas de prompts nom/email — direct
+        git_name="$gh_login"
+        git_email="${gh_id}+${gh_login}@users.noreply.github.com"
+        ok "Compte GitHub : ${gh_login} <${git_email}>"
+        persist_zshenv "GH_TOKEN" "$gh_token"
+        persist_zshenv "AC_GIT_USER_NAME" "$git_name"
+        persist_zshenv "AC_GIT_USER_EMAIL" "$git_email"
+        return 0
+      fi
+      # 2xx mais parsing vide (cas rare) → token valide, persist puis fallback
+      persist_zshenv "GH_TOKEN" "$gh_token"
+      _github_fallback
+      return 0
+    fi
+
+    # #4 : token invalide ou API injoignable, proposer retry
+    _attempt=$((_attempt + 1))
+    if [ "$_attempt" -lt "$_max_attempts" ]; then
+      warn "Échec : GitHub non connecté (token invalide ou API injoignable)."
+      if confirm "Réessayer la connexion GitHub ? (tentative $_attempt/$_max_attempts)"; then
+        continue
+      fi
+    fi
+
+    # L'utilisateur ne veut pas retenter → fallback (pas de persistance du token non validé)
+    _github_fallback
+    return 0
+  done
+
+  # Limite de tentatives atteinte
+  warn "Tentatives épuisées — GitHub non connecté."
+  return 1
+}
+
+# _github_fallback — prompts manuels nom/email (quand la dérivation API échoue)
+_github_fallback() {
+  local git_name git_email git_name_def
+  git_name_def="$(git config --global user.name 2>/dev/null || true)"
+  git_name="$(prompt_input "Nom pour les commits" "${git_name_def:-}")"
+
+  local email_attempts=0
+  while [ "$email_attempts" -lt 3 ]; do
+    warn "Introuvable automatiquement. Ton email noreply est de la forme <id>+<login>@users.noreply.github.com, visible sur GitHub > Paramètres > Emails (https://github.com/settings/emails)."
+    git_email="$(prompt_input "Email noreply GitHub (doit finir en users.noreply.github.com)" "$(git config --global user.email 2>/dev/null || true)")"
+    case "$git_email" in
+      *users.noreply.github.com) break ;;
+    esac
+    email_attempts=$((email_attempts + 1))
+    if [ "$email_attempts" -lt 3 ]; then
+      warn "L'email doit finir par users.noreply.github.com. Réessaie (tentative $email_attempts/3)."
+    fi
+  done
+  if [ "$email_attempts" -ge 3 ]; then
+    warn "3 tentatives échouées — on accepte l'email tel quel."
+  fi
+  persist_zshenv "AC_GIT_USER_NAME" "$git_name"
+  persist_zshenv "AC_GIT_USER_EMAIL" "$git_email"
 }
 
 # copy_template — copie non-destructive
