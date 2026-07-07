@@ -3,13 +3,37 @@
 # Albert Code — phases d'installation, sourçables par install.sh ET bin/albert-code.
 # -----------------------------------------------------------------------------
 # Ce fichier définit les 3 phases :
-#   phase_a()  — bootstrap hôte : agent-vm, clés, skills, runtime VM.
+#   phase_a()  — bootstrap hôte : moteur VM, clés, skills, runtime VM.
 #   phase_b()  — scaffold projet : AGENTS.md + opencode.json + runtime + choix skills/MCP.
-#   phase_run() — lancement de la bulle agent-vm.
+#   phase_run() — lancement de la VM isolée.
 #
 # Nécessite que lib/ui.sh ait été sourcé avant (pour apply_*, confirm, etc.).
 # Variables requises : SELF_DIR, LIB_DIR, AGENT_VM_DIR, AC_VM_*.
 # =============================================================================
+
+# =============================================================================
+# Source agent-vm.sh (vendored) — rend la fonction agent-vm() disponible
+# en interne pour _vm() sans shim ni PATH user.
+# =============================================================================
+_agent_vm_sourced=0
+if [ -f "$AGENT_VM_DIR/agent-vm.sh" ]; then
+  source "$AGENT_VM_DIR/agent-vm.sh" 2>/dev/null && _agent_vm_sourced=1
+fi
+
+# _vm : wrapper interne pour appeler agent-vm (setup, opencode, etc.)
+# sans dépendre d'un shim sur le PATH. Usage : _vm setup --disk 32
+_vm() {
+  if [ "$_agent_vm_sourced" -eq 1 ]; then
+    # Le vendored (agent-vm.sh) est écrit pour bash récent : sous set -u de
+    # bash 3.2 (macOS), l'expansion d'un tableau vide "${arr[@]}" plante en
+    # "unbound variable". On l'exécute dans un sous-shell permissif (comme le
+    # faisait l'ancien shim), sans toucher au vendored.
+    ( set +u +e +o pipefail; agent-vm "$@" )
+  else
+    err "agent-vm.sh introuvable dans $AGENT_VM_DIR — réinstalle Albert Code."
+    return 1
+  fi
+}
 
 # =============================================================================
 # Phase A — Bootstrap hôte (idempotent)
@@ -18,17 +42,16 @@ phase_a() {
   title "Phase A — Bootstrap de ton poste"
   echo
 
-  # A.1 Pédagogie agent-vm
+  # A.1 Pédagogie isolation
   echo
-  title "À propos de l'isolation (agent-vm)"
-  info "Albert Code tourne dans une bulle isolée : une VM légère (Lima)."
-  info "Pourquoi ? Garantir que le modèle ne touche QU'À ton code —"
-  info "pas à tes fichiers perso, clés SSH, cookies, sessions navigateur."
-  info "Ça permet aussi de le laisser tourner en autonomie (mode YOLO)"
-  info "sans valider une permission toutes les 2 minutes."
+  title "À propos de l'isolation"
+  info "Albert Code fait tourner OpenCode dans une VM isolée (moteur Lima) :"
+  info "le modèle ne touche qu'à ton code, pas à tes fichiers perso,"
+  info "clés SSH, cookies ou sessions navigateur."
+  info "Tu peux le laisser tourner en autonomie en toute sécurité."
   info "Ce qu'on va installer :"
   info "  • Lima (moteur de VM)"
-  info "  • agent-vm (couche d'isolation)"
+  info "  • Le moteur d'isolation d'Albert Code"
   info "  • Une clé Albert API dédiée révocable"
   echo
 
@@ -42,7 +65,7 @@ phase_a() {
   esac
 
   if ! require_cmd "lima" 2>/dev/null; then
-    warn "Lima absent — agent-vm en a besoin pour créer la bulle isolée."
+    warn "Lima absent — le moteur de VM en a besoin pour créer la bulle isolée."
     if confirm "Installer Lima maintenant (via Homebrew) ?"; then
       if ! command -v brew >/dev/null 2>&1; then
         err "Homebrew absent. Installe Lima manuellement : https://lima-vm.io/docs/installation/"
@@ -115,7 +138,7 @@ phase_a() {
         if [ -n "$gh_id" ] && [ -n "$gh_login" ]; then
           git_name="$gh_id"
           git_email_def="${gh_login}+${gh_id}@users.noreply.github.com"
-          ok "Compte GitHub identifié : ${gh_id} (noreply : ${gh_email_def})"
+          ok "Compte GitHub identifié : ${gh_id} (noreply : ${git_email_def})"
         fi
       fi
 
@@ -151,7 +174,7 @@ phase_a() {
 
   echo
 
-  # A.5 agent-vm (clone + source dans le shell rc)
+  # A.5 Source le moteur de VM vendored (agent-vm)
   install_agent_vm
 
   # A.6 Runtime VM (~/.agent-vm/runtime.sh) — exporte les clés dans la VM
@@ -160,14 +183,14 @@ phase_a() {
   # A.7 Skills État (côté hôte, pour OpenCode hors VM)
   sync_skills_host
 
-  # A.8 OpenCode s'exécute exclusivement dans la bulle agent-vm
-  info "OpenCode s'exécute dans la bulle agent-vm — rien à installer sur ton poste."
+  # A.8 OpenCode s'exécute exclusivement dans la VM isolée
+  info "OpenCode s'exécute dans la VM isolée — rien à installer sur ton poste."
 
   # A.9 Ressources VM (détection hôte + garde-fou, lecture seule)
   compute_effective_vm_resources
   check_disk_space_warning
 
-  # A.10 VM de base agent-vm (préalable obligatoire à `agent-vm opencode`)
+  # A.10 VM de base (préalable obligatoire)
   check_base_vm
 
   echo
@@ -211,7 +234,7 @@ phase_b() {
   scaffold_skills_selection
   echo
 
-  # B.4 [4/4] .agent-vm.runtime.sh (runtime de référence)
+  # B.4 [4/4] Runtime de la VM
   title "[4/4] Runtime VM"
   copy_template "runtime/agent-vm.runtime.sh" "./.agent-vm.runtime.sh" "runtime VM (sync skills + clés)"
   apply "chmod +x .agent-vm.runtime.sh" chmod +x "./.agent-vm.runtime.sh" 2>/dev/null || true
@@ -233,7 +256,7 @@ phase_b() {
 }
 
 # =============================================================================
-# phase_run — Lancement de la bulle agent-vm
+# phase_run — Lancement de la VM isolée
 # =============================================================================
 phase_run() {
   title "Albert Code — lancement"
@@ -246,19 +269,13 @@ phase_run() {
   # Créer la VM de base si nécessaire
    if ! base_vm_exists; then
     info "Création de la VM de base nécessaire…"
-    if confirm "Créer la VM de base maintenant (agent-vm setup --disk ${AC_VM_DISK}) ?"; then
-      echo
-      info "Tu entres maintenant dans le wizard agent-vm (en anglais)."
-      info "C'est normal : agent-vm est l'outil d'isolation open source"
-      info "sur lequel s'appuie Albert Code. Valide les logiciels"
-      info "proposés par défaut (Python, Node, Docker, Chromium, gh, OpenCode)."
-      echo
-      apply "créer la VM de base (agent-vm setup --disk ${AC_VM_DISK})" agent-vm setup --disk "${AC_VM_DISK}" || {
-        warn "Création de la VM de base échouée — lance : agent-vm setup --disk ${AC_VM_DISK}"
+    if confirm "Créer la VM de base maintenant ?"; then
+      apply "créer la VM de base (setup VM isolée)" _vm setup --preinstall=node,gh,chromium,opencode --disk "${AC_VM_DISK}" || {
+        warn "Création de la VM de base échouée."
         return 1
       }
     else
-      warn "VM de base absente. Lance d'abord : agent-vm setup --disk ${AC_VM_DISK}"
+      warn "VM de base absente."
       return 1
     fi
   fi
@@ -266,9 +283,9 @@ phase_run() {
   # Lancer la VM
   echo
   info "Ouverture de la bulle isolée…"
-  info "  agent-vm --cpus ${EFF_CPUS} --memory ${EFF_MEM} --disk ${AC_VM_DISK} opencode"
+  info "  Albert Code lance OpenCode dans la VM"
   echo
-  apply "lancer agent-vm" agent-vm --cpus "${EFF_CPUS}" --memory "${EFF_MEM}" --disk "${AC_VM_DISK}" opencode
+  apply "lancer la VM isolée" _vm --cpus "${EFF_CPUS}" --memory "${EFF_MEM}" --disk "${AC_VM_DISK}" opencode
 }
 
 # =============================================================================
@@ -281,20 +298,13 @@ check_base_vm() {
     return 0
   fi
   if base_vm_exists; then
-    ok "VM de base agent-vm déjà créée"
+    ok "VM de base déjà créée"
     return 0
   fi
   echo
-  warn "VM de base absente — lance %s une fois avant %s." "agent-vm setup --disk ${AC_VM_DISK}" "agent-vm opencode"
-  if confirm "Créer la VM de base maintenant (agent-vm setup --disk ${AC_VM_DISK}, ~plusieurs minutes) ?"; then
-    echo
-    info "Tu entres maintenant dans le wizard agent-vm (en anglais)."
-    info "C'est normal : agent-vm est l'outil d'isolation open source"
-    info "sur lequel s'appuie Albert Code. Valide les logiciels"
-    info "proposés par défaut (Python, Node, Docker, Chromium, gh, OpenCode)."
-    echo
-    apply "créer la VM de base (agent-vm setup --disk ${AC_VM_DISK})" agent-vm setup --disk "${AC_VM_DISK}" || {
-      warn "Création de la VM de base échouée — tu pourras la créer plus tard avec : agent-vm setup --disk ${AC_VM_DISK}"
+  if confirm "Créer la VM de base maintenant (~plusieurs minutes) ?"; then
+    apply "créer la VM de base (setup VM isolée)" _vm setup --preinstall=node,gh,chromium,opencode --disk "${AC_VM_DISK}" || {
+      warn "Création de la VM de base échouée — tu pourras la créer plus tard."
     }
   fi
 }
@@ -304,55 +314,51 @@ base_vm_exists() {
   command -v limactl >/dev/null 2>&1 && limactl list -q 2>/dev/null | grep -q '^agent-vm-base$'
 }
 
-# install_agent_vm — clone + shim
+# install_agent_vm — vérifie que le bundle vendored est présent (plus de clone).
 install_agent_vm() {
-  if command -v agent-vm >/dev/null 2>&1; then
-    ok "agent-vm déjà installé"
-    return 0
+  if [ ! -f "$AGENT_VM_DIR/agent-vm.sh" ]; then
+    err "agent-vm.sh introuvable dans $AGENT_VM_DIR — le bundle est incomplet."
+    exit 1
   fi
-
-  local shim_file="" _d="" _ifs_save="$IFS"
-  IFS=':'
-  for _d in /opt/homebrew/bin /usr/local/bin $PATH; do
-    [ -z "$_d" ] && continue
-    [ -f "$_d/agent-vm" ] && [ -x "$_d/agent-vm" ] && { shim_file="$_d/agent-vm"; break; }
-  done
-  IFS="$_ifs_save"
-  [ -n "$shim_file" ] && ok "shim agent-vm déjà présent"
-  if [ -f "$AGENT_VM_DIR/agent-vm.sh" ]; then
-    ok "agent-vm déjà cloné dans $AGENT_VM_DIR"
+  if [ "$_agent_vm_sourced" -eq 0 ]; then
+    # Si le source a échoué (bash 3.2) on ressource ici
+    source "$AGENT_VM_DIR/agent-vm.sh" 2>/dev/null && _agent_vm_sourced=1
+  fi
+  if [ "$_agent_vm_sourced" -eq 1 ]; then
+    ok "Moteur de VM prêt (vendored dans $AGENT_VM_DIR)"
   else
-    info "Clonage d'agent-vm…"
-    apply_mkdir "créer $(dirname "$AGENT_VM_DIR")" "$(dirname "$AGENT_VM_DIR")"
-    with_spinner "Clonage d'agent-vm" git clone --depth 1 --quiet "$AGENT_VM_REPO" "$AGENT_VM_DIR"
-    if [ "$DRY_RUN" -eq 0 ] && [ -d "$AGENT_VM_DIR/.git" ]; then
-      ok "agent-vm cloné dans $AGENT_VM_DIR"
-    fi
+    err "Échec du chargement du moteur de VM ($AGENT_VM_DIR/agent-vm.sh) — bundle incomplet."
+    exit 1
   fi
-  local rc=""
-  case "${SHELL##*/}" in
-    zsh)  rc="$HOME/.zshrc" ;;
-    bash) rc="$HOME/.bashrc" ;;
-    *)    rc="$HOME/.profile" ;;
-  esac
-  apply_touch "créer $rc si absent" "$rc"
-  if ! file_contains "$rc" "agent-vm.sh"; then
-    apply_append "sourcer agent-vm dans $rc" "$rc" \
-      "# Albert Code — agent-vm"
-    apply_append "sourcer agent-vm dans $rc (ligne source)" "$rc" \
-      "[ -f \"$AGENT_VM_DIR/agent-vm.sh\" ] && source \"$AGENT_VM_DIR/agent-vm.sh\""
-  fi
-  install_shim "agent-vm" "$AGENT_VM_DIR/agent-vm.sh"
 
-  if [ "$DRY_RUN" -eq 0 ]; then
-    if command -v agent-vm >/dev/null 2>&1; then
-      ok "agent-vm utilisable (shim sur le PATH)"
-    else
-      if [ "$SHIM_PATH_ADDED" -eq 1 ]; then
-        warn "~/.local/bin a été ajouté au PATH — ouvre un nouveau terminal ou source ~/.zshenv."
+  # Nettoyage non-destructif : si un ancien shim agent-vm ou un sourçage
+  # dans le rc traîne, proposer de les retirer.
+  if command -v agent-vm >/dev/null 2>&1; then
+    local _vm_real
+    _vm_real="$(command -v agent-vm 2>/dev/null)"
+    # Si c'est un shim exécutable (pas la fonction shell), proposer le retrait
+    if [ -x "$_vm_real" ] && [ -f "$_vm_real" ]; then
+      warn "Ancien shim du moteur de VM détecté : $_vm_real"
+      if confirm "Retirer l'ancien shim (Albert Code utilise désormais le moteur vendored) ?"; then
+        rm -f "$_vm_real"
+        ok "Ancien shim retiré"
       fi
     fi
   fi
+
+  # Vérifier les lignes de sourçage dans les rc (installations pré-vendor)
+  for _rc_file in "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.profile"; do
+    [ -f "$_rc_file" ] || continue
+    if file_contains "$_rc_file" "agent-vm.sh"; then
+      warn "Ancienne ligne de sourçage du moteur de VM trouvée dans $_rc_file"
+      if confirm "Retirer la ligne de sourçage obsolète de $_rc_file ?"; then
+        _tmp="$(mktemp)"
+        grep -v "agent-vm.sh" "$_rc_file" > "$_tmp" || true
+        mv "$_tmp" "$_rc_file"
+        ok "Ligne retirée de $_rc_file"
+      fi
+    fi
+  done
 }
 
 # ensure_vm_runtime — ~/.agent-vm/runtime.sh
@@ -617,7 +623,7 @@ scaffold_opencode_json() {
   if [ "$mcp_chrome" = "true" ]; then
     [ "$first" = false ] && content=$content','
     first=false
-    content=$content'"chrome-devtools":{"type":"local","command":["npx","-y","chrome-devtools-mcp@latest"],"enabled":true}'
+    content=$content'"chrome-devtools":{"type":"local","command":["npx","-y","chrome-devtools-mcp@latest","--headless=true","--isolated=true"],"enabled":true}'
   fi
 
   content=$content'},'

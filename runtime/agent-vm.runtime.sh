@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Albert Code — runtime de référence (agent-vm).
+# Albert Code — runtime de référence (VM).
 # -----------------------------------------------------------------------------
 # Ce script est copié à la racine du projet cible sous le nom `.agent-vm.runtime.sh`.
-# Il s'exécute DANS la VM agent-vm à chaque démarrage, juste après `~/.agent-vm/runtime.sh`.
+# Il s'exécute DANS la VM à chaque démarrage, juste après `~/.agent-vm/runtime.sh`.
 #
 # Rôles :
 #   1. Persister ALBERT_API_KEY (et CONTEXT7_API_KEY) dans le ~/.zshenv de la VM
@@ -22,7 +22,7 @@ while [ $# -gt 0 ]; do
     --dry-run) DRY_RUN=1 ;;
     --help|-h)
       cat <<'USAGE'
-Albert Code — runtime VM (agent-vm)
+Albert Code — runtime VM
 
 Usage: ./.agent-vm.runtime.sh [--dry-run] [--help]
 

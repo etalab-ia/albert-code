@@ -205,6 +205,21 @@ et le bloc marqueur a disparu.
 - Une description absente retourne chaîne vide (l'afficheur utilise « (aucune description) »).
 **Validé le :** — (non exécuté).
 
+## S39 — Absorption agent-vm : vendoring, OpenCode-only, chrome-devtools projet, pas de nom agent-vm dans l'UI ☐
+
+**Préconditions :** dépôt albert-code sur branche `feat/absorb-agent-vm`.
+
+**Étapes :**
+1. Vérifier `vendor/vm/agent-vm.sh` + `vendor/vm/agent-vm.setup.sh` + `vendor/vm/VERSION` + `vendor/vm/LICENSE` présents.
+2. `bash bin/albert-code install --dry-run` — vérifier qu'aucun message ne contient « agent-vm » (sauf commentaires de code).
+3. `bash bin/albert-code setup --dry-run` — idem.
+4. `bash bin/albert-code run --dry-run` — idem.
+5. Vérifier que `config/opencode.template.json` contient `--headless=true --isolated=true` pour chrome-devtools.
+6. Vérifier que `vendor/vm/agent-vm.setup.sh` contient `INSTALL_OPENCODE_MCP="${AGENT_VM_INSTALL_OPENCODE_MCP:-0}"`.
+7. `bash tests/check_no_personal_paths.sh` — exit 0.
+
+**Attendu :** aucun message utilisateur ne contient « agent-vm ». La VM de base se crée avec `--preinstall=node,gh,chromium,opencode`. chrome-devtools a les flags headless, n'est plus injecté globalement par agent-vm. Vérification chemin personnel OK.
+
 ---
 
 ## Critères d'acceptation v1 (Definition of Done globale)

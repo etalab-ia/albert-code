@@ -23,7 +23,7 @@ SKILLS_DIR="$HOME/.config/opencode/skills"
 SKILLS_CACHE="$HOME/.config/opencode/.albert-skills-cache"
 RUNTIME_VM_FILE="$HOME/.agent-vm/runtime.sh"
 ZSHENV="$HOME/.zshenv"
-AGENT_VM_DIR="${AGENT_VM_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/agent-vm}"
+AGENT_VM_DIR="${AGENT_VM_DIR:-$SELF_DIR/vendor/vm}"
 AC_MARKER="# --- albert-code : clés VM ---"
 
 banner
@@ -131,7 +131,7 @@ for _check_rc in "$RC_FILE_ALBERT" "$HOME/.zshenv"; do
   fi
 done
 
-# 5. Sourcing agent-vm dans le shell rc
+# 5. Ancien sourçage agent-vm dans le shell rc (migration)
 rc=""
 case "${SHELL##*/}" in
   zsh)  rc="$HOME/.zshrc" ;;
@@ -147,15 +147,14 @@ if [ -f "$rc" ] && file_contains "$rc" "agent-vm.sh"; then
   fi
 fi
 
-# 6. agent-vm (clone + VMs + shim) — optionnel, lourd
-if [ -d "$AGENT_VM_DIR" ] && confirm "Supprimer agent-vm ($AGENT_VM_DIR) et ses VMs ?"; then
-  # Retirer le shim d'abord (avant que la fonction disparaisse)
-  if command -v agent-vm >/dev/null 2>&1; then
-    agent-vm destroy-all 2>/dev/null || true
+# 6. VMs Lima (optionnel) — les VMs créées par agent-vm
+if command -v limactl >/dev/null 2>&1 && limactl list -q 2>/dev/null | grep -q '^agent-vm-'; then
+  if confirm "Supprimer toutes les VMs agent-vm (Lima) ?"; then
+    if command -v agent-vm >/dev/null 2>&1; then
+      agent-vm destroy-all 2>/dev/null || true
+    fi
+    ok "VMs agent-vm supprimées"
   fi
-  remove_shim "agent-vm" 2>/dev/null || true
-  rm -rf "$AGENT_VM_DIR"
-  ok "agent-vm supprimé (code + shim)"
 fi
 
 
