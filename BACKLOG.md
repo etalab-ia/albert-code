@@ -107,7 +107,18 @@ Config MCP de référence :
 3. **Gotcha de rotation** : documenter (README) + garde-fou — un `GH_TOKEN`/email déjà persisté dans le `~/.zshenv` de la VM n'est **pas** mis à jour par un changement côté hôte (grep-guard). Prévoir un chemin de mise à jour (réécrire la ligne `~/.zshenv` de la VM, ou `agent-vm rm` documenté).
 4. **Next-steps de l'install** : mentionner l'auth GitHub dans « Prochaines étapes » (actuellement absente).
 **DoD :** sur un poste vierge, `install.sh` propose l'auth GitHub ; après acceptation, une VM fraîche pushe + ouvre une PR sans aucune édition manuelle de `runtime.sh` ; un email non-noreply est refusé avec un message clair. → `TESTS.md` S24.
-**⏳ Implémenté (06/07/2026, branche `feat/github-auth-installer`)** — sous-points 1 (prompt token dans Phase A), 2 (identité + garde-fou email noreply, 3 tentatives) et 4 (next-steps) faits ; token jamais loggé (vérifié par canari en dry-run). **Reste** : sous-point 3 (gotcha de rotation — mise à jour d'un `~/.zshenv` VM déjà écrit) → PR séparée. Validation S24 à finaliser.
+**Implémenté (06/07/2026, branche `feat/github-auth-installer`)** — sous-points 1 (prompt token dans Phase A), 2 (identité + garde-fou email noreply, 3 tentatives) et 4 (next-steps) faits ; token jamais loggé (vérifié par canari en dry-run). **Reste** : sous-point 3 (gotcha de rotation) → PR séparée. Validation S24 absorbée par T2-CH2.
+
+---
+
+### T2-CH2 🟠 Simplifier et fiabiliser l'auth GitHub du wizard `<- AC-R036`
+**But :** le bloc GitHub de `phase_a` est redondant et fragile : après la dérivation API réussie, il redemande quand même le nom et l'email (pré-remplis, donc inutiles). Et si l'utilisateur colle son token à la question o/N (cas réel bêta-testeur), le token est silencieusement ignoré.
+**Tâches :**
+1. **#1 — Supprimer les 2 prompts quand la dérivation réussit** : après curl 2xx + login + id, utiliser directement `git_name = login` et `git_email = <id>+<login>@users.noreply.github.com`. Afficher un seul récap `ok "Compte GitHub : login <email>"`. Persister GH_TOKEN, AC_GIT_USER_NAME, AC_GIT_USER_EMAIL.
+2. **#2 — Fallback uniquement si la dérivation échoue** : curl non-2xx/réseau/parsing vide → prompts manuels nom/email avec validation noreply.
+3. **#3 — Séparation visuelle** : ajouter `info "Étape suivante : colle ton PAT GitHub (scope repo)."` avant le prompt_secret du token.
+4. **#4 — Détection token collé à l'étape o/N** : regex `^(ghp_|github_pat_|gho_|ghs_|ghr_|.{31,}$)` → warn + retry. Token invalide (curl non-2xx) → warn + retry (max 3). Ne jamais persister un token non validé.
+**DoD :** dérivation OK → aucun prompt nom/email ; token collé à l'étape o/N → message clair + retry ; token invalide → message + retry ; limites à 3 tentatives. → `TESTS.md` S31, S40.
 
 ---
 

@@ -237,17 +237,16 @@ et le bloc marqueur a disparu.
 3. Dans `phase_run()`, répondre « oui » à la création de la VM (dry-run).
 **Attendu :** un encart `info` en français s'affiche avant `agent-vm setup`, mentionnant que le wizard est en anglais, expliquant ce qu'est agent-vm, et conseillant de valider les logiciels par défaut. Sortie identique en `check_base_vm` et `phase_run`.
 
-## S31 — Dérivation automatique email noreply GitHub (T6.6, AC-R019) ☐
+## S31 — Dérivation automatique identité GitHub (T6.6, AC-R019, T2-CH2) ☐
 **Préconditions :** un PAT GitHub valide (scope `repo`) ; `curl` disponible.
 **Étapes :**
 1. Lancer `./install.sh` (ou `albert-code install`).
 2. Répondre « oui » à l'activation push/PR GitHub.
 3. Coller le PAT.
-4. Vérifier que le prompt « Email noreply GitHub » affiche le noreply dérivé (ex. `12345+username@users.noreply.github.com`).
-5. Faire Entrée.
-6. Vérifier `~/.zshenv` : `AC_GIT_USER_EMAIL` = noreply GitHub.
-7. (Fallback) Simuler l'absence de réseau : sans `curl` ou PAT invalide, vérifier que le message FR d'aide s'affiche.
-**Attendu :** (4) le noreply est pré-rempli, l'utilisateur fait Entrée ; (6) email noreply persisté ; (7) message FR d'aide clair avec lien GitHub. Le PAT n'apparaît dans aucun log.
+4. Vérifier AUCUN prompt « Nom pour les commits » ni « Email noreply GitHub » (dérivation réussie → tout est automatique).
+5. Vérifier le récap : ok "Compte GitHub : <login> <<id>+<login>@users.noreply.github.com>"
+6. Vérifier `~/.zshenv` : `AC_GIT_USER_NAME` = login, `AC_GIT_USER_EMAIL` = noreply GitHub.
+**Attendu :** (4) pas de prompts ; (5) récap correct ; (6) identité persistée. Le PAT n'apparaît dans aucun log.
 
 ## S32 — Shim avant VM + migration ancien `albert-code()` (T6.8, AC-R021) ☐
 **Préconditions :** `install.sh` ou `bin/albert-code install` ; `albert-code()` dans un shell rc (ex. `~/.zshrc`).
@@ -300,6 +299,49 @@ et le bloc marqueur a disparu.
 5. Répéter le setup avec `CONTEXT7_API_KEY` ABSENTE de l'env et de `~/.zshenv`, répondre « oui » au MCP context7 → vérifier qu'un prompt `prompt_secret` est affiché (dry-run : « [dry-run] prompt: Colle ta clé API Context7 ») ; laisser vide → warning « Pas de clé Context7 — le MCP context7 s'affichera en erreur ».
 6. Répéter le setup avec `CONTEXT7_API_KEY` déjà dans l'env → vérifier qu'aucun prompt Context7 n'apparaît (le MCP est activé normalement).
 **Attendu :** (2) ASCII art présent au début de Phase B. (3) `print_next_steps` raccourci, plus de « Crée la VM de base », plus de « Ouvre la bulle isolée », plus de « Parle en français ». (4) statut GitHub AVANT le ✓ final, pas après. (5) clé demandée, warning si vide. (6) pas de prompt si clé déjà présente.
+
+## S40 — Auth GitHub : dérivation OK, token collé à mauvaise étape, token invalide (T2-CH2, AC-R036) ☐
+
+**S40a — Dérivation API OK → pas de prompts nom/email, juste le récap**
+**Préconditions :** `install.sh` disponible, `curl`, PAT valide (scope repo).
+**Étapes :**
+1. Lancer `bash lib/phases.sh` (sourcer) et appeler `_github_auth` avec un vrai PAT (ou stub `api.github.com/user`).
+2. Répondre `o` au prompt d'activation, coller le PAT valide.
+3. Observer la sortie.
+**Attendu :** aucun prompt « Nom pour les commits » ni « Email noreply GitHub ». Le seul message est `✓ Compte GitHub : <login> <<id>+<login>@users.noreply.github.com>`. `AC_GIT_USER_NAME` = login, `AC_GIT_USER_EMAIL` = noreply.
+
+**S40b — Token collé à la question o/N → message d'échec + avertissement sécurité + transition vers prompt masqué**
+**Préconditions :** `install.sh` disponible, un token quelconque.
+**Étapes :**
+1. Lancer `install.sh`.
+2. Au prompt « Activer le push et les PR GitHub depuis la VM ? [o/N] », coller un token (commence par `ghp_`, `github_pat_`, ou chaîne >30 car. non reconnue comme o/n).
+3. Observer les messages.
+**Attendu :** le script affiche `! On dirait que tu as collé ton token à la mauvaise étape (réponds d'abord o).` puis `! Ce token vient d'être affiché en clair dans le terminal : pense à le révoquer` et `! et à en régénérer un (github.com/settings/tokens).` puis `? Continuer la connexion GitHub ?`. Répondre oui → on passe DIRECTEMENT au prompt masqué `prompt_secret` (ETAPE TOKEN, pas de re-demande de [o/N]). Répondre non → `! GitHub non connecté.`
+
+**S40c — Token invalide → message d'échec + retry sur prompt masqué (pas de [o/N])**
+**Préconditions :** `install.sh` disponible, un token invalide.
+**Étapes :**
+1. Lancer `install.sh`.
+2. Répondre `o` à l'activation, coller un token invalide.
+3. Observer le message.
+**Attendu :** le script affiche `! Échec : GitHub non connecté (token invalide ou API injoignable).` puis `! Tentative 1/3 — recolle ton PAT dans le champ masqué ci-dessous.` et le prompt masqué `prompt_secret` réapparaît (pas de [o/N]). Au 3e échec → fallback prompts manuels nom/email.
+
+**S40d — Token valide au 2e essai après un premier échec → connexion directe, pas de fallback**
+**Préconditions :** `install.sh` disponible, un token invalide puis un token valide.
+**Étapes :**
+1. Lancer `install.sh`.
+2. Répondre `o` à l'activation, coller un token invalide.
+3. Voir le message d'échec + prompt masqué réapparaître.
+4. Coller un token valide.
+**Attendu :** le script dérive l'identité, affiche `✓ Compte GitHub : <login> <<id>+<login>@users.noreply.github.com>` et persiste. Pas de fallback manuel, pas de prompts nom/email.
+
+**S40e — Fallback quand token invalide au 3e essai**
+**Préconditions :** `install.sh` disponible, token invalide.
+**Étapes :**
+1. Lancer `install.sh`.
+2. Répondre `o` à l'activation, coller un token invalide 3 fois (Entrée entre chaque pour abandonner).
+3. Observer les prompts manuels.
+**Attendu :** le script affiche le message d'aide FR `! Introuvable automatiquement...` puis demande le nom et l'email. Ne jamais persister GH_TOKEN.
 
 ## S36 — `install_shim` réécrit un shim obsolète + sortie sync_skills propre (T6.12, T6.13) ☐
 **Préconditions :** dossier sandbox `/tmp/ac-test`, `install.sh` disponible.
