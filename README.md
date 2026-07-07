@@ -6,9 +6,9 @@
 /_/   \_\_|_.__/ \___|_|   \__|  \____\___/ \__,_|\___|
 ```
 
-# Albert Code
+⚠️ **PROJET EXPÉRIMENTAL : Nous testons actuellement plusieurs modèles dans le cadre d'une éventuelle offre pour le code. Le(s) modèle(s) de code d'Albert API peut(vent) changer.** ⚠️ 
 
-⚠️ PROJET EXPÉRIMENTAL ⚠️
+# Albert Code
 
 **Stack d'agentic coding souveraine pour l'État, en une commande : OpenCode + VM isolée + Albert API + skills de l'État + MCP.**
 
