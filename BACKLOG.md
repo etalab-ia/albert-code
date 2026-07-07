@@ -362,3 +362,20 @@ Option : ajouter un paramètre `install_shim` pour mode "exec" vs "source", ou d
 **But :** au boot VM (`runtime/agent-vm.runtime.sh`, sync_skills), des lignes « name=<skill> » parasites apparaissent dans la sortie (ex. name=datagouv-apis). Bruit dû aux variables `local name` + `name=$(basename …)` en bash 3.2.
 **Tâches :** remplacer les déclarations `local name` puis `name="$(basename …)"` par `local name="$(basename …)"` (fusion local+assignation), et idem pour `local ename`, `local resolved`. Supprime la source probable du bruit.
 **DoD :** la sortie de sync_skills n'affiche que les messages _ok/_info/_warn, plus de lignes « name= ». → `TESTS.md` S36 (vérification sortie propre).
+
+### T6.14 🟡 Polish visuel du wizard `<- AC-R031 AC-R032 AC-R033 AC-R034`
+**But :** 4 retouches visuelles sur le wizard install/setup (feedback Leo Guillaume, Tech Lead Albert API). Gains de confiance utilisateur sans dépendance ajoutée — reste 100% bash, bash 3.2, non-destructif, dry-run OK.
+
+**Tâches :**
+1. **Nouvelle ASCII art (banner, `lib/ui.sh`)** : remplacer par "Albert Code" en figlet slant (57 col, <=76 col max). Baseline "Coder avec l'IA souveraine de l'État, dans une bulle isolée." inchangée.
+2. **Spinner (`with_spinner` dans `lib/ui.sh`)** : helper `with_spinner "message" cmd args...` avec frames braille (⠋⠙⠹⠸⠴⠦⠧), dégradation non-TTY/dry-run. Appliquer UNIQUEMENT à : clone agent-vm, clone/refresh skills (jamais à `agent-vm setup` ni `agent-vm ... opencode` qui streament leur propre sortie).
+3. **Compteur d'étapes** : prefixer les 4 sous-étapes de phase_b par [1/4]..[4/4] : `[1/4] AGENTS.md`, `[2/4] Connecteurs MCP`, `[3/4] Skills`, `[4/4] Runtime VM`.
+4. **Panneau récap** : après "✓ Projet configuré.", afficher un panel aligné gauche (filet haut, titre, Projet/MCP/Skills/GitHub, filet bas). Utiliser variables globales `AC_SELECTED_MCP` / `AC_SELECTED_SKILLS` exposées par `scaffold_opencode_json` / `scaffold_skills_selection`. PAS d'encadré justifié à droite (piège UTF-8 width).
+
+**Règles :**
+- Garder tous les accents français corrects (é è à ê ç …)
+- Pas de tiret cadratin
+- Bash 3.2 compatible
+- Dry-run : spinner dégradé (pas d'animation), récap affiché quand même
+
+**DoD :** art <=76 col, spinner dégrade en non-TTY/dry-run, compteur [1/4]..[4/4] visible, récap affiche les bons choix. → `TESTS.md` S38.

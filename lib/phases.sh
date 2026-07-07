@@ -192,16 +192,27 @@ phase_b() {
   title "Phase B — Configuration de ce projet"
   echo
 
-  # B.1 AGENTS.md par défaut (non-destructif)
+  # Variables globales pour le récap
+  AC_SELECTED_MCP=""
+  AC_SELECTED_SKILLS=""
+
+  # B.1 [1/4] AGENTS.md par défaut (non-destructif)
+  title "[1/4] AGENTS.md"
   copy_template "templates/AGENTS.default.md" "./AGENTS.md" "AGENTS.md (règles sécurité + conventions)"
+  echo
 
-  # B.2 opencode.json avec MCP interactifs (non-destructif)
+  # B.2 [2/4] opencode.json avec MCP interactifs (non-destructif)
+  title "[2/4] Connecteurs MCP"
   scaffold_opencode_json
+  echo
 
-  # B.3 Sélection des skills
+  # B.3 [3/4] Sélection des skills
+  title "[3/4] Skills"
   scaffold_skills_selection
+  echo
 
-  # B.4 .agent-vm.runtime.sh (runtime de référence)
+  # B.4 [4/4] .agent-vm.runtime.sh (runtime de référence)
+  title "[4/4] Runtime VM"
   copy_template "runtime/agent-vm.runtime.sh" "./.agent-vm.runtime.sh" "runtime VM (sync skills + clés)"
   apply "chmod +x .agent-vm.runtime.sh" chmod +x "./.agent-vm.runtime.sh" 2>/dev/null || true
 
@@ -214,6 +225,10 @@ phase_b() {
   fi
   ok "Projet configuré."
   echo
+
+  # Panneau récap
+  print_setup_summary
+
   print_next_steps
 }
 
@@ -309,8 +324,10 @@ install_agent_vm() {
   else
     info "Clonage d'agent-vm…"
     apply_mkdir "créer $(dirname "$AGENT_VM_DIR")" "$(dirname "$AGENT_VM_DIR")"
-    apply "cloner agent-vm depuis $AGENT_VM_REPO" git clone --depth 1 --quiet "$AGENT_VM_REPO" "$AGENT_VM_DIR"
-    [ "$DRY_RUN" -eq 0 ] && ok "agent-vm cloné dans $AGENT_VM_DIR" || true
+    with_spinner "Clonage d'agent-vm" git clone --depth 1 --quiet "$AGENT_VM_REPO" "$AGENT_VM_DIR"
+    if [ "$DRY_RUN" -eq 0 ] && [ -d "$AGENT_VM_DIR/.git" ]; then
+      ok "agent-vm cloné dans $AGENT_VM_DIR"
+    fi
   fi
   local rc=""
   case "${SHELL##*/}" in
@@ -610,12 +627,28 @@ scaffold_opencode_json() {
   apply_write "générer opencode.json (provider Albert + MCP sélectionnés)" "$dest" "$content"
   ok "%s posé" "$dest"
 
-  echo
+  # Exposer la liste des MCP actives pour le récap
+  local _mcp_list=""
   local selected_mcp=0
-  [ "$mcp_data_gouv" = "true" ] && selected_mcp=$((selected_mcp + 1))
-  [ "$mcp_ctx7" = "true" ] && selected_mcp=$((selected_mcp + 1))
-  [ "$mcp_playwright" = "true" ] && selected_mcp=$((selected_mcp + 1))
-  [ "$mcp_chrome" = "true" ] && selected_mcp=$((selected_mcp + 1))
+  if [ "$mcp_data_gouv" = "true" ]; then
+    _mcp_list="${_mcp_list:+$_mcp_list, }data.gouv"
+    selected_mcp=$((selected_mcp + 1))
+  fi
+  if [ "$mcp_ctx7" = "true" ]; then
+    _mcp_list="${_mcp_list:+$_mcp_list, }context7"
+    selected_mcp=$((selected_mcp + 1))
+  fi
+  if [ "$mcp_playwright" = "true" ]; then
+    _mcp_list="${_mcp_list:+$_mcp_list, }playwright"
+    selected_mcp=$((selected_mcp + 1))
+  fi
+  if [ "$mcp_chrome" = "true" ]; then
+    _mcp_list="${_mcp_list:+$_mcp_list, }chrome-devtools"
+    selected_mcp=$((selected_mcp + 1))
+  fi
+  AC_SELECTED_MCP="$_mcp_list"
+
+  echo
   ok "%d MCP sélectionnés" "$selected_mcp"
 }
 
@@ -702,22 +735,22 @@ scaffold_skills_selection() {
 
   # Rafraîchir le cache
   if [ -d "$skills_dir/.git" ]; then
-    apply "maj skills cache (git pull)" git -C "$skills_dir" pull --ff-only --quiet 2>/dev/null || true
+    with_spinner "Mise à jour du cache skills" git -C "$skills_dir" pull --ff-only --quiet || true
   else
     apply_mkdir "créer $skills_dir" "$skills_dir"
-    apply "cloner skills État" git clone --depth 1 --quiet "https://github.com/etalab-ia/skills.git" "$skills_dir" 2>/dev/null || true
+    with_spinner "Clonage du cache skills" git clone --depth 1 --quiet "https://github.com/etalab-ia/skills.git" "$skills_dir" 2>/dev/null || true
   fi
 
   apply_mkdir "créer $manifest_dir" "$manifest_dir"
 
   local selected=""
   local count=0
+  local _skill_list=""
 
   if [ -d "$skills_dir/skills" ]; then
     for _skill_dir in "$skills_dir/skills"/*/; do
       [ -d "$_skill_dir" ] || continue
-      local name
-      name="$(basename "$_skill_dir")"
+      local name="$(basename "$_skill_dir")"
       case "$name" in .*|.experimental|.git) continue ;; esac
 
       local desc=""
@@ -728,16 +761,49 @@ scaffold_skills_selection() {
 
       if confirm "Installer la skill « ${name} » (${desc}) ?"; then
         selected="${selected}${name}"$'\n'
+        _skill_list="${_skill_list:+$_skill_list, }${name}"
         count=$((count + 1))
       fi
     done
   fi
+
+  # Exposer la liste des skills pour le récap
+  AC_SELECTED_SKILLS="$_skill_list"
 
   if [ "$DRY_RUN" -eq 0 ] || [ -n "$selected" ]; then
     apply_write "écrire .albert-code/skills.txt" "$manifest_dir/skills.txt" "$selected"
   fi
 
   [ "$DRY_RUN" -eq 0 ] && ok "%d skills sélectionnées" "$count" || true
+}
+
+# print_setup_summary — panneau récap en fin de setup
+print_setup_summary() {
+  local _proj
+  _proj="$(basename "$PWD")"
+
+  local _mcp_display="${AC_SELECTED_MCP:-}"
+  [ -z "$_mcp_display" ] && _mcp_display="aucun (mode souverain)"
+
+  local _skills_display="${AC_SELECTED_SKILLS:-}"
+  [ -z "$_skills_display" ] && _skills_display="aucune"
+
+  local _gh_display=""
+  if [ -n "${GH_TOKEN:-}" ] || file_contains "$ZSHENV" "GH_TOKEN"; then
+    _gh_display="push + PR activés"
+  else
+    _gh_display="non configuré"
+  fi
+
+  echo "  -------------------------------------------------------"
+  echo "   Récapitulatif du projet"
+  echo "  -------------------------------------------------------"
+  echo "   Projet   : $_proj"
+  echo "   MCP      : $_mcp_display"
+  echo "   Skills   : $_skills_display"
+  echo "   GitHub   : $_gh_display"
+  echo "  -------------------------------------------------------"
+  echo
 }
 
 # print_next_steps — affiche les prochaines étapes
