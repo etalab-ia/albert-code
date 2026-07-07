@@ -296,3 +296,40 @@ et le bloc marqueur a disparu.
 4. Simuler un boot VM : `bash runtime/agent-vm.runtime.sh --dry-run` dans un dossier projet scaffoldé.
 5. Inspecter la sortie de `sync_skills` pour les lignes commençant par « name= ».
 **Attendu :** (3) shim réécrit lors d'un changement de contenu, pas besoin de `rm` manuel. (5) aucun « name= » dans la sortie, seulement des `_ok`/`_info`/`_warn`.
+
+## S38 — Polish visuel wizard (T6.14, AC-R031..R034) ☐
+**Préconditions :** dépôt sur branche `feat/wizard-polish`, dossier projet vierge pour setup.
+
+**Étapes — ASCII art (AC-R031) :**
+1. Lancer `bash bin/albert-code setup --dry-run` depuis un dossier projet.
+2. Capturer la bannière ASCII art.
+3. Vérifier que la texte est "Albert Code" en figlet slant (5 lignes de caractères monospace).
+4. Vérifier que la baseline « Coder avec l'IA souveraine de l'État, dans une bulle isolée. » est présente avec accents (é à).
+5. Mesurer la largeur max : chaque ligne <= 76 colonnes.
+**Attendu :** (1) art "Albert Code" affiché au début de Phase B. (2) baseline avec accents corrects. (3) largeur max <= 76 col.
+
+**Étapes — Spinner (AC-R032) :**
+6. Lancer `bash bin/albert-code install --dry-run` → observer si un spinner apparaît pour le clone agent-vm et clone skills.
+7. Pipeliner la sortie : `bash bin/albert-code install --dry-run 2>&1 | cat` → observer que le spinner est absent (pas d'animation, non-TTY).
+8. Exécuter `DRY_RUN=1 with_spinner "test" echo hello` dans un terminal → aucun spinner, message affiché puis ✓.
+9. Exécuter `with_spinner "test" true` → ✓ test.
+10. Exécuter `with_spinner "test" false` → ✗ test.
+**Attendu :** (6) pas de spinner en dry-run (dégagement). (7) pas de spinner quand stdout n'est pas un TTY. (8) en dry-run, le helper passe par _dry_gate pour les mutations. (9) retourne ✓ avec code retour 0. (10) retourne ✗ avec code retour 1.
+
+**Étapes — Compteur d'étapes (AC-R033) :**
+11. Lancer `bash bin/albert-code setup --dry-run` depuis un dossier projet.
+12. Observer la sortie Phase B : chaque sous-étape est préfixée par `[1/4]` à `[4/4]`.
+13. Vérifier l'ordre : [1/4] AGENTS.md, [2/4] Connecteurs MCP, [3/4] Skills, [4/4] Runtime VM.
+**Attendu :** (11)(12) compteur visible dans la sortie. (13) les 4 numérotations dans l'ordre.
+
+**Étapes — Panneau récap (AC-R034) :**
+14. Lancer `bash bin/albert-code setup --dry-run` (répondre Y à >=1 MCP, skip skills).
+15. Après "✓ Projet configuré.", observer le panneau récap.
+16. Vérifier : Projet = basename du dossier courant, MCP = liste des MCP actives (ou "aucun (mode souverain)"), Skills = liste cochées (ou "aucune"), GitHub = statut GH_TOKEN.
+17. Vérifier format : aligné à gauche, 3 filets `---` (haut/milieu/bas), largeur fixe ~55 col, PAS d'encadré justifié à droite.
+**Attendu :** (14)(15) panneau visible après "✓ Projet configuré.". (16) valeurs correctes. (17) format simple, aligne gauche, filets fixes.
+**Étapes — dry-run :**
+18. Lancer `bash bin/albert-code setup --dry-run` et `bash bin/albert-code install --dry-run`.
+19. Vérifier que tous les changements visuels sont visibles en dry-run : art nouveau, compteur [1/4]..[4/4], récap.
+20. Vérifier que le spinner n'apparaît pas (pas d'animation).
+**Attendu :** (18) 4 chantiers visibles en dry-run. (19) spinner dégradé, pas de caracteres d'animation.

@@ -49,6 +49,11 @@
 | AC-R029 | 🎛️ | 🟡 | `print_next_steps` est long et encombré : instructions VM de base (déjà faite en Phase A), ligne « Parle en français » (banale), et push GitHub (déjà fait plus haut). Trop de texte tuile finale. | Dogfood setup 2026-07 | ✅ traité | `BACKLOG.md` T6.12-p |
 | AC-R030 | 🎛️ | 🟡 | Le statut GitHub (push/PR OK ou non) apparaît après « ✓ Projet configuré. » dans `print_next_steps` — ordre illogique : un statut AVANT le ✅ final. | Dogfood setup 2026-07 | ✅ traité | `BACKLOG.md` T6.12-p |
 
+| AC-R031 | 🎛️ | 🟡 | L'ASCII art actuel ne correspond pas au branding. Remplacer par la police figlet "slant" de "Albert Code" (57 colonnes, tient sous 80). | Feedback Leo Guillaume (Tech Lead Albert API) 2026-07 | ✅ traité | `BACKLOG.md` T6.14 · `TESTS.md` S38 |
+| AC-R032 | 🎛️ | 🟠 | Les étapes silencieuses et longues (clone agent-vm, clone skills) laissent l'utilisateur sans feedback. Ajouter un spinner (frames braille) pendant ces opérations. | Feedback Leo Guillaume (Tech Lead Albert API) 2026-07 | ✅ traité | `BACKLOG.md` T6.14 · `TESTS.md` S38 |
+| AC-R033 | 🎛️ | 🟡 | L'utilisateur ne sait pas où il en est dans le setup (Phase B) : pas de compteur d'étapes. Afficher [1/4]..[4/4] serait utile. | Feedback Leo Guillaume (Tech Lead Albert API) 2026-07 | ✅ traité | `BACKLOG.md` T6.14 · `TESTS.md` S38 |
+| AC-R034 | 🎛️ | 🟡 | En fin de setup, aucun récapitulatif des choix (MCP actifs, skills cochées, statut GitHub). Un panneau récap aide à valider avant de lancer. | Feedback Leo Guillaume (Tech Lead Albert API) 2026-07 | ✅ traité | `BACKLOG.md` T6.14 · `TESTS.md` S38 |
+
 ## Notes
 
 - **AC-R004 (prompt caching)** : à instruire avant tout scaling. Vérifier si Albert API expose du caching sur `chat/completions` ; sinon, arbitrer l'infra d'inférence. vLLM implémente le caching nativement.

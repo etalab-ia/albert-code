@@ -230,13 +230,71 @@ title() { printf '%s%s%s\n'    "${C_BOLD}"   "$(_fmt "$@")" "${C_RESET}"; }
 # --- Bannière ------------------------------------------------------------------
 banner() {
   cat <<'BANNER'
-    _    _ _               _      ____          _
-   / \  | | |__   ___ _ __| |_   / ___|___   __| | ___
-  / _ \ | | '_ \ / _ \ '__| __| | |   / _ \ / _` |/ _ \
- / ___ \| | |_) |  __/ |  | |_  | |__| (_) | (_| |  __/
-/_/   \_\_|_.__/ \___|_|   \__|  \____\___/ \__,_|\___|
+    ___    ____              __     ______          __
+   /   |  / / /_  ___  _____/ /_   / ____/___  ____/ /__
+  / /| | / / __ \/ _ \/ ___/ __/  / /   / __ \/ __  / _ \
+ / ___ |/ / /_/ /  __/ /  / /_   / /___/ /_/ / /_/ /  __/
+/_/  |_/_/_.___/\___/_/   \__/   \____/\____/\__,_/\___/
 BANNER
   printf '%s%s%s\n\n' "${C_CYAN}" "Coder avec l'IA souveraine de l'État, dans une bulle isolée." "${C_RESET}"
+}
+
+# --- Spinner (étapes longues silencieuses) -------------------------------------
+# with_spinner "message" cmd args...
+#   Lance la commande en arrière-plan, anime des frames braille tant que le PID
+#   tourne, puis affiche le résultat (✓ succès, ✗ échec).
+#   Dégradation : si stdout n'est pas un TTY OU DRY_RUN=1, pas d'animation.
+#   Retourne le code retour de la commande.
+with_spinner() {
+  local msg="$1"; shift
+  local _ret=0
+
+  # Dry-run : logger via _dry_gate et retourner proprement (pas d'animation)
+  if [ "$DRY_RUN" -eq 1 ]; then
+    _dry_gate "exécuter $msg"
+    return 0
+  fi
+
+  # Non-TTY : pas d'animation, exécution directe sans bruit
+  if [ ! -t 1 ]; then
+    "$@" >/dev/null 2>&1
+    _ret=$?
+    if [ $_ret -eq 0 ]; then
+      ok "$msg"
+    else
+      err "$msg"
+    fi
+    return $_ret
+  fi
+
+  # Terminal TTY : animation braille
+  local _frames="⠋⠙⠹⠸⠴⠦⠧"
+  local _frame_idx=0
+
+  # Lancer la commande en arrière-plan
+  "$@" >/dev/null 2>&1 &
+  local _pid=$!
+
+  # Boucle d'animation
+  while kill -0 "$_pid" 2>/dev/null; do
+    _frame_idx=$(( (_frame_idx + 1) % 8 ))
+    local _frame="${_frames:$_frame_idx:1}"
+    printf '\r%s  %s' "$_frame" "$msg"
+    sleep 0.1
+  done
+
+  # Récupérer le code retour
+  wait "$_pid" 2>/dev/null
+  _ret=$?
+
+  # Effacer la ligne du spinner et afficher le résultat
+  printf '\r\033[K'
+  if [ $_ret -eq 0 ]; then
+    ok "$msg"
+  else
+    err "$msg"
+  fi
+  return $_ret
 }
 
 # --- Vérifications -------------------------------------------------------------
