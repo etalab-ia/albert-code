@@ -24,7 +24,11 @@ fi
 # sans dépendre d'un shim sur le PATH. Usage : _vm setup --disk 32
 _vm() {
   if [ "$_agent_vm_sourced" -eq 1 ]; then
-    agent-vm "$@"
+    # Le vendored (agent-vm.sh) est écrit pour bash récent : sous set -u de
+    # bash 3.2 (macOS), l'expansion d'un tableau vide "${arr[@]}" plante en
+    # "unbound variable". On l'exécute dans un sous-shell permissif (comme le
+    # faisait l'ancien shim), sans toucher au vendored.
+    ( set +u +e +o pipefail; agent-vm "$@" )
   else
     err "agent-vm.sh introuvable dans $AGENT_VM_DIR — réinstalle Albert Code."
     return 1
@@ -134,7 +138,7 @@ phase_a() {
         if [ -n "$gh_id" ] && [ -n "$gh_login" ]; then
           git_name="$gh_id"
           git_email_def="${gh_login}+${gh_id}@users.noreply.github.com"
-          ok "Compte GitHub identifié : ${gh_id} (noreply : ${gh_email_def})"
+          ok "Compte GitHub identifié : ${gh_id} (noreply : ${git_email_def})"
         fi
       fi
 
