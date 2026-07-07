@@ -433,7 +433,8 @@ persist_zshenv() {
 }
 
 # =============================================================================
-# _github_auth — config GitHub : activation, token, dérivation API, fallback.
+# _github_auth — config GitHub : activation UNE FOIS, token masqué, retry
+# sur prompt_secret uniquement (jamais [o/N]).
 # =============================================================================
 _github_auth() {
   local gh_token="" git_name="" git_email=""
@@ -443,55 +444,65 @@ _github_auth() {
   # Regex pour détecter un PAT collé (ghp_, github_pat_, gho_, ghs_, ghr_, >30 car.)
   local _pat_regex='^(ghp_|github_pat_|gho_|ghs_|ghr_|.{31,}$)'
 
-  while [ "$_attempt" -lt "$_max_attempts" ]; do
-    echo
-    info "Étape suivante : colle ton PAT GitHub (scope repo) pour activer le push."
+  echo
+  info "Étape suivante : colle ton PAT GitHub (scope repo) pour activer le push."
 
-    local _answer=""
-    printf '%sActiver le push et les PR GitHub depuis la VM ?%s [o/N] : ' "${C_BOLD}" "${C_RESET}" >&2
-    if [ "$DRY_RUN" -eq 1 ]; then
-      printf '%s[dry-run] confirm: Activer le push et les PR GitHub depuis la VM ? → non%s\n' "${C_GREY}" "${C_RESET}" >&2
-      _answer="n"
-    elif [ -t 0 ]; then
-      read -r _answer </dev/tty
-    else
-      read -r _answer
-    fi
+  # 1. Activation UNE FOIS — pas dans la boucle
+  local _answer=""
+  printf '%sActiver le push et les PR GitHub depuis la VM ?%s [o/N] : ' "${C_BOLD}" "${C_RESET}" >&2
+  if [ "$DRY_RUN" -eq 1 ]; then
+    printf '%s[dry-run] confirm: Activer le push et les PR GitHub depuis la VM ? → non%s\n' "${C_GREY}" "${C_RESET}" >&2
+    _answer="n"
+  elif [ -t 0 ]; then
+    read -r _answer </dev/tty
+  else
+    read -r _answer
+  fi
 
-    case "$_answer" in
-      o|O|y|Y)
-        # Cas 1 : l'utilisateur dit oui — passer au prompt token
-        ;;
-      n|N|"")
-        # Cas 2 : non ou vide — pas de GitHub
-        warn "Pas de connexion GitHub — le push/PR depuis la VM restera inactif."
-        return 0
-        ;;
-      *)
-        # Cas 3 : on dirait un token collé à la mauvaise étape
-        if [[ "$_answer" =~ $_pat_regex ]]; then
-          warn "On dirait que tu as collé ton token à la mauvaise étape (il faut d'abord répondre o, puis coller le token)."
-          if confirm "Réessayer la connexion GitHub ?"; then
-            _attempt=$((_attempt + 1))
-            continue
-          fi
+  case "$_answer" in
+    o|O|y|Y)
+      # OK — aller à la boucle token
+      ;;
+    n|N|"")
+      warn "Pas de connexion GitHub — le push/PR depuis la VM restera inactif."
+      return 0
+      ;;
+    *)
+      if [[ "$_answer" =~ $_pat_regex ]]; then
+        warn "On dirait que tu as collé ton token à la mauvaise étape (réponds d'abord o)."
+        warn "Ce token vient d'être affiché en clair dans le terminal : pense à le révoquer"
+        warn "et à en régénérer un (github.com/settings/tokens)."
+        if confirm "Continuer la connexion GitHub ?"; then
+          # Aller directement à la boucle token, ne pas re-demander o/N
+          :
+        else
           warn "GitHub non connecté."
           return 0
         fi
-        # Ni oui, ni non, ni token → redemander
+      else
+        # Ni oui, ni non, ni token
         if confirm "Réponse non reconnue. Réessayer ?"; then
-          _attempt=$((_attempt + 1))
-          continue
+          # Re-poser l'activation (appel récursif — une fois max)
+          _github_auth
+          return $?
         fi
         warn "GitHub non connecté."
         return 0
-        ;;
-    esac
+      fi
+      ;;
+  esac
 
-    # Étape token
-    gh_token="$(prompt_secret "Colle ton PAT GitHub (scope repo ; Entrée pour passer)")"
+  # 2. Boucle token — TOUJOURS via prompt_secret (masqué), jamais de [o/N]
+  while [ "$_attempt" -lt "$_max_attempts" ]; do
+    local _prompt_msg="Colle ton PAT GitHub (scope repo"
+    if [ "$_attempt" -gt 0 ]; then
+      _prompt_msg="Recolle ton PAT (tentative $((_attempt+1))/${_max_attempts}"
+    fi
+    _prompt_msg="${_prompt_msg} ; Entrée pour abandonner)"
+
+    gh_token="$(prompt_secret "$_prompt_msg")"
     if [ -z "$gh_token" ]; then
-      warn "Pas de PAT GitHub — le push/PR depuis la VM restera inactif."
+      warn "Pas de PAT — le push/PR depuis la VM restera inactif."
       return 0
     fi
 
@@ -509,7 +520,6 @@ _github_auth() {
       gh_id="$(printf '%s' "$_raw" | sed -n 's/.*"id"[[:space:]]*:[[:space:]]*\([0-9]*\).*/\1/p')"
 
       if [ -n "$gh_login" ] && [ -n "$gh_id" ]; then
-        # #1 : pas de prompts nom/email — direct
         git_name="$gh_login"
         git_email="${gh_id}+${gh_login}@users.noreply.github.com"
         ok "Compte GitHub : ${gh_login} <${git_email}>"
@@ -524,23 +534,19 @@ _github_auth() {
       return 0
     fi
 
-    # #4 : token invalide ou API injoignable, proposer retry
+    # Échec : token invalide ou API injoignable
     _attempt=$((_attempt + 1))
     if [ "$_attempt" -lt "$_max_attempts" ]; then
       warn "Échec : GitHub non connecté (token invalide ou API injoignable)."
-      if confirm "Réessayer la connexion GitHub ? (tentative $_attempt/$_max_attempts)"; then
-        continue
-      fi
+      warn "Tentative $_attempt/${_max_attempts} — recolle ton PAT dans le champ masqué ci-dessous."
+      # Rebouble DIRECTEMENT sur prompt_secret (pas de [o/N])
+      continue
     fi
 
-    # L'utilisateur ne veut pas retenter → fallback (pas de persistance du token non validé)
+    # Tentatives épuisées — fallback sans persister le token non validé
     _github_fallback
     return 0
   done
-
-  # Limite de tentatives atteinte
-  warn "Tentatives épuisées — GitHub non connecté."
-  return 1
 }
 
 # _github_fallback — prompts manuels nom/email (quand la dérivation API échoue)

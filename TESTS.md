@@ -310,30 +310,38 @@ et le bloc marqueur a disparu.
 3. Observer la sortie.
 **Attendu :** aucun prompt « Nom pour les commits » ni « Email noreply GitHub ». Le seul message est `✓ Compte GitHub : <login> <<id>+<login>@users.noreply.github.com>`. `AC_GIT_USER_NAME` = login, `AC_GIT_USER_EMAIL` = noreply.
 
-**S40b — Token collé à la question o/N → message d'échec + retry**
+**S40b — Token collé à la question o/N → message d'échec + avertissement sécurité + transition vers prompt masqué**
 **Préconditions :** `install.sh` disponible, un token quelconque.
 **Étapes :**
 1. Lancer `install.sh`.
 2. Au prompt « Activer le push et les PR GitHub depuis la VM ? [o/N] », coller un token (commence par `ghp_`, `github_pat_`, ou chaîne >30 car. non reconnue comme o/n).
-3. Observer le message.
-**Attendu :** le script affiche `! On dirait que tu as collé ton token à la mauvaise étape (il faut d'abord répondre o, puis coller le token).` puis propose `? Réessayer la connexion GitHub ?`. Répondre non → `! GitHub non connecté.`
+3. Observer les messages.
+**Attendu :** le script affiche `! On dirait que tu as collé ton token à la mauvaise étape (réponds d'abord o).` puis `! Ce token vient d'être affiché en clair dans le terminal : pense à le révoquer` et `! et à en régénérer un (github.com/settings/tokens).` puis `? Continuer la connexion GitHub ?`. Répondre oui → on passe DIRECTEMENT au prompt masqué `prompt_secret` (ETAPE TOKEN, pas de re-demande de [o/N]). Répondre non → `! GitHub non connecté.`
 
-**S40c — Token invalide → message d'échec + retry**
+**S40c — Token invalide → message d'échec + retry sur prompt masqué (pas de [o/N])**
 **Préconditions :** `install.sh` disponible, un token invalide.
 **Étapes :**
 1. Lancer `install.sh`.
 2. Répondre `o` à l'activation, coller un token invalide.
 3. Observer le message.
-**Attendu :** le script affiche `! Échec : GitHub non connecté (token invalide ou API injoignable).` puis propose `? Réessayer la connexion GitHub ? (tentative 1/3)`. Répondre non → fallback prompts manuels nom/email. Répondre oui 3 fois → `! Tentatives épuisées — GitHub non connecté.`
+**Attendu :** le script affiche `! Échec : GitHub non connecté (token invalide ou API injoignable).` puis `! Tentative 1/3 — recolle ton PAT dans le champ masqué ci-dessous.` et le prompt masqué `prompt_secret` réapparaît (pas de [o/N]). Au 3e échec → fallback prompts manuels nom/email.
 
-**S40d — Fallback quand dérivation échoue**
-**Préconditions :** `install.sh` disponible, token quelconque (même invalide).
+**S40d — Token valide au 2e essai après un premier échec → connexion directe, pas de fallback**
+**Préconditions :** `install.sh` disponible, un token invalide puis un token valide.
 **Étapes :**
 1. Lancer `install.sh`.
 2. Répondre `o` à l'activation, coller un token invalide.
-3. Au message d'échec, répondre non au retry.
-4. Observer les prompts manuels.
-**Attendu :** le script affiche le message d'aide FR `! Introuvable automatiquement. Ton email noreply est de la forme <id>+<login>@users.noreply.github.com`, puis demande le nom et l'email avec validation du suffixe. L'email ne passant pas la validation noreply, le message `! L'email doit finir par users.noreply.github.com.` s'affiche après 3 tentatives.
+3. Voir le message d'échec + prompt masqué réapparaître.
+4. Coller un token valide.
+**Attendu :** le script dérive l'identité, affiche `✓ Compte GitHub : <login> <<id>+<login>@users.noreply.github.com>` et persiste. Pas de fallback manuel, pas de prompts nom/email.
+
+**S40e — Fallback quand token invalide au 3e essai**
+**Préconditions :** `install.sh` disponible, token invalide.
+**Étapes :**
+1. Lancer `install.sh`.
+2. Répondre `o` à l'activation, coller un token invalide 3 fois (Entrée entre chaque pour abandonner).
+3. Observer les prompts manuels.
+**Attendu :** le script affiche le message d'aide FR `! Introuvable automatiquement...` puis demande le nom et l'email. Ne jamais persister GH_TOKEN.
 
 ## S36 — `install_shim` réécrit un shim obsolète + sortie sync_skills propre (T6.12, T6.13) ☐
 **Préconditions :** dossier sandbox `/tmp/ac-test`, `install.sh` disponible.
