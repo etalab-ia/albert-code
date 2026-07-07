@@ -347,6 +347,17 @@ Option : ajouter un paramètre `install_shim` pour mode "exec" vs "source", ou d
 **Tâches :** dans `install_shim` (`lib/ui.sh`), avant de skip un shim existant, comparer les 3 premières lignes du fichier existant avec le `shim_content` attendu. Si différent : réécrire. Si identique : skip.
 **DoD :** après un changement de contenu du shim, `./install.sh` réécrit le fichier (au lieu de « déjà présent »). → `TESTS.md` S36.
 
+### T6.12-p 🟠 Polish UX sortie setup `<- AC-R027 AC-R028 AC-R029 AC-R030`
+**But :** 4 retouches UX sur la sortie de `albert-code setup`, issues de dogfood.
+
+**Tâches :**
+1. Afficher l'ASCII art Albert Code au début de Phase B (après le garde-fou PWD = SELF_DIR, avant `title "Phase B …"`).
+2. Quand Context7 MCP est choisi, demander la clé API si absente (ni env ni ~/.zshenv) via `prompt_secret`, la persister via `persist_zshenv`. Si vide, avertir que le MCP sera en erreur.
+3. Réécrire `print_next_steps()` : seulement `title "Prochaines étapes"` + `info "Lancer Albert Code : albert-code run"` + une ligne NB sans flèche sur les skills. Retirer le bloc VM de base, opencode, « Parle en français », et le statut GitHub.
+4. Déplacer le statut GitHub (push/PR configuré ou non) JUSTE AVANT « ✓ Projet configuré. » dans `phase_b()`.
+
+**DoD :** les 4 retouches visibles en dry-run. L'ASCII art apparaît en Phase B. La clé Context7 est demandée quand on choisit le MCP sans clé préexistante. L'ordre des lignes en fin de Phase B est : statut GitHub → ✓ Projet configuré → Prochaines étapes → albert-code run → NB skills. → `TESTS.md` S37.
+
 ### T6.13 🟡 Bruit de debug « name= » dans sync_skills `<- AC-R026` ✅ implémenté
 **But :** au boot VM (`runtime/agent-vm.runtime.sh`, sync_skills), des lignes « name=<skill> » parasites apparaissent dans la sortie (ex. name=datagouv-apis). Bruit dû aux variables `local name` + `name=$(basename …)` en bash 3.2.
 **Tâches :** remplacer les déclarations `local name` puis `name="$(basename …)"` par `local name="$(basename …)"` (fusion local+assignation), et idem pour `local ename`, `local resolved`. Supprime la source probable du bruit.

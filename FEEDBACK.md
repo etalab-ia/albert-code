@@ -44,6 +44,11 @@
 
 ---
 
+| AC-R027 | 🎛️ | 🟡 | Phase B (setup) commence sans aucun repère visuel — pas d'ASCII art, pas de titre d'étape — alors que Phase A en a. L'utilisateur ne sait pas que la config du projet a commencé. | Dogfood setup 2026-07 | ✅ traité | `BACKLOG.md` T6.12-p |
+| AC-R028 | 🎛️ | 🟡 | Context7 MCP coché au setup mais la clé n'est jamais demandée : le MCP apparaît « cassé » au premier lancement (401). L'utilisateur doit l'activer manuellement après coup. | Dogfood setup 2026-07 | ✅ traité | `BACKLOG.md` T6.12-p |
+| AC-R029 | 🎛️ | 🟡 | `print_next_steps` est long et encombré : instructions VM de base (déjà faite en Phase A), ligne « Parle en français » (banale), et push GitHub (déjà fait plus haut). Trop de texte tuile finale. | Dogfood setup 2026-07 | ✅ traité | `BACKLOG.md` T6.12-p |
+| AC-R030 | 🎛️ | 🟡 | Le statut GitHub (push/PR OK ou non) apparaît après « ✓ Projet configuré. » dans `print_next_steps` — ordre illogique : un statut AVANT le ✅ final. | Dogfood setup 2026-07 | ✅ traité | `BACKLOG.md` T6.12-p |
+
 ## Notes
 
 - **AC-R004 (prompt caching)** : à instruire avant tout scaling. Vérifier si Albert API expose du caching sur `chat/completions` ; sinon, arbitrer l'infra d'inférence. vLLM implémente le caching nativement.
