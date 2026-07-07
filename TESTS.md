@@ -275,6 +275,17 @@ et le bloc marqueur a disparu.
 5. Vérifier l'email final = `{id}+{login}@users.noreply.github.com`.
 **Attendu :** pas de fallback « Introuvable automatiquement » avec un PAT valide. L'email dérivé est correct.
 
+## S37 — Polish UX sortie setup (T6.12-p) ☐
+**Préconditions :** dossier projet vierge (hors dépôt albert-code), `HOME` sandboxé.
+**Étapes :**
+1. Lancer `bash bin/albert-code setup --dry-run` (depuis le dossier projet).
+2. Observer la sortie Phase B : ASCII art (« Coder avec l'IA souveraine » / `____`) visible APRÈS le message garde-fou et AVANT « Phase B — Configuration ».
+3. Vérifier que `print_next_steps` contient exactement : « Prochaines étapes », « Lancer Albert Code : albert-code run », et une ligne « NB : Les skills sélectionnées se synchronisent automatiquement au démarrage » (sans flèche `→`).
+4. Vérifier l'ordre final : (éventuel statut GitHub) → « ✓ Projet configuré. » → (echo) → « Prochaines étapes » → « Lancer Albert Code : albert-code run ».
+5. Répéter le setup avec `CONTEXT7_API_KEY` ABSENTE de l'env et de `~/.zshenv`, répondre « oui » au MCP context7 → vérifier qu'un prompt `prompt_secret` est affiché (dry-run : « [dry-run] prompt: Colle ta clé API Context7 ») ; laisser vide → warning « Pas de clé Context7 — le MCP context7 s'affichera en erreur ».
+6. Répéter le setup avec `CONTEXT7_API_KEY` déjà dans l'env → vérifier qu'aucun prompt Context7 n'apparaît (le MCP est activé normalement).
+**Attendu :** (2) ASCII art présent au début de Phase B. (3) `print_next_steps` raccourci, plus de « Crée la VM de base », plus de « Ouvre la bulle isolée », plus de « Parle en français ». (4) statut GitHub AVANT le ✓ final, pas après. (5) clé demandée, warning si vide. (6) pas de prompt si clé déjà présente.
+
 ## S36 — `install_shim` réécrit un shim obsolète + sortie sync_skills propre (T6.12, T6.13) ☐
 **Préconditions :** dossier sandbox `/tmp/ac-test`, `install.sh` disponible.
 **Étapes (install_shim) :**

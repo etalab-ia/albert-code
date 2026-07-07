@@ -187,6 +187,8 @@ phase_b() {
     return 0
   fi
 
+  banner
+  echo
   title "Phase B — Configuration de ce projet"
   echo
 
@@ -205,6 +207,11 @@ phase_b() {
 
   compute_effective_vm_resources
   echo
+  if [ -n "${GH_TOKEN:-}" ] || file_contains "$ZSHENV" "GH_TOKEN"; then
+    ok "Push et PR GitHub configurés depuis la VM."
+  else
+    info "Push/PR GitHub non configuré — voir le § Push & PR depuis la VM du README."
+  fi
   ok "Projet configuré."
   echo
   print_next_steps
@@ -575,6 +582,15 @@ scaffold_opencode_json() {
     [ "$first" = false ] && content=$content','
     first=false
     content=$content'"context7":{"type":"remote","url":"https://mcp.context7.com/mcp","enabled":true,"headers":{"Authorization":"Bearer {env:CONTEXT7_API_KEY}"}}'
+    if [ -z "${CONTEXT7_API_KEY:-}" ] && ! file_contains "$ZSHENV" "CONTEXT7_API_KEY"; then
+      local _ctx7_key
+      _ctx7_key="$(prompt_secret "Colle ta clé API Context7 (https://context7.com/plans) — Entrée pour passer")"
+      if [ -n "$_ctx7_key" ]; then
+        persist_zshenv "CONTEXT7_API_KEY" "$_ctx7_key"
+      else
+        warn "Pas de clé Context7 — le MCP context7 s'affichera en erreur sans clé."
+      fi
+    fi
   fi
   if [ "$mcp_playwright" = "true" ]; then
     [ "$first" = false ] && content=$content','
@@ -727,20 +743,6 @@ scaffold_skills_selection() {
 # print_next_steps — affiche les prochaines étapes
 print_next_steps() {
   title "Prochaines étapes"
-  local step=1
-  if ! base_vm_exists; then
-    info "%s. Crée la VM de base (une seule fois) :  agent-vm setup --disk %s" "$step" "$AC_VM_DISK"
-    step=$((step + 1))
-  fi
-  info "%s. Ouvre la bulle isolée :  agent-vm --cpus %s --memory %s --disk %s opencode" \
-    "$step" "$EFF_CPUS" "$EFF_MEM" "$AC_VM_DISK"
-  step=$((step + 1))
-  info "%s. Parle en français à l'assistant." "$step"
-  echo
-  info "Les skills se synchronisent automatiquement au démarrage."
-  if [ -n "${GH_TOKEN:-}" ] || file_contains "$ZSHENV" "GH_TOKEN"; then
-    ok "Push et PR GitHub configurés depuis la VM."
-  else
-    info "Push/PR GitHub non configuré — voir le § Push & PR depuis la VM du README."
-  fi
+  info "Lancer Albert Code : albert-code run"
+  printf '  NB : Les skills sélectionnées se synchronisent automatiquement au démarrage\n'
 }
