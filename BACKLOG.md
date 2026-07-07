@@ -248,6 +248,30 @@ Config MCP de référence :
 
 ---
 
+## EPIC 7 — Absorption d'agent-vm dans le bundle (vendoring)
+
+### T7.1 🔴 Vendoriser agent-vm dans vendor/vm/ ✅ implémenté
+**But :** arrêter de cloner agent-vm depuis GitHub à chaque install. Copier les scripts au commit 6f20194 dans `vendor/vm/` du repo albert-code. Plus de clone, plus de dépendance réseau pour le moteur d'isolation.
+**DoD :** `vendor/vm/` contient `agent-vm.sh`, `agent-vm.setup.sh`, `runtime.example.sh`, `LICENSE` (MIT, attribution Sylvain Zimmer), `VERSION`. Le repo albert-code est auto-suffisant. `bin/albert-code` + `install.sh` : `AGENT_VM_DIR` pointe vers `$SELF_DIR/vendor/vm`, plus de `AGENT_VM_REPO`.
+
+### T7.2 🔴 Supprimer le shim et le nom « agent-vm » du PATH utilisateur ✅ implémenté
+**But :** agent-vm n'est plus une commande utilisateur. Albert Code l'appelle en interne via `_vm()` helper après l'avoir sourcé. Plus de shim `agent-vm` sur le PATH, plus de sourçage dans `~/.zshrc`.
+**DoD :** `install_agent_vm()` ne clone plus, ne pose plus de shim, ne modifie plus le rc. Vérifie seulement la présence de `vendor/vm/agent-vm.sh`. Nettoyage non-destructif : si un ancien shim ou sourçage traîne, propose de les retirer.
+
+### T7.3 🔴 VM de base OpenCode-only (--preinstall) ✅ implémenté
+**But :** `agent-vm setup` installait tous les harnais (Claude, Codex, Vibe, OpenCode). Albert Code n'a besoin que d'OpenCode. Passage de `--preinstall=node,gh,chromium,opencode`.
+**DoD :** `check_base_vm()` et `phase_run()` appellent `_vm setup --preinstall=node,gh,chromium,opencode`. Migration : si une VM de base multi-harnais existe, l'utilisateur peut la garder ou la refaire.
+
+### T7.4 🔴 chrome-devtools au niveau MCP, pas global VM ✅ implémenté
+**But :** agent-vm écrivait chrome-devtools dans le `opencode.json` global de la VM. Ce MCP doit être géré au niveau projet (opt-in au setup, avec flags headless).
+**DoD :** `vendor/vm/agent-vm.setup.sh` patché : le bloc OpenCode chrome-devtools est désactivé par défaut (`INSTALL_OPENCODE_MCP=0`). `config/opencode.template.json` et `scaffold_opencode_json` ajoutent `--headless=true --isolated=true` à la commande chrome-devtools.
+
+### T7.5 🟠 UI sans « agent-vm » pour l'utilisateur ✅ implémenté
+**But :** l'utilisateur ne voit plus « agent-vm » dans les messages, juste des références à « la VM isolée » / « le moteur de VM d'Albert Code ».
+**DoD :** tous les messages utilisateur dans `lib/phases.sh`, `lib/ui.sh`, `install.sh`, `README.md` sont reformulés. Le nom « agent-vm » reste dans les commentaires de code, la LICENSE et `vendor/vm/`.
+
+---
+
 ## EPIC 6 — Interface 3 verbes & simplification profils `<- AC-R014, AC-R015, AC-R016, AC-R017`
 
 ### T6.1 🔴 Commande `albert-code` à 3 verbes `<- AC-R014`

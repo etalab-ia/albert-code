@@ -11,6 +11,8 @@
 
 ---
 
+| AC-R035 | ⚙️ | 🟠 | Absorption d'agent-vm dans le bundle : le code est vendored sous `vendor/vm/`, plus de clone GitHub, plus de shim `agent-vm` sur le PATH. Installation OpenCode-only (`--preinstall=node,gh,chromium,opencode`). chrome-devtools MCP géré au niveau projet (pas global VM). | Chantier technique 2026-07-07 | ✅ traité | `BACKLOG.md` EPIC 7 · `TESTS.md` S39 |
+
 ## Registre
 
 | ID | Type | Sév | Retour | Source | Statut | Renvoi |

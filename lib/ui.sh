@@ -433,7 +433,7 @@ Ce script amorce ton poste (Phase A) puis pose le shim « albert-code ».
 Après installation, utilise :
 
   albert-code setup     → configurer un projet (Phase B)
-  albert-code run       → lancer la bulle agent-vm
+  albert-code run       → lancer la VM isolée
 
 Options :
   --dry-run   Affiche chaque action sans l'exécuter. Aucun fichier n'est écrit.
@@ -442,15 +442,15 @@ Options :
 Variables d'environnement (sandbox) :
   HOME                   Redirige ~/.zshenv, ~/.config/opencode, etc.
   OPENCODE_CONFIG_DIR     Dossier de config OpenCode (défaut: ~/.config/opencode).
-  AGENT_VM_DIR            Dossier d'installation d'agent-vm (défaut: \${XDG_DATA_HOME:-~/.local/share}/agent-vm).
-  SHIM_BIN_DIR            Dossier du shim agent-vm (défaut: sonde /opt/homebrew/bin,
+  AGENT_VM_DIR            Dossier du moteur de VM vendored (défaut: \$SELF_DIR/vendor/vm).
+  SHIM_BIN_DIR            Dossier du shim (défaut: sonde /opt/homebrew/bin,
                           /usr/local/bin puis \$PATH, sinon ~/.local/bin).
 
 Ressources VM (surchargeables) :
   AC_VM_CPUS              CPU alloués à la VM (défaut: 4).
   AC_VM_MEMORY             RAM en GiB allouée à la VM (défaut: 8).
-  AC_VM_DISK               Disque en GiB de la VM, fixé au 1er `agent-vm setup`,
-                          ne peut que grandir ensuite (défaut: 32).
+  AC_VM_DISK               Disque en GiB de la VM, fixé au 1er lancement,
+                           ne peut que grandir ensuite (défaut: 32).
                           Garde-fou : CPU/RAM effectifs jamais > ~moitié des
                           ressources hôte détectées (sysctl/nproc, lecture seule).
 USAGE
@@ -461,9 +461,9 @@ usage_albert_code() {
 Albert Code — assistant de code IA souverain
 
 Usage :
-  albert-code install   → 1ʳᵉ fois : bootstrap ton poste (Lima, agent-vm, clés)
+  albert-code install   → 1ʳᵉ fois : bootstrap ton poste (Lima, VM isolée, clés)
   albert-code setup     → configure un projet (AGENTS.md + opencode.json + skills)
-  albert-code run       → lance la bulle isolée agent-vm
+  albert-code run       → lance la VM isolée
   albert-code --help    → cette aide
 
 Options :
@@ -486,7 +486,7 @@ USAGE
 # usage_runtime : texte d'aide pour runtime/agent-vm.runtime.sh.
 usage_runtime() {
   cat <<'USAGE'
-Albert Code — runtime VM (agent-vm)
+Albert Code — runtime VM
 
 Usage: ./.agent-vm.runtime.sh [--dry-run] [--help]
 

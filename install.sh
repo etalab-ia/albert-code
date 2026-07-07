@@ -9,7 +9,7 @@
 #
 # Après installation, utilise :
 #   albert-code setup   → configurer un projet
-#   albert-code run     → lancer la bulle agent-vm
+#   albert-code run     → lancer la VM isolée
 #
 # Non-destructif : ne réinstalle rien déjà présent, n'écrase aucune config.
 # Compatible bash 3.2 (macOS).
@@ -30,6 +30,15 @@ while [ $# -gt 0 ]; do
   shift
 done
 
+# --- Ressources VM -----------------------------------------------------------
+AC_VM_CPUS="${AC_VM_CPUS:-4}"
+AC_VM_MEMORY="${AC_VM_MEMORY:-8}"
+AC_VM_DISK="${AC_VM_DISK:-32}"
+
+AGENT_VM_DIR="${AGENT_VM_DIR:-$SELF_DIR/vendor/vm}"
+RUNTIME_VM_FILE="$HOME/.agent-vm/runtime.sh"
+ZSHENV="$HOME/.zshenv"
+
 # Source les phases (contient phase_a, phase_b, phase_run)
 if [ -f "$LIB_DIR/phases.sh" ]; then
   source "$LIB_DIR/phases.sh"
@@ -37,16 +46,6 @@ else
   err "lib/phases.sh introuvable. Albert Code est-il complet ?"
   exit 1
 fi
-
-# --- Ressources VM -----------------------------------------------------------
-AC_VM_CPUS="${AC_VM_CPUS:-4}"
-AC_VM_MEMORY="${AC_VM_MEMORY:-8}"
-AC_VM_DISK="${AC_VM_DISK:-32}"
-
-AGENT_VM_DIR="${AGENT_VM_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/agent-vm}"
-AGENT_VM_REPO="https://github.com/sylvinus/agent-vm.git"
-RUNTIME_VM_FILE="$HOME/.agent-vm/runtime.sh"
-ZSHENV="$HOME/.zshenv"
 
 # --- Détection ancien installeur (albert-code() dans shell rc) -----------------
 _detect_old_albert_code_function() {
@@ -79,7 +78,7 @@ _remove_old_albert_code_function() {
 }
 
 # --- Exécution (shim + Phase A, rétrocompat) ----------------------------------
-# Le shim doit être posé AVANT la VM de base (fragile). Si agent-vm setup
+# Le shim doit être posé AVANT la VM de base (fragile). Si la création de VM
 # échoue (429, réseau, etc.), la commande `albert-code` est quand même
 # disponible pour un essai ultérieur. Cf. AC-R021.
 banner
@@ -106,4 +105,4 @@ echo
 title "C'est prêt. Bon code avec Albert."
 echo
 info "Utilise « albert-code setup » pour configurer un projet,"
-info "ou « albert-code run » pour lancer la bulle."
+info "ou « albert-code run » pour lancer la VM isolée."

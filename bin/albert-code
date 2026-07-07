@@ -13,18 +13,17 @@ set -euo pipefail
 SELF_DIR="$(cd "$(dirname "$(dirname "${BASH_SOURCE[0]}")")" && pwd)"
 LIB_DIR="$SELF_DIR/lib"
 
-source "$LIB_DIR/ui.sh"
-source "$LIB_DIR/phases.sh"
-
 # --- Ressources VM (surchargeables) -------------------------------------------
 AC_VM_CPUS="${AC_VM_CPUS:-4}"
 AC_VM_MEMORY="${AC_VM_MEMORY:-8}"
 AC_VM_DISK="${AC_VM_DISK:-32}"
 
-AGENT_VM_DIR="${AGENT_VM_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/agent-vm}"
-AGENT_VM_REPO="https://github.com/sylvinus/agent-vm.git"
+AGENT_VM_DIR="${AGENT_VM_DIR:-$SELF_DIR/vendor/vm}"
 RUNTIME_VM_FILE="$HOME/.agent-vm/runtime.sh"
 ZSHENV="$HOME/.zshenv"
+
+source "$LIB_DIR/ui.sh"
+source "$LIB_DIR/phases.sh"
 
 # --- Parsing des arguments -----------------------------------------------------
 while [ $# -gt 0 ]; do
