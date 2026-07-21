@@ -442,3 +442,92 @@ bash pur — zéro pipe, donc pas de course SIGPIPE.
 19. Vérifier que tous les changements visuels sont visibles en dry-run : art nouveau, compteur [1/4]..[4/4], récap.
 20. Vérifier que le spinner n'apparaît pas (pas d'animation).
 **Attendu :** (18) 4 chantiers visibles en dry-run. (19) spinner dégradé, pas de caracteres d'animation.
+
+---
+
+## S-ctx-1 — Install ne mentionne plus Context7 (T6.15, AC-R038)
+
+**Préconditions :** dossier sandbox `/tmp/ac-test-ctx`, `install.sh` ou `bin/albert-code install` disponible.
+
+**Étapes :**
+1. `HOME=/tmp/ac-test-ctx OPENCODE_CONFIG_DIR=/tmp/ac-test-ctx/.config/opencode AGENT_VM_DIR=vendor/vm bash bin/albert-code install --dry-run`
+2. `grep -ciE 'context7|Context7|ctx7'` sur la sortie (hors ensure_vm_runtime).
+3. Vérifier qu'aucun block A.4 (prompt clé Context7) n'apparaît dans la sortie.
+
+**Attendu :** l'install ne mentionne pas « Context7 », ne demande pas de clé. Les seules mentions
+sont dans `ensure_vm_runtime` (fallback vide), pas de prompt interactif.
+**Validé le :** 2026-07-21 — `bash bin/albert-code install --dry-run` sandboxé : aucune ligne
+« Context7 » ou « context7 » visible en Phase A. Le prompt de clé (A.4) a disparu.
+
+## S-ctx-2 — Setup Y context7 sans clé → clé demandée, persistée hôte + runtime.sh, visible VM (T6.15, AC-R038)
+
+**Préconditions :** aucun `CONTEXT7_API_KEY` dans l'environnement ni `~/.zshenv`.
+Dossier projet vierge `/tmp/ac-test-project-ctx`.
+
+**Étapes :**
+1. Lancer `bash bin/albert-code setup --dry-run` depuis le dossier projet.
+2. Répondre `o` à context7 (via dry-run ce n'est pas possible → on vérifie le code).
+3. Vérifier dans `scaffold_opencode_json` (lignes ~718-725) : si Y à context7 et clé absente,
+   `prompt_secret` est appelé, puis `persist_zshenv`.
+4. Vérifier dans `phase_b` : `ensure_vm_runtime` appelé après B.4 → la clé fraîchement persistée
+   dans `~/.zshenv` est lue par le fallback de `ensure_vm_runtime` (lignes 334-335) et écrite
+   dans `~/.agent-vm/runtime.sh` avec la vraie valeur (pas `''`).
+
+**Attendu :** la clé est demandée au setup (pas à l'install), persistée dans `~/.zshenv` ET dans
+`~/.agent-vm/runtime.sh`. Au `run` suivant, la VM voit `CONTEXT7_API_KEY` non vide.
+**Validé le :** 2026-07-21 — code inspecté : `scaffold_opencode_json` lignes 718-725 appelle
+`prompt_secret` + `persist_zshenv` ; `phase_b` ligne 188 appelle `ensure_vm_runtime` après
+persistance → le fallback (lignes 334-335) lit la clé depuis `~/.zshenv` et l'écrit dans runtime.sh.
+
+## S-ctx-3 — Setup N à context7 → aucune question de clé (T6.15, AC-R038)
+
+**Préconditions :** `CONTEXT7_API_KEY` absente.
+
+**Étapes :**
+1. Lancer `bash bin/albert-code setup --dry-run` depuis un dossier projet.
+2. Répondre `n` (ou dry-run) à la question context7 → `mcp_ctx7="false"`, le bloc conditionnel
+   (lignes ~715-730) n'est pas exécuté.
+3. Vérifier qu'aucun `prompt_secret` ni `persist_zshenv` pour `CONTEXT7_API_KEY` n'est appelé.
+
+**Attendu :** clé jamais demandée. Le MCP context7 n'est pas activé dans `opencode.json`.
+**Validé le :** 2026-07-21 — en dry-run, le `confirm` retourne `1` (non) → `mcp_ctx7` reste `false` → pas de prompt.
+
+## S-ctx-4 — Re-run setup sans duplication (T6.15, idempotence)
+
+**Préconditions :** `~/.agent-vm/runtime.sh` existe avec le bloc marqué (écrit par un premier
+`install` ou `setup`).
+
+**Étapes :**
+1. Lancer `bash bin/albert-code setup --dry-run` une 2e fois sur le même projet.
+2. Observer la sortie de `ensure_vm_runtime` : elle détecte le marqueur existant dans runtime.sh,
+   supprime l'ancien bloc et en réécrit un neuf avec les mêmes valeurs.
+3. Vérifier qu'aucune duplication de lignes n'apparaît dans runtime.sh après réécriture :
+   le bloc est remplacé (pas ajouté), GH_TOKEN et l'identité git sont lus depuis env/zshenv
+   et réécrits à l'identique.
+
+**Attendu :** pas de duplication dans runtime.sh. GH_TOKEN et AC_GIT_USER_* conservés.
+L'opération est idempotente.
+**Validé le :** 2026-07-21 — `ensure_vm_runtime` (lignes 336-345) : si `$AC_MARKER` trouvé,
+   1. sed supprime du marqueur-début à marqueur-fin (ligne 373),
+   2. puis le bloc est réécrit (lignes 387-430) avec les mêmes valeurs lues depuis env/zshenv.
+   Pas de duplication possible.
+
+## S-ctx-5 — Dry-run : explications avant chaque question MCP (T6.16, AC-R039)
+
+**Préconditions :** dossier projet vierge `/tmp/ac-test-project-ctx`.
+
+**Étapes :**
+1. `DRY_RUN=1 bash bin/albert-code setup --dry-run` depuis le dossier projet.
+2. Observer les lignes avant chaque `confirm` MCP :
+   - data.gouv : `→ MCP qui permet à l'agent d'interroger les données publiques de` puis
+     `→ data.gouv.fr (catalogue, datasets, API tabulaire), en lecture.` puis le confirm.
+   - context7 : explication doc à jour des librairies + clé gratuite + demandée après.
+   - playwright : explication navigateur headless.
+   - chrome-devtools : explication debug DOM/console/réseau/perf.
+3. Vérifier que chaque explain est un `info` (préfixe `→`), pas un `title` ni du texte brut.
+4. Vérifier que les confirms sont courts : `Installer le connecteur <nom> ?`
+
+**Attendu :** chaque MCP a ≥1 ligne d'explication avant son Y/n. Les libellés sont textuellement
+ceux du ticket T6.16. Aucune ligne ne dépasse 80 colonnes. Les accents sont corrects.
+**Validé le :** 2026-07-21 — dry-run confirme les 4 paires explication+confirm. Textes correspondant
+au ticket. Aucun tiret cadratin. `bash -n lib/phases.sh` OK.
