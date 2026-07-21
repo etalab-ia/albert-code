@@ -427,6 +427,20 @@ ensure_vm_runtime() {
       apply_append "export AC_GIT_USER_EMAIL dans runtime.sh" "$RUNTIME_VM_FILE" \
         "export AC_GIT_USER_EMAIL='${safe_email}'"
     fi
+    # T8.3: Garde-fou OpenCode --auto execute dans la VM au boot
+    # Si opencode est trop ancien pour --auto, upgrade auto.
+    apply_append "garde-fou OpenCode --auto (T8.3)" "$RUNTIME_VM_FILE" \
+      "  _oc_help=\"\$(opencode --help 2>&1 || true)\""
+    apply_append "garde-fou OpenCode --auto (T8.3)" "$RUNTIME_VM_FILE" \
+      "  case \"\$_oc_help\" in"
+    apply_append "garde-fou OpenCode --auto (T8.3)" "$RUNTIME_VM_FILE" \
+      "    *--auto*) : ;;"
+    apply_append "garde-fou OpenCode --auto (T8.3)" "$RUNTIME_VM_FILE" \
+      "    *) echo \"OpenCode trop ancien pour --auto - mise a jour...\"; opencode upgrade || true ;;"
+    apply_append "garde-fou OpenCode --auto (T8.3)" "$RUNTIME_VM_FILE" \
+      "  esac"
+    apply_append "garde-fou OpenCode --auto (T8.3)" "$RUNTIME_VM_FILE" \
+      "  unset _oc_help"
     apply_append "albert-code block end" "$RUNTIME_VM_FILE" "$AC_MARKER_END"
   fi
 
@@ -682,9 +696,43 @@ scaffold_opencode_json() {
     if grep -q '"albert"' "$dest" 2>/dev/null; then
       warn "%s existe déjà — conservé (non écrasé)" "$dest"
     else
-      # T1.6 : fichier existant sans provider Albert → footgun silencieux.
-      warn "%s existe déjà mais ne déclare pas le provider Albert — conservé (non écrasé)." "$dest"
-      info "Albert ne sera pas câblé dans ce projet. Ajoute le bloc provider \"albert\" (voir README), ou renomme/supprime ce fichier puis relance albert-code setup."
+      # T8.2 (generalise T1.6/T7.7) : tenter le merge du provider albert
+      if command -v jq >/dev/null 2>&1; then
+        warn "%s existe déjà sans provider Albert — proposition de merge." "$dest"
+        info "Le provider Albert (et model/small_model) peuvent etre ajoutes sans ecraser"
+        info "tes MCP, permissions ou autres providers (ex. Scaleway)."
+        if confirm "Ajouter le provider Albert dans opencode.json ?"; then
+          local _bak="${dest}.bak"
+          apply_cp "sauvegarder ${dest} vers ${_bak}" "$dest" "$_bak"
+          if [ "$DRY_RUN" -eq 1 ]; then
+            info "[dry-run] merge du provider albert dans ${dest}"
+          # jq : ajoute provider.albert + model + small_model, preserve le reste.
+          # Le message de succes n'est affiche que si le merge a reellement abouti.
+          elif jq '.provider.albert = {
+              "npm": "@ai-sdk/openai-compatible",
+              "name": "Albert API (État)",
+              "options": {"baseURL": "https://albert.api.etalab.gouv.fr/v1", "apiKey": "{env:ALBERT_API_KEY}"},
+              "models": {
+                "mistralai/Mistral-Medium-3.5-128B": {"name": "Mistral Medium 3.5 (Albert)", "limit": {"context": 131072, "output": 65536}},
+                "deepseek-ai/DeepSeek-V4-Flash": {"name": "DeepSeek V4 Flash (Albert)", "limit": {"context": 393216, "output": 65536}},
+                "Qwen/Qwen3.6-27B": {"name": "Qwen 3.6 27B (Albert)", "limit": {"context": 262144, "output": 65536}}
+              }
+            } | .model = "albert/mistralai/Mistral-Medium-3.5-128B" | .small_model = "albert/deepseek-ai/DeepSeek-V4-Flash"' "$dest" > "${dest}.tmp" 2>/dev/null && mv "${dest}.tmp" "$dest"; then
+            ok "Provider Albert ajoute dans ${dest}. Sauvegarde dans ${_bak}"
+          else
+            warn "Echec du merge jq (JSON invalide ? ex. commentaires) - fichier restaure, Albert non cable."
+            mv "$_bak" "$dest" 2>/dev/null || true
+            info "Ajoute le bloc provider \"albert\" manuellement (voir README)."
+          fi
+        else
+          info "Provider Albert non ajoute. Utilise albert-code setup plus tard ou ajoute-le manuellement."
+        fi
+      else
+        # Fallback T7.7 : jq absent, simple avertissement
+        warn "%s existe déjà mais ne déclare pas le provider Albert — conservé (non écrasé)." "$dest"
+        info "Albert ne sera pas câblé dans ce projet. Ajoute le bloc provider \"albert\" (voir README), ou renomme/supprime ce fichier puis relance albert-code setup."
+        info "Astuce : installe jq pour que albert-code puisse merger automatiquement."
+      fi
     fi
     return 0
   fi

@@ -557,3 +557,62 @@ L'opération est idempotente.
 ceux du ticket T6.16. Aucune ligne ne dépasse 80 colonnes. Les accents sont corrects.
 **Validé le :** 2026-07-21 — dry-run confirme les 4 paires explication+confirm. Textes correspondant
 au ticket. Aucun tiret cadratin. `bash -n lib/phases.sh` OK.
+
+---
+
+## S46 — Merge provider Albert dans opencode.json existant (T8.2)
+
+**Préconditions :** `jq` installé sur le PATH ; un dossier projet avec un `opencode.json` contenant
+un provider non-Albert (ex. Scaleway) et des MCP + permissions, sans `"albert"`.
+
+**Étapes :**
+1. Créer un fichier `opencode.json` de test avec un provider Scaleway :
+   ```json
+   {
+     "provider": { "scaleway": { "npm": "@ai-sdk/scaleway", "name": "Scaleway", "options": { "baseURL": "https://api.scaleway.ai/v1", "apiKey": "{env:SCW_API_KEY}" } } },
+     "mcp": { "data-gouv": { "type": "remote", "url": "https://mcp.data.gouv.fr/mcp", "enabled": true } },
+     "permission": { "edit": "allow", "bash": {".*":"allow"} }
+   }
+   ```
+2. Lancer `bash bin/albert-code setup --dry-run` dans ce dossier.
+3. Observer la sortie : proposition de merge, dry-run affiche `[dry-run] merge du provider albert dans opencode.json`.
+4. Relancer en réel (`DRY_RUN=0` avec un HOME sandboxé) et répondre `o` au confirm.
+5. Vérifier le fichier résultant :
+   - Provider `albert` présent avec ses 3 modèles
+   - Provider `scaleway` toujours présent (non écrasé)
+   - MCP `data-gouv` toujours présent
+   - La sauvegarde `.bak` existe et contient l'original
+6. Relancer le setup : le fichier est détecté comme ayant `"albert"` → message « conservé (non écrasé) ».
+
+**Attendu :** (3) proposition affichée. (4) jq merge réussi. (5) les 3 vérifications passent — albert ajouté, scaleway intact, MCP intact, .bak présent. (6) idempotent, pas de duplication. Sans `jq` → avertissement T7.7 inchangé + info « installe jq ».
+
+## S47 — Garde-fou OpenCode --auto dans la VM (T8.3, AC-R041)
+
+**Préconditions :** `~/.agent-vm/runtime.sh` existe (post-install) ; une VM avec une version
+ancienne d'OpenCode (ex. 1.2.9) ne supportant pas `--auto`.
+
+**Étapes (validation du code injecté) :**
+1. Lancer `bash bin/albert-code install --dry-run` (ou setup) → le bloc marqué de `ensure_vm_runtime`
+   est réécrit avec le garde-fou T8.3.
+2. Inspecter `~/.agent-vm/runtime.sh` (ou `/tmp/ac-test/.agent-vm/runtime.sh` sandboxé) :
+   le bloc `$AC_MARKER … $AC_MARKER_END` contient les lignes :
+   ```
+     _oc_help="$(opencode --help 2>&1 || true)"
+     case "$_oc_help" in
+       *--auto*) : ;;
+       *) echo "OpenCode trop ancien pour --auto - mise a jour..."; opencode upgrade || true ;;
+     esac
+     unset _oc_help
+   ```
+3. Vérifier qu'elles sont placées APRÈS les exports et AVANT `$AC_MARKER_END`.
+
+**Validation réelle (VM) :**
+4. Démarrer une VM où opencode est une ancienne version (simulable en renommant `opencode` ou
+   en installant une version antérieure) → au boot, le runtime `~/.agent-vm/runtime.sh` s'exécute :
+   `opencode --help` ne contient pas `--auto` → le garde-fou déclenche `opencode upgrade` → après
+   upgrade, `opencode --auto` fonctionne → le TUI s'affiche au lieu du help.
+5. Même VM avec opencode à jour → le `case` matche `--auto` → no-op, pas d'upgrade.
+6. Vérifier que le garde-fou est en `|| true` : un échec d'upgrade ne casse pas le boot.
+
+**Attendu :** (2)(3) le code injecté est correctement placé. (4) opencode 1.2.9 → upgrade auto → TUI.
+(5) opencode à jour → no-op. (6) un échec (hors-ligne, etc.) n'empêche pas le runtime de continuer.

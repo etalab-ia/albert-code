@@ -480,6 +480,48 @@ Option : ajouter un paramètre `install_shim` pour mode "exec" vs "source", ou d
 **Validé le :** 2026-07-21 — dry-run Phase A sans mention Context7 (S-ctx-1). Code inspecté pour persistence zshenv + runtime.sh au setup (S-ctx-2). Réponse N → pas de prompt (S-ctx-3). Idempotence ensure_vm_runtime (S-ctx-4). `bash -n lib/phases.sh` OK.
 
 ### T6.16 🟡 Une ligne d'explication avant chaque question d'option du setup `<- AC-R039` ✅ implémenté
+
+---
+
+## EPIC 8 — Rafraîchir les fichiers projet figés au setup
+
+**Problème de fond :** Au `albert-code setup`, les fichiers posés dans le projet (AGENTS.md, opencode.json, .agent-vm.runtime.sh) sont **conservés** s'ils existent — les évolutions du template ne redescendent **jamais** aux projets déjà configurés. Symptômes déjà vus : opencode.json conservé sans provider Albert (T1.6/T7.7), runtime projet ancien + OpenCode 1.2.9 dans la VM → `opencode --auto` inconnu → écran de help au lieu du TUI (AC-R041).
+
+**Fait de code clé :** Le SEUL fichier rafraîchi à l'existant est le runtime USER `~/.agent-vm/runtime.sh` : son bloc marqué (`$AC_MARKER … $AC_MARKER_END`) est réécrit par `ensure_vm_runtime()` à chaque phase A ET B. Toute logique évolutive doit passer par là.
+
+### T8.1 🟡 (doc) Convention zone gérée vs fichiers figés
+
+**But :** Documenter dans ce ticket l'architecture de rafraîchissement du bundle, pour que tout contributeur sache où et comment ajouter une logique évolutive.
+
+**Architecture de rafraîchissement :**
+| Fichier | Rafraîchi ? | Mécanisme | Pourquoi |
+|---|---|---|---|
+| `~/.agent-vm/runtime.sh` bloc marqué | ✅ Oui, à chaque phase A ET B | `ensure_vm_runtime()` supprime le bloc `$AC_MARKER … $AC_MARKER_END` et le réécrit | Clés API + GH_TOKEN doivent être à jour au boot VM |
+| `./opencode.json` | 🟡 Merge conditionnel (T8.2) | Si `jq` présent → merge provider.albert dans existant, sinon avertissement | Provider Albert doit pouvoir être ajouté sans écraser les MCP/permissions |
+| `./AGENTS.md` | ❌ Non (jamais écrasé) | `copy_template()` → non-destructif pur | Le projet peut avoir un AGENTS.md personnalisé |
+| `./.agent-vm.runtime.sh` (projet) | ❌ Non (jamais écrasé) | `copy_template()` → non-destructif pur | Idem, fichier figé chez l'existant |
+| `vendor/vm/` (moteur VM) | ❌ Non (vendored figé) | Versionné dans le repo albert-code | Mis à jour par `git pull` du dépôt albert-code |
+| `templates/` | ❌ Non (versionnés) | Versionné dans le repo | Utilisés uniquement au premier `setup` |
+
+**DoD :** cette documentation est présente dans `BACKLOG.md`.
+
+### T8.2 🟠 opencode.json — réparer, pas seulement avertir (généralise T1.6/T7.7)
+
+**But :** Dans `scaffold_opencode_json()`, branche « fichier existe sans albert » (ajoutée par T7.7) : si `jq` est présent, proposer (confirm) puis **merger** `provider.albert` + `model` + `small_model` du template dans l'`opencode.json` existant, sans toucher les autres clés (MCP, permissions, autres providers). Sauvegarder l'original (`.bak`). Si `jq` absent → garder l'avertissement T7.7 (fallback). Non-destructif.
+
+**DoD :** `opencode.json` perso avec provider scaleway → après setup, provider albert ajouté ET scaleway préservé. → `TESTS.md` S46.
+
+### T8.3 🟠 Garde-fou version OpenCode dans le bloc marqué du runtime USER (absorbe AC-R041)
+
+**But :** `ensure_vm_runtime()` écrit un garde-fou exécuté dans la VM au boot, à l'intérieur du bloc marqué `~/.agent-vm/runtime.sh` (après les exports, avant `$AC_MARKER_END`). Logique : capture `opencode --help`, si `--auto` absent → upgrade auto.
+
+**DoD :** VM avec opencode trop vieux → au boot, upgrade auto → `run` ouvre le TUI, plus de help. → `TESTS.md` S47 `<- AC-R041`.
+
+### T8.4 🟡 (OPTION, nice-to-have) Verbe `albert-code update` pour rafraîchir un projet existant
+
+**But :** Proposer un verbe simple pour rafraîchir un projet existant sans repasser tout le setup interactif. `albert-code update` (ou `--update`) exécute les logiques de rafraîchissement (T8.2 merge opencode.json + T8.3 garde-fou runtime) sans les questions MCP/skills. Non implémenté dans cette EPIC, ouvert pour le futur.
+
+**DoD :** ticket documenté mais pas implémenté.
 **But :** chaque option d'installation doit être compréhensible sans contexte préalable. Format cible : « Installer Context7 ? Context7 est un MCP qui permet de [...]. Y/n ».
 
 **Tâches :**
