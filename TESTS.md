@@ -335,6 +335,58 @@ et le bloc marqueur a disparu.
 4. Coller un token valide.
 **Attendu :** le script dérive l'identité, affiche `✓ Compte GitHub : <login> <<id>+<login>@users.noreply.github.com>` et persiste. Pas de fallback manuel, pas de prompts nom/email.
 
+## S41 — VM présente → rattachement sans prompt ressource (T7.6, AC-R037, correctif v2)
+
+**Préconditions :** VM projet `agent-vm-<projet>-<hash>` déjà présente dans `limactl list -q`
+(Running **ou** Stopped). `bin/albert-code run` exécutable depuis un dossier projet.
+
+**Étapes :**
+1. S'assurer que la VM projet est listée : `limactl list -q | grep 'agent-vm-<projet>'`.
+2. Lancer `bash bin/albert-code run --dry-run`.
+3. Observer la sortie.
+
+**Attendu :** la sortie contient `✓ lancer la VM isolée : _vm opencode` **sans** `--cpus`,
+`--memory`, ni `--disk`. Le message `VM déjà créée — rattachement sans re-réglage des ressources.`
+est affiché. Aucun prompt « must be stopped to apply new resource settings » ne provient
+d'agent-vm — car la condition testée est **présence** (pas `Running`), et le chemin de décision
+est capture-first + `case` bash pur (zéro pipe, immunisé SIGPIPE/pipefail). Exit 0.
+**Validation réelle** (le bug est une course SIGPIPE, pas reproductible à froid) :
+`albert-code run` sur la VM déjà Running ne doit **plus** afficher le prompt « must be stopped ».
+Si le prompt réapparaît, tracer avec `bash -x bin/albert-code run 2>/tmp/tr.txt` → vérifier
+que la branche `*)` (flags) n'est pas prise.
+
+## S42 — VM inexistante → flags ressources passés (T7.6, AC-R037, correctif v2)
+
+**Préconditions :** VM projet absente de `limactl list -q` (jamais créée pour ce projet).
+`bin/albert-code run` exécutable depuis un dossier projet.
+
+**Étapes :**
+1. Confirmer que la VM projet n'apparaît pas : `limactl list -q | grep -c 'agent-vm-<projet>'` → 0.
+2. Lancer `bash bin/albert-code run --dry-run`.
+3. Observer la sortie.
+
+**Attendu :** la sortie contient
+`✓ lancer la VM isolée : _vm --cpus "${EFF_CPUS}" --memory "${EFF_MEM}" --disk "${AC_VM_DISK}" opencode`
+avec les valeurs calculées de `EFF_CPUS`, `EFF_MEM`, `AC_VM_DISK`. Pas de message
+« VM déjà créée ». Comportement identique à celui d'avant T7.6.
+
+## S43 — `base_vm_exists` détecte la VM de base sans faux négatif (T7.6, AC-R037, même racine SIGPIPE)
+
+**Préconditions :** VM de base `agent-vm-base` présente dans `limactl list -q` (Running ou Stopped).
+
+**Étapes :**
+1. Vérifier que la base est listée : `limactl list -q | grep -c '^agent-vm-base$'` → 1.
+2. Exécuter la fonction dans le contexte réel du binaire, en boucle pour attraper la course :
+   ```sh
+   source lib/phases.sh 2>/dev/null   # ou reproduire base_vm_exists()
+   r=""; for i in $(seq 20); do ( set -euo pipefail; base_vm_exists ) && r="${r}T" || r="${r}F"; done; echo "$r"
+   ```
+
+**Attendu :** `TTTTTTTTTTTTTTTTTTTT` (20/20). Aucun `F`. Avant correctif (`limactl list -q | grep -q`),
+un `F` intermittent sous `set -o pipefail` reproposait la création de la VM de base à chaque `run`.
+Le correctif capture d'abord (`_list="$(limactl list -q 2>/dev/null || true)"`) puis teste par `case`
+bash pur — zéro pipe, donc pas de course SIGPIPE.
+
 **S40e — Fallback quand token invalide au 3e essai**
 **Préconditions :** `install.sh` disponible, token invalide.
 **Étapes :**
