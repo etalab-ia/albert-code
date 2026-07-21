@@ -318,6 +318,8 @@ Config MCP de référence :
 
 **DoD :** VM projet **présente** (Running **ou** Stopped) → `albert-code run` n'affiche plus « must be stopped » et lance OpenCode directement (message « rattachement »). VM **inexistante** (1er run du projet) → flags passés, la VM projet est créée dimensionnée. Validation en run **réel** (le bug ne se voit pas en test isolé à froid : course SIGPIPE, cf. post-mortem). → `TESTS.md` S41 (VM running → plus de prompt, message rattachement) + S42 (VM inexistante → flags passés, création OK).
 
+**Extension (même racine SIGPIPE) :** `base_vm_exists()` portait le même anti-pattern `limactl list -q | grep -q '^agent-vm-base$'`, et il est appelé par `phase_run`/`check_base_vm` en amont → un faux négatif reproposait la création de la VM de base à chaque `run` (symptôme observé chez un bêta-testeur). Aligné sur le même correctif capture-first + `case` bash pur. → `TESTS.md` S43.
+
 ---
 
 ## EPIC 6 — Interface 3 verbes & simplification profils `<- AC-R014, AC-R015, AC-R016, AC-R017`

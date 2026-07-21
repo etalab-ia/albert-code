@@ -270,8 +270,19 @@ check_base_vm() {
 }
 
 # base_vm_exists — 0 si la VM de base existe
+# Détection sans pipe : `limactl list -q | grep -q` est un faux négatif
+# intermittent sous set -o pipefail (course SIGPIPE, cf. T7.6 post-mortem) —
+# grep -q ferme le pipe, limactl prend un SIGPIPE, pipefail fait échouer le tout.
+# base_vm_exists est appelé dans phase_run/check_base_vm : un faux négatif
+# reproposait la création de la VM de base à chaque run. Capture d'abord, case pur.
 base_vm_exists() {
-  command -v limactl >/dev/null 2>&1 && limactl list -q 2>/dev/null | grep -q '^agent-vm-base$'
+  command -v limactl >/dev/null 2>&1 || return 1
+  local _list
+  _list="$(limactl list -q 2>/dev/null || true)"
+  case $'\n'"$_list"$'\n' in
+    *$'\n'agent-vm-base$'\n'*) return 0 ;;
+    *) return 1 ;;
+  esac
 }
 
 # install_agent_vm — vérifie que le bundle vendored est présent (plus de clone).

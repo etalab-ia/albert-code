@@ -370,6 +370,23 @@ que la branche `*)` (flags) n'est pas prise.
 avec les valeurs calculées de `EFF_CPUS`, `EFF_MEM`, `AC_VM_DISK`. Pas de message
 « VM déjà créée ». Comportement identique à celui d'avant T7.6.
 
+## S43 — `base_vm_exists` détecte la VM de base sans faux négatif (T7.6, AC-R037, même racine SIGPIPE)
+
+**Préconditions :** VM de base `agent-vm-base` présente dans `limactl list -q` (Running ou Stopped).
+
+**Étapes :**
+1. Vérifier que la base est listée : `limactl list -q | grep -c '^agent-vm-base$'` → 1.
+2. Exécuter la fonction dans le contexte réel du binaire, en boucle pour attraper la course :
+   ```sh
+   source lib/phases.sh 2>/dev/null   # ou reproduire base_vm_exists()
+   r=""; for i in $(seq 20); do ( set -euo pipefail; base_vm_exists ) && r="${r}T" || r="${r}F"; done; echo "$r"
+   ```
+
+**Attendu :** `TTTTTTTTTTTTTTTTTTTT` (20/20). Aucun `F`. Avant correctif (`limactl list -q | grep -q`),
+un `F` intermittent sous `set -o pipefail` reproposait la création de la VM de base à chaque `run`.
+Le correctif capture d'abord (`_list="$(limactl list -q 2>/dev/null || true)"`) puis teste par `case`
+bash pur — zéro pipe, donc pas de course SIGPIPE.
+
 **S40e — Fallback quand token invalide au 3e essai**
 **Préconditions :** `install.sh` disponible, token invalide.
 **Étapes :**
