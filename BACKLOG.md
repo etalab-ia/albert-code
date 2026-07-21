@@ -453,3 +453,33 @@ Option : ajouter un paramètre `install_shim` pour mode "exec" vs "source", ou d
 - Dry-run : spinner dégradé (pas d'animation), récap affiché quand même
 
 **DoD :** art <=76 col, spinner dégrade en non-TTY/dry-run, compteur [1/4]..[4/4] visible, récap affiche les bons choix. → `TESTS.md` S38.
+
+### T6.15 🟠 Clé Context7 : plus jamais à l'install, seulement au setup si le MCP est choisi `<- AC-R038` ✅ implémenté
+**But :** `albert-code install` (phase A.4) demande la clé Context7 avant toute explication et avant que l'utilisateur ait choisi de brancher ce MCP (onboarding Adrien 21/07). La clé ne doit être demandée qu'au `setup`, après un Y à la question context7.
+
+**Tâches :**
+1. Supprimer le bloc A.4 de `phase_a()` (`lib/phases.sh:103-116`) : plus aucun prompt ni mention Context7 à l'install. Ne plus appeler `persist_zshenv "CONTEXT7_API_KEY"` en phase A.
+2. Conserver le chemin setup existant (`scaffold_opencode_json`, `lib/phases.sh:707-715`) comme unique point de collecte : si Y à context7 et clé absente (env + `~/.zshenv`), `prompt_secret` + `persist_zshenv`.
+3. Propager la clé saisie au setup vers la VM : appeler `ensure_vm_runtime` en fin de `phase_b()` (au moins quand une clé vient d'être persistée) pour régénérer le bloc de `~/.agent-vm/runtime.sh`. Aujourd'hui ce bloc n'est écrit qu'en phase A : une clé saisie au setup n'arrive jamais dans la VM (`runtime.sh` garde `export CONTEXT7_API_KEY=''`).
+4. `ensure_vm_runtime` est idempotent (remplacement du bloc marqué, `lib/phases.sh:356-371`) : vérifier en dry-run qu'un re-run en phase B ne duplique rien et n'écrase pas GH_TOKEN / identité git déjà posés.
+
+**DoD :** `albert-code install` ne mentionne plus Context7. `albert-code setup` avec Y à context7 et sans clé demande la clé et la persiste (zshenv hôte + runtime.sh) ; au `run` suivant, `echo $CONTEXT7_API_KEY` dans la VM est non vide. N à context7 : aucune question de clé, ni à l'install ni au setup. → `TESTS.md` S-ctx-1, S-ctx-2, S-ctx-3, S-ctx-4.
+
+**Validé le :** 2026-07-21 — dry-run Phase A sans mention Context7 (S-ctx-1). Code inspecté pour persistence zshenv + runtime.sh au setup (S-ctx-2). Réponse N → pas de prompt (S-ctx-3). Idempotence ensure_vm_runtime (S-ctx-4). `bash -n lib/phases.sh` OK.
+
+### T6.16 🟡 Une ligne d'explication avant chaque question d'option du setup `<- AC-R039` ✅ implémenté
+**But :** chaque option d'installation doit être compréhensible sans contexte préalable. Format cible : « Installer Context7 ? Context7 est un MCP qui permet de [...]. Y/n ».
+
+**Tâches :**
+1. Dans `scaffold_opencode_json` (`lib/phases.sh:672-688`) : avant chaque `confirm`, une ligne `info` qui explique le connecteur (ce que l'agent saura faire en plus), puis un `confirm` court « Installer <nom> ? » :
+   - data.gouv : « MCP qui permet à l'agent d'interroger les données publiques de data.gouv.fr (catalogue, datasets, API tabulaire), en lecture. »
+   - context7 : « MCP qui donne à l'agent la documentation à jour des librairies et frameworks pendant qu'il code. Clé gratuite (https://context7.com/plans), demandée juste après si tu acceptes. »
+   - playwright : « MCP qui permet à l'agent de piloter un navigateur headless dans la VM (ouvrir une page, cliquer, tester une UI). »
+   - chrome-devtools : « MCP de debug navigateur : DOM, console, requêtes réseau, performance. »
+2. Vérifier que les skills du setup suivent le même pattern (une ligne d'objectif avant le Y/n) et harmoniser si besoin.
+
+**Règles :** accents corrects, pas de tiret cadratin, bash 3.2, <=80 colonnes par ligne affichée.
+
+**DoD :** en dry-run, chaque question MCP est précédée d'une ligne d'explication ; les questions sont de la forme « Installer <nom> ? ». → `TESTS.md` S-ctx-5.
+
+**Validé le :** 2026-07-21 — dry-run setup affiche les 4 paires explication+confirm avec les libellés exacts du ticket. Skills déjà avec description inline dans le confirm. `bash -n lib/phases.sh` OK.

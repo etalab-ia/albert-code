@@ -46,8 +46,8 @@ Après installation, tu disposes de la commande `albert-code` à 3 verbes :
 
 | Verbe | Action |
 |---|---|
-| `albert-code install` | **1ʳᵉ fois** : bootstrap le poste (Lima, VM isolée, clés, skills). |
-| `albert-code setup` | **Par projet** : configure un projet (AGENTS.md + opencode.json + choix skills/MCP). |
+| `albert-code install` | **1ʳᵉ fois** : bootstrap le poste (Lima, VM isolée, clé Albert, skills). |
+| `albert-code setup` | **Par projet, obligatoire avant le 1ᵉʳ `run`** : configure le projet (AGENTS.md + opencode.json + choix skills/MCP). |
 | `albert-code run` | **Lancement** : crée la VM de base si absente, puis ouvre la VM isolée. |
 
 `install.sh` est **idempotent** et **non-destructif** : il amorce le poste (Phase A) et pose le shim `albert-code`. Ensuite, c'est `albert-code setup` puis `albert-code run`.
@@ -62,6 +62,8 @@ mkdir -p ~/mon-projet && cd ~/mon-projet
 albert-code setup                                        # configure le projet (AGENTS.md + MCP + skills)
 albert-code run                                          # ouvre la bulle isolée + OpenCode
 ```
+
+> ⚠️ **L'ordre compte : `install` (une fois), puis `setup` (une fois par projet), puis `run`.** C'est `setup` qui pose l'`opencode.json` (provider Albert), les MCP et les skills du projet. Un `run` sans `setup` ouvre OpenCode **non connecté à Albert** (pas de `/models`, ni MCP, ni skills) : si c'est ton cas, quitte, fais `albert-code setup`, relance `albert-code run`.
 
 Dans la bulle, l'agent tourne en mode autonome (`--dangerously-skip-permissions`), sûr parce que tout est confiné dans la VM. Tu peux lui parler en français.
 
@@ -109,6 +111,33 @@ Par défaut, l'agent peut **committer** dans la VM mais **ni pusher ni ouvrir de
 
 > Le token vit dans une bulle exposée au prompt-injection : garde-le **fine-grained, scopé, révocable**, et **relis chaque PR avant merge**. Un contenu malveillant pourrait pousser l'agent à en abuser dans la limite de sa portée — d'où les permissions minimales.
 
+## Qu'est-ce qu'une skill ? Qu'est-ce qu'un MCP ?
+
+Au `setup`, Albert Code te propose des **skills** et des **MCP**, à la carte : une question Y/n par brique, avec une ligne d'explication. Rien n'est imposé, rien n'est appliqué dans ton dos.
+
+### Qu'est-ce qu'une skill ?
+
+Une skill est un **mode d'emploi que l'agent charge à la demande** : un dossier d'instructions, de conventions et d'exemples pour une tâche précise. Exemples embarqués ([Skills de l'État](https://github.com/etalab-ia/skills)) : appliquer le DSFR, vérifier l'accessibilité RGAA, respecter les règles de sécurité ANSSI, utiliser les API data.gouv.
+
+- **Choisie au `setup`** : chaque skill est proposée en Y/n avec son objectif. La sélection est propre au projet (`.albert-code/skills.txt`).
+- **Jamais appliquée automatiquement** : cocher la skill DSFR ne « DSFR-ise » pas ton projet. Une skill est une capacité en plus, que l'agent mobilise quand tu le lui demandes (« applique le DSFR à cette page ») ou quand la tâche s'y prête clairement. Ton code n'est pas modifié tant que tu ne demandes rien.
+- **Réversible** : relance `albert-code setup` (ou édite `.albert-code/skills.txt`) pour changer la sélection.
+
+### Qu'est-ce qu'un MCP ?
+
+MCP (**Model Context Protocol**) est un standard qui **branche l'agent sur un outil ou un service externe**. Sans MCP, l'agent sait lire/écrire des fichiers et lancer des commandes dans la VM ; chaque MCP lui ajoute un accès structuré à une source ou un outil.
+
+| MCP | Ce que l'agent sait faire en plus | Clé |
+|---|---|---|
+| `data-gouv` | Interroger les données publiques de data.gouv.fr (catalogue, datasets, API tabulaire), en lecture. | aucune |
+| `context7` | Lire la documentation à jour des librairies et frameworks pendant qu'il code. | gratuite ([context7.com/plans](https://context7.com/plans)), demandée au `setup` si tu choisis ce MCP |
+| `playwright` | Piloter un navigateur headless dans la VM : ouvrir une page, cliquer, tester une UI. | aucune |
+| `chrome-devtools` | Débugger le navigateur : DOM, console, requêtes réseau, performance. | aucune |
+
+- **Choisis au `setup`** : seuls les MCP que tu acceptes sont écrits dans l'`opencode.json` du projet.
+- **La clé Context7 n'est demandée que si tu choisis ce MCP**, au moment du `setup` (jamais à l'`install`).
+- Même un MCP « qui agit » (Playwright) reste confiné à la bulle : c'est l'intérêt de la VM.
+
 ## Sécurité
 
 - **Isolation noyau (Lima)** : l'agent n'a aucun accès à tes clés SSH, credentials, cookies ou sessions de l'hôte. La VM est jetable.
@@ -129,7 +158,7 @@ Par défaut, l'agent peut **committer** dans la VM mais **ni pusher ni ouvrir de
   Pour changer le modèle par défaut d'un projet, édite `model` dans son `opencode.json`.
 - **Config** : `opencode.json` de **portée projet** (jamais le global de l'utilisateur, qui peut avoir d'autres providers).
 - **Skills** : `etalab-ia/skills` cloné dans un cache (`~/.config/opencode/.albert-skills-cache`) et symliqué dans le dossier scanné par OpenCode. Au `setup`, chaque skill est proposée en Y/N avec son objectif. La sélection est écrite dans `.albert-code/skills.txt` à la racine du projet. Au boot de la VM, `sync_skills` ne symlinke que les skills sélectionnées puis réconcilie (retire les symlinks des skills non sélectionnées, sans jamais toucher les skills perso). Sans manifeste `.albert-code/skills.txt`, toutes les skills sont installées (rétrocompat). Mise à jour à chaque démarrage de VM.
-- **MCP** : les 4 connecteurs sont désormais **tous opt-in**. Au `setup`, chaque MCP est proposé en Y/N avec son objectif : `data-gouv` (accès aux données publiques), `context7` (doc à jour des librairies, clé API requise via https://context7.com/plans), `playwright` (navigateur headless), `chrome-devtools` (debug navigateur). Seuls les MCP acceptés sont écrits dans `opencode.json` du projet (`enabled:false` par défaut). Note : le MCP `chrome-devtools` peut aussi apparaître dans OpenCode même si non coché — il est préinstallé par le moteur d'isolation en amont et n'est pas sous le contrôle d'Albert Code.
+- **MCP** : les 4 connecteurs sont désormais **tous opt-in**. Au `setup`, chaque MCP est proposé en Y/N avec son objectif : `data-gouv` (accès aux données publiques), `context7` (doc à jour des librairies ; si tu le choisis, la clé gratuite est demandée à ce moment-là : https://context7.com/plans), `playwright` (navigateur headless), `chrome-devtools` (debug navigateur). Seuls les MCP acceptés sont écrits dans `opencode.json` du projet (`enabled:false` par défaut). Note : le MCP `chrome-devtools` peut aussi apparaître dans OpenCode même si non coché — il est préinstallé par le moteur d'isolation en amont et n'est pas sous le contrôle d'Albert Code.
 - **Conventions** : `AGENTS.md` depuis `templates/AGENTS.default.md` (sécurité, plan mode, task management, code quality, git, accessibilité). Si le projet a déjà son `AGENTS.md`, il est conservé.
 
 Docs : [OpenCode](https://opencode.ai/docs/fr) · [Albert API](https://doc.incubateur.net/alliance/albert-api) · [agent-vm](https://github.com/sylvinus/agent-vm) · [Skills État](https://github.com/etalab-ia/skills)

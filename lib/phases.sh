@@ -100,23 +100,6 @@ phase_a() {
   fi
   persist_zshenv "ALBERT_API_KEY" "$albert_key"
 
-  # A.4 Clé Context7 (optionnelle)
-  local ctx7_key=""
-  if [ -n "${CONTEXT7_API_KEY:-}" ]; then
-    ok "CONTEXT7_API_KEY déjà présente dans l'environnement"
-    ctx7_key="$CONTEXT7_API_KEY"
-  elif file_contains "$ZSHENV" "CONTEXT7_API_KEY"; then
-    ok "CONTEXT7_API_KEY déjà présente dans ~/.zshenv"
-    ctx7_key="<<from-zshenv>>"
-  else
-    echo
-    info "Connecteur context7 (doc des librairies à jour) — clé gratuite : https://context7.com/plans"
-    ctx7_key="$(prompt_secret "Clé Context7 (optionnelle, Entrée pour ignorer)")"
-  fi
-  persist_zshenv "CONTEXT7_API_KEY" "$ctx7_key"
-
-  echo
-
   # GitHub PAT (optionnel) — gestions des 3 cas : activation, token, dérivation
   _github_auth
 
@@ -186,6 +169,10 @@ phase_b() {
   title "[4/4] Runtime VM"
   copy_template "runtime/agent-vm.runtime.sh" "./.agent-vm.runtime.sh" "runtime VM (sync skills + clés)"
   apply "chmod +x .agent-vm.runtime.sh" chmod +x "./.agent-vm.runtime.sh" 2>/dev/null || true
+  # Synchroniser les clés potentiellement persistées par le setup (ex. Context7)
+  # vers le runtime VM (~/.agent-vm/runtime.sh). ensure_vm_runtime est idempotent :
+  # il remplace le bloc marqué sans dupliquer et sans écraser GH_TOKEN / identité git.
+  ensure_vm_runtime
 
   compute_effective_vm_resources
   echo
@@ -688,16 +675,27 @@ scaffold_opencode_json() {
 
   local mcp_data_gouv="false" mcp_ctx7="false" mcp_playwright="false" mcp_chrome="false"
 
-  if confirm "Brancher le MCP data.gouv (accès aux données publiques en lecture) ?"; then
+  info "MCP qui permet à l'agent d'interroger les données publiques de"
+  info "data.gouv.fr (catalogue, datasets, API tabulaire), en lecture."
+  if confirm "Installer le connecteur data.gouv ?"; then
     mcp_data_gouv="true"
   fi
-  if confirm "Brancher le MCP context7 (doc à jour des librairies — clé API requise) ?"; then
+  echo
+  info "MCP qui donne à l'agent la documentation à jour des librairies"
+  info "et frameworks pendant qu'il code. Clé gratuite (https://context7.com/plans),"
+  info "demandée juste après si tu acceptes."
+  if confirm "Installer le connecteur Context7 ?"; then
     mcp_ctx7="true"
   fi
-  if confirm "Brancher le MCP playwright (piloter un navigateur / agir dans une page) ?"; then
+  echo
+  info "MCP qui permet à l'agent de piloter un navigateur headless dans"
+  info "la VM (ouvrir une page, cliquer, tester une UI)."
+  if confirm "Installer le connecteur Playwright ?"; then
     mcp_playwright="true"
   fi
-  if confirm "Brancher le MCP chrome-devtools (debug navigateur : DOM, console, réseau, perf) ?"; then
+  echo
+  info "MCP de debug navigateur : DOM, console, requêtes réseau, performance."
+  if confirm "Installer le connecteur Chrome DevTools ?"; then
     mcp_chrome="true"
   fi
 
