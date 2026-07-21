@@ -58,6 +58,9 @@
 
 | AC-R036 | 🎛️ | 🟠 | UX auth GitHub du wizard : après avoir collé le PAT, le wizard redemande quand même « Nom pour les commits » et « Email noreply GitHub » (pré-remplis), alors que le PAT donne tout via l'API. De plus, si l'utilisateur colle par erreur son token à la question o/N (au lieu de répondre o d'abord), le token est silencieusement ignoré sans message clair. | Feedback bêta-testeur 2026-07-07 (Romaric) | ✅ traité | `BACKLOG.md` T2-CH2 · `TESTS.md` S40 |
 
+| AC-R038 | 🎛️ | 🟠 | La clé Context7 est demandée dès `albert-code install` (phase A.4), avant toute explication du MCP et avant même que l'utilisateur ait choisi de le brancher. À déplacer : ne la demander qu'au `setup`, si l'utilisateur répond Y à « Installer le MCP context7 ». Aggravant découvert à l'analyse : une clé saisie au `setup` (chemin AC-R028) est persistée dans le `~/.zshenv` hôte mais jamais propagée dans `~/.agent-vm/runtime.sh` (`ensure_vm_runtime` n'est appelé qu'en phase A) : la VM garde `CONTEXT7_API_KEY=''`. | Onboarding alpha Adrien Carpentier 2026-07-21 | ✅ traité | `BACKLOG.md` T6.15 · `TESTS.md` S-ctx-1 à S-ctx-4 |
+| AC-R039 | 🎛️ | 🟡 | Les questions Y/n du `setup` (MCP notamment) n'expliquent pas assez chaque option : un libellé court entre parenthèses, pas de vraie phrase. Un testeur demande deux fois « c'est quoi Context7 ? » pendant l'onboarding. Format cible : une ligne d'explication avant chaque question, « Installer Context7 ? Context7 est un MCP qui permet de [...]. Y/n ». | Onboarding alpha Adrien Carpentier 2026-07-21 | ✅ traité | `BACKLOG.md` T6.16 · `TESTS.md` S-ctx-5 |
+
 ## Notes
 
 - **AC-R004 (prompt caching)** : à instruire avant tout scaling. Vérifier si Albert API expose du caching sur `chat/completions` ; sinon, arbitrer l'infra d'inférence. vLLM implémente le caching nativement.
