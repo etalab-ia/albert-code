@@ -228,12 +228,24 @@ phase_run() {
     fi
   fi
 
-  # Lancer la VM
+  # Lancer la VM (ou rattachement si déjà créée — pas de pipe, cf. post-mortem v1)
   echo
   info "Ouverture de la bulle isolée…"
   info "  Albert Code lance OpenCode dans la VM"
   echo
-  apply "lancer la VM isolée" _vm --cpus "${EFF_CPUS}" --memory "${EFF_MEM}" --disk "${AC_VM_DISK}" opencode
+
+  local _vm_name _vm_list
+  _vm_name="$(_agent_vm_name)"
+  # Capture d'abord (aucun pipe → immunisé SIGPIPE/pipefail, cf. T7.6 post-mortem).
+  # `|| true` : sortie vide ne casse pas set -e.
+  _vm_list="$(limactl list -q 2>/dev/null || true)"
+  case $'\n'"$_vm_list"$'\n' in
+    *$'\n'"$_vm_name"$'\n'*)
+      info "VM déjà créée — rattachement sans re-réglage des ressources."
+      apply "lancer la VM isolée" _vm opencode ;;
+    *)
+      apply "lancer la VM isolée" _vm --cpus "${EFF_CPUS}" --memory "${EFF_MEM}" --disk "${AC_VM_DISK}" opencode ;;
+  esac
 }
 
 # =============================================================================

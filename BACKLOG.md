@@ -281,6 +281,43 @@ Config MCP de référence :
 **But :** l'utilisateur ne voit plus « agent-vm » dans les messages, juste des références à « la VM isolée » / « le moteur de VM d'Albert Code ».
 **DoD :** tous les messages utilisateur dans `lib/phases.sh`, `lib/ui.sh`, `install.sh`, `README.md` sont reformulés. Le nom « agent-vm » reste dans les commentaires de code, la LICENSE et `vendor/vm/`.
 
+### T7.6 🟠 Ne pas repasser les flags ressources au `run` si la VM projet tourne déjà `<- AC-R037`
+**But :** sur une VM projet déjà `Running`, chaque `albert-code run` affiche le prompt agent-vm « VM is currently running. It must be stopped to apply new resource settings. Stop the VM and apply changes? [y/N] » alors que rien ne change (ressources demandées = ressources courantes). Faux positif agaçant à chaque lancement.
+
+**Cause :** `phase_run` passe toujours `--cpus/--memory/--disk` (`lib/phases.sh:236`), et le vendored ne compare jamais aux valeurs courantes : `vendor/vm/agent-vm.sh:374` déclenche dès qu'un flag ressource est présent ET que la VM tourne (le commentaire « if ... changed » est faux). Le vendored est figé (pin 6f20194) → correction côté Albert Code uniquement.
+
+> ⚠️ **Post-mortem v1 (tentative du 21/07 — NE PAS refaire) :** premier correctif = `if _agent_vm_running "$(_agent_vm_name)"; then _vm opencode; else _vm --cpus … ; fi`. **Échec en run réel** : le prompt revenait. Trace `bash -x` (`/tmp/tr.txt`) : le nom dérivé était bon (`agent-vm-albert-code-b9ed5d09`), mais `_agent_vm_running` renvoyait **faux** → branche `else` → flags → prompt. Cause : `_agent_vm_running` fait `limactl list --format … | grep -q`, et `bin/albert-code` tourne sous `set -o pipefail` (l.11). Quand `grep -q` matche la 1re ligne et ferme le pipe, `limactl` (encore en écriture de la 2e VM) prend un SIGPIPE, sort en 141, `pipefail` fait échouer tout le pipe → **faux négatif intermittent** (course, dépend de la charge). Preuve dans le trace : la MÊME fonction, même VM, renvoie **vrai** 100 lignes plus loin (`agent-vm.sh:376`) car appelée **dans** le sous-shell `_vm` où `set +o pipefail` est actif (l.31). C'est exactement pourquoi `_vm()` enveloppe le vendored dans `( set +u +e +o pipefail; … )`.
+> **Leçon : ne jamais appeler un helper vendored en `… | grep -q` directement sous `pipefail`.**
+
+**Tâches (v2 — correctif retenu) :**
+1. Dans `phase_run()` (`lib/phases.sh`), remplacer l'appel unique `_vm --cpus … --memory … --disk … opencode` par une détection **sans pipe** : capturer la liste des VM d'abord, puis test bash pur. Basculer de « déjà **Running** » vers « VM projet **déjà présente** » (les ressources sont figées à la création → inutile de les repasser quel que soit le statut ; évite aussi de dépendre du format `Name Status`).
+2. Ne PAS réutiliser `_agent_vm_running` (fragile sous `pipefail`, cf. post-mortem). Réutiliser `_agent_vm_name` (`vendor/vm/agent-vm.sh:137`) pour le nom (OK, pas de pipe fragile).
+3. Forme cible :
+   ```sh
+   local _vm_name _vm_list
+   _vm_name="$(_agent_vm_name)"
+   # Capture d'abord (aucun pipe → immunisé au SIGPIPE/pipefail, cf. post-mortem v1),
+   # puis test en bash pur. `|| true` : une sortie limactl vide ne casse pas set -e.
+   _vm_list="$(limactl list -q 2>/dev/null || true)"
+   case $'\n'"$_vm_list"$'\n' in
+     *$'\n'"$_vm_name"$'\n'*)
+       info "VM déjà créée — rattachement sans re-réglage des ressources."
+       apply "lancer la VM isolée" _vm opencode ;;
+     *)
+       apply "lancer la VM isolée" _vm --cpus "${EFF_CPUS}" --memory "${EFF_MEM}" --disk "${AC_VM_DISK}" opencode ;;
+   esac
+   ```
+4. Garder `compute_effective_vm_resources` appelé avant (message « Ressources hôte détectées ») : on ne fait que conditionner l'usage de `EFF_*`.
+
+**Règles :**
+- Ne PAS toucher `vendor/vm/` (vendored figé).
+- **Aucun `… | grep` dans le chemin de décision** : capture-first + `case`. C'est le cœur du fix.
+- Bash 3.2 compatible / `set -euo pipefail` : `_agent_vm_name` (`${1:-$(pwd)}`) sûr ; `limactl … || true` neutralise `set -e` ; `case` en bash pur, pas de pipe.
+- Ne pas canonicaliser `pwd` à la main (laisser `_agent_vm_name` faire).
+- Accents FR corrects, pas de tiret cadratin, non-destructif, dry-run OK.
+
+**DoD :** VM projet **présente** (Running **ou** Stopped) → `albert-code run` n'affiche plus « must be stopped » et lance OpenCode directement (message « rattachement »). VM **inexistante** (1er run du projet) → flags passés, la VM projet est créée dimensionnée. Validation en run **réel** (le bug ne se voit pas en test isolé à froid : course SIGPIPE, cf. post-mortem). → `TESTS.md` S41 (VM running → plus de prompt, message rattachement) + S42 (VM inexistante → flags passés, création OK).
+
 ---
 
 ## EPIC 6 — Interface 3 verbes & simplification profils `<- AC-R014, AC-R015, AC-R016, AC-R017`
