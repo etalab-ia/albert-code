@@ -387,6 +387,32 @@ un `F` intermittent sous `set -o pipefail` reproposait la création de la VM de 
 Le correctif capture d'abord (`_list="$(limactl list -q 2>/dev/null || true)"`) puis teste par `case`
 bash pur — zéro pipe, donc pas de course SIGPIPE.
 
+## S44 — Garde-fou : `run` dans un projet non câblé pour Albert (T7.7, AC-R040)
+
+**Préconditions :** un dossier **sans** `opencode.json` (ou avec un `opencode.json` sans `"albert"`).
+
+**Étapes :**
+1. Se placer dans un dossier jamais `setup` : `mkdir -p /tmp/ac-noalbert && cd /tmp/ac-noalbert`.
+2. Lancer `bash <chemin>/bin/albert-code run --dry-run`.
+
+**Attendu :** avertissement « Ce projet n'est pas configuré pour Albert… » + « Fais d'abord … albert-code
+setup ». En dry-run/non-interactif, `confirm` répond non → `phase_run` **retourne sans lancer** la VM
+(pas de « must be stopped », pas d'ouverture d'OpenCode sans Albert). Répéter avec un `opencode.json`
+contenant `{"provider":{"scaleway":{}}}` (sans `albert`) → même avertissement. Avec un `opencode.json`
+contenant `"albert"` → aucun avertissement, le lancement se poursuit.
+
+## S45 — Avertissement au `setup` : `opencode.json` existant sans provider Albert (T7.7 ⊃ T1.6, ex-S22)
+
+**Préconditions :** un dossier avec un `opencode.json` **sans** `"albert"` (ex. `{"provider":{"scaleway":{}}}`).
+
+**Étapes :**
+1. Lancer `albert-code setup` (ou déclencher `scaffold_opencode_json`) dans ce dossier.
+
+**Attendu :** le fichier est **conservé** (non écrasé), mais le message n'est plus un simple « conservé » :
+il signale explicitement que le provider Albert n'est pas déclaré et pointe le bloc `provider "albert"`
+à ajouter (ou renommer/supprimer + relancer). Avec un `opencode.json` contenant déjà `"albert"` →
+message « conservé (non écrasé) » inchangé.
+
 **S40e — Fallback quand token invalide au 3e essai**
 **Préconditions :** `install.sh` disponible, token invalide.
 **Étapes :**

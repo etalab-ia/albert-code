@@ -79,7 +79,8 @@ Config MCP de référence :
 **Tâches :** au scaffold (Phase B, pose de `opencode.json`), fixer `context7.enabled` selon la présence de `CONTEXT7_API_KEY` (env ou `~/.zshenv`) — `false` (ou MCP retiré) si absente ; `true` si présente. Post-patch du fichier posé (sed/jq) ou template conditionnel. Documenter le comportement.
 **DoD :** install **sans** clé context7 → `opencode.json` posé a `context7.enabled: false` → aucun MCP en erreur dans la VM ; **avec** clé → `enabled: true`. → `TESTS.md` S21.
 
-### T1.6 🟠 Scaffold : `opencode.json` existant sans provider `albert` `<- AC-R012`
+### T1.6 🟠 Scaffold : `opencode.json` existant sans provider `albert` `<- AC-R012` → **absorbé par T7.7**
+> Traité dans T7.7 (garde-fou générique run + setup) : l'avertissement au `setup` pour un `opencode.json` existant sans `albert` y est implémenté (`scaffold_opencode_json`).
 **But :** dans un repo ayant déjà un `opencode.json`, le scaffold le conserve (non-destructif) → le provider `albert` n'est jamais ajouté → Albert ne se connecte pas dans la VM, sans alerte (juste « conservé »). Footgun silencieux.
 **Tâches :** en Phase B, si `./opencode.json` existe déjà, détecter s'il contient le provider `albert` ; sinon → **avertir clairement** (« opencode.json existant sans provider Albert → Albert non câblé ») et proposer/documenter le merge du bloc `provider.albert` + `model`/`small_model` (jq/sed) sans écraser le reste. Ne jamais écraser silencieusement.
 **DoD :** scaffold dans un repo avec `opencode.json` sans `albert` → message explicite (+ option de merge) ; avec `albert` déjà présent → info « rien à faire ». → `TESTS.md` S22.
@@ -319,6 +320,17 @@ Config MCP de référence :
 **DoD :** VM projet **présente** (Running **ou** Stopped) → `albert-code run` n'affiche plus « must be stopped » et lance OpenCode directement (message « rattachement »). VM **inexistante** (1er run du projet) → flags passés, la VM projet est créée dimensionnée. Validation en run **réel** (le bug ne se voit pas en test isolé à froid : course SIGPIPE, cf. post-mortem). → `TESTS.md` S41 (VM running → plus de prompt, message rattachement) + S42 (VM inexistante → flags passés, création OK).
 
 **Extension (même racine SIGPIPE) :** `base_vm_exists()` portait le même anti-pattern `limactl list -q | grep -q '^agent-vm-base$'`, et il est appelé par `phase_run`/`check_base_vm` en amont → un faux négatif reproposait la création de la VM de base à chaque `run` (symptôme observé chez un bêta-testeur). Aligné sur le même correctif capture-first + `case` bash pur. → `TESTS.md` S43.
+
+### T7.7 🟠 Garde-fou : avertir quand un projet n'est pas câblé pour Albert (au `run` et au `setup`) `<- AC-R040` (absorbe T1.6)
+**But :** `albert-code run` dans un dossier sans `opencode.json` (jamais `setup`) — ou avec un `opencode.json` sans provider `albert` — ouvre OpenCode sur ses modèles par défaut, **Albert absent de `/models`, sans aucune alerte**. Footgun silencieux : 2 bêta-testeurs piégés (dont un power user), longue session de debug à chaque fois. Généralise T1.6 (fichier existant sans `albert`) au cas « pas de fichier du tout ».
+
+**Tâches :**
+1. **Garde-fou au `run`** (`phase_run`, tout début) : si `./opencode.json` absent **ou** ne contient pas `"albert"`, avertir clairement (« projet non configuré pour Albert → fais `albert-code setup` ici ») et demander confirmation avant de lancer sans Albert (`confirm` → défaut non ; en dry-run/non-interactif, n'ouvre pas). Détection **sur fichier** (`grep -q '"albert"' ./opencode.json` — pas de pipe, pas de course SIGPIPE, cf. T7.6).
+2. **Avertissement au `setup`** (`scaffold_opencode_json`, branche fichier existant) : si `./opencode.json` existe **sans** `"albert"`, ne pas se contenter de « conservé » — signaler explicitement qu'Albert n'est pas câblé et pointer le bloc `provider.albert` à ajouter (ou renommer/supprimer + relancer). Couvre T1.6.
+
+**Règles :** ne rien écraser (non-destructif) ; `grep` sur fichier uniquement (jamais `limactl | grep`) ; bash 3.2 / `set -euo pipefail` ; accents FR corrects ; dry-run : le garde-fou n'ouvre pas OpenCode sans config.
+
+**DoD :** `run` dans un dossier sans `opencode.json` **ou** sans provider `albert` → avertissement + confirmation (pas de lancement silencieux) ; `run` dans un projet câblé → aucun changement. `setup` sur un `opencode.json` existant sans `albert` → message explicite. → `TESTS.md` S44 (garde-fou run) + S45 (avertissement setup, ex-T1.6/S22).
 
 ---
 

@@ -197,6 +197,19 @@ phase_run() {
   title "Albert Code — lancement"
   echo
 
+  # Garde-fou : ce projet doit déclarer le provider Albert dans ./opencode.json,
+  # sinon OpenCode s'ouvre sur ses modèles par défaut (Albert absent de /models).
+  # Cas observé : `run` lancé dans un dossier jamais `setup`. Détection sur fichier
+  # (grep direct sur un fichier, pas de pipe → pas de course SIGPIPE).
+  if [ ! -f ./opencode.json ] || ! grep -q '"albert"' ./opencode.json 2>/dev/null; then
+    warn "Ce projet n'est pas configuré pour Albert (pas d'opencode.json avec le provider Albert)."
+    info "Fais d'abord, dans ce dossier :  albert-code setup"
+    info "Sinon OpenCode s'ouvrira sans Albert (modèles par défaut, Albert absent de /models)."
+    if ! confirm "Lancer quand même sans Albert ?"; then
+      return 1
+    fi
+  fi
+
   # Calculer les ressources si pas déjà fait
   compute_effective_vm_resources
   check_disk_space_warning
@@ -666,7 +679,13 @@ check_disk_space_warning() {
 scaffold_opencode_json() {
   local dest="./opencode.json"
   if [ -f "$dest" ]; then
-    warn "%s existe déjà — conservé (non écrasé)" "$dest"
+    if grep -q '"albert"' "$dest" 2>/dev/null; then
+      warn "%s existe déjà — conservé (non écrasé)" "$dest"
+    else
+      # T1.6 : fichier existant sans provider Albert → footgun silencieux.
+      warn "%s existe déjà mais ne déclare pas le provider Albert — conservé (non écrasé)." "$dest"
+      info "Albert ne sera pas câblé dans ce projet. Ajoute le bloc provider \"albert\" (voir README), ou renomme/supprime ce fichier puis relance albert-code setup."
+    fi
     return 0
   fi
 
