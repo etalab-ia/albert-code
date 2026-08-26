@@ -73,7 +73,7 @@ albert-code/
 ├── docs/
 │   └── PLAN.md                     # Contexte & décisions (FAIT)
 ├── bin/
-│   └── albert-code                # Dispatcher à 3 verbes : install|setup|run
+│   └── albert-code                # Dispatcher à 4 verbes : install|setup|run|update
 ├── install.sh                     # Amorçage (Phase A + pose du shim)
 ├── uninstall.sh                   # Désinstallation propre
 ├── lib/                           # Fonctions bash partagées (banner, ui, checks, phases)

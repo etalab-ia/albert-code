@@ -434,6 +434,7 @@ Après installation, utilise :
 
   albert-code setup     → configurer un projet (Phase B)
   albert-code run       → lancer la VM isolée
+  albert-code update    → rafraîchir un projet configuré (réparer opencode.json)
 
 Options :
   --dry-run   Affiche chaque action sans l'exécuter. Aucun fichier n'est écrit.
@@ -464,6 +465,7 @@ Usage :
   albert-code install   → 1ʳᵉ fois : bootstrap ton poste (Lima, VM isolée, clés)
   albert-code setup     → configure un projet (AGENTS.md + opencode.json + skills)
   albert-code run       → lance la VM isolée
+  albert-code update    → rafraîchit un projet configuré (répare opencode.json + runtime)
   albert-code --help    → cette aide
 
 Options :

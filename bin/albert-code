@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Albert Code — dispatcher à 3 verbes
+# Albert Code — dispatcher à 4 verbes
 # -----------------------------------------------------------------------------
 # Usage :
 #   albert-code install   → Phase A (bootstrap poste)
 #   albert-code setup     → Phase B (scaffold projet)
 #   albert-code run       → Phase run (lancement VM)
+#   albert-code update    → Rafraîchit un projet configuré (répare le catalogue)
 #   albert-code --help    → Cette aide
 # =============================================================================
 set -euo pipefail
@@ -32,14 +33,14 @@ while [ $# -gt 0 ]; do
     --help|-h)
       usage_albert_code
       exit 0 ;;
-    install|setup|run) verb="$1" ;;
+    install|setup|run|update) verb="$1" ;;
     *) err "Verbe inconnu : $1"; usage_albert_code; exit 1 ;;
   esac
   shift
 done
 
 if [ -z "${verb:-}" ]; then
-  err "Usage : albert-code {install|setup|run}"
+  err "Usage : albert-code {install|setup|run|update}"
   err "  albert-code --help  pour plus d'infos"
   exit 1
 fi
@@ -54,12 +55,16 @@ case "$verb" in
     title "C'est prêt. Bon code avec Albert."
     echo
     info "Utilise « albert-code setup » pour configurer un projet,"
-    info "ou « albert-code run » pour lancer la bulle."
+    info "« albert-code run » pour lancer la bulle,"
+    info "ou « albert-code update » pour rafraîchir un projet configuré."
     ;;
   setup)
     phase_b
     ;;
   run)
     phase_run
+    ;;
+  update)
+    phase_update
     ;;
 esac

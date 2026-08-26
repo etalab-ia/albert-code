@@ -42,15 +42,16 @@ cd ~/albert-code
 
 > Le chemin d'installation ne doit **pas contenir d'espace** (contrainte du moteur de VM/Lima, qui monte le répertoire de travail dans la VM).
 
-Après installation, tu disposes de la commande `albert-code` à 3 verbes :
+Après installation, tu disposes de la commande `albert-code` à 4 verbes :
 
 | Verbe | Action |
 |---|---|
 | `albert-code install` | **1ʳᵉ fois** : bootstrap le poste (Lima, VM isolée, clé Albert, skills). |
 | `albert-code setup` | **Par projet, obligatoire avant le 1ᵉʳ `run`** : configure le projet (AGENTS.md + opencode.json + choix skills/MCP). |
 | `albert-code run` | **Lancement** : crée la VM de base si absente, puis ouvre la VM isolée. |
+| `albert-code update` | **Maintenance** : rafraîchit un projet déjà configuré (répare les identifiants de modèles périmés dans opencode.json + régénère le runtime). |
 
-`install.sh` est **idempotent** et **non-destructif** : il amorce le poste (Phase A) et pose le shim `albert-code`. Ensuite, c'est `albert-code setup` puis `albert-code run`.
+`install.sh` est **idempotent** et **non-destructif** : il amorce le poste (Phase A) et pose le shim `albert-code`. Ensuite, c'est `albert-code setup` puis `albert-code run`. Pour réparer un projet dont les modèles Albert sont devenus invalides, lance `albert-code update` dans le dossier du projet.
 
 Flags : `--dry-run` (simule sans rien écrire), `--help`.
 
@@ -61,6 +62,7 @@ albert-code install                                      # 1ʳᵉ fois : bootstr
 mkdir -p ~/mon-projet && cd ~/mon-projet
 albert-code setup                                        # configure le projet (AGENTS.md + MCP + skills)
 albert-code run                                          # ouvre la bulle isolée + OpenCode
+albert-code update                                       # (maintenance) répare opencode.json + runtime
 ```
 
 > ⚠️ **L'ordre compte : `install` (une fois), puis `setup` (une fois par projet), puis `run`.** C'est `setup` qui pose l'`opencode.json` (provider Albert), les MCP et les skills du projet. Un `run` sans `setup` ouvre OpenCode **non connecté à Albert** (pas de `/models`, ni MCP, ni skills) : si c'est ton cas, quitte, fais `albert-code setup`, relance `albert-code run`.

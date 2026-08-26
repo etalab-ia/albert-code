@@ -105,4 +105,5 @@ echo
 title "C'est prêt. Bon code avec Albert."
 echo
 info "Utilise « albert-code setup » pour configurer un projet,"
-info "ou « albert-code run » pour lancer la VM isolée."
+info "« albert-code run » pour lancer la VM isolée,"
+info "ou « albert-code update » pour rafraîchir un projet configuré."
