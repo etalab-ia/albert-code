@@ -263,7 +263,8 @@ phase_update() {
   # 1. opencode.json : vérifier / réparer les identifiants du catalogue Albert.
   if [ -f ./opencode.json ] && grep -q '"albert"' ./opencode.json 2>/dev/null; then
     if command -v jq >/dev/null 2>&1 && fetch_albert_catalog; then
-      if ! repair_stale_provider_albert ./opencode.json; then
+      repair_stale_provider_albert ./opencode.json || return $?
+      if [ "$AC_REPAIR_APPLIED" -eq 1 ]; then
         changed=1
       fi
     else
@@ -731,11 +732,11 @@ check_disk_space_warning() {
   fi
 }
 
-# jq_albert_merge_program — filtre jq cible du provider Albert (unique source de
-# vérité). Pose provider.albert + model + small_model SANS toucher aux autres
-# clés (MCP, permissions, autres providers). Factorise le scaffold (merge quand
-# le provider est absent) ET la réparation (T9.2) pour éviter de dupliquer le
-# JSON du catalogue, qui avait laissé passer des identifiants morts (AC-R042).
+# jq_albert_merge_program — filtre jq cible du provider Albert pour le cas
+# « provider absent » (scaffold). Pose provider.albert + model + small_model SANS
+# toucher aux autres clés (MCP, permissions, autres providers). C'est la source de
+# vérité de l'état cible par défaut ; la réparation (T9.2) est un traitement
+# distinct (jq_albert_reconcile_program) mais partage ce même état par défaut.
 jq_albert_merge_program() {
   cat <<'JQ'
 .provider.albert = {
@@ -786,69 +787,114 @@ fetch_albert_catalog() {
   return 0
 }
 
-# extract_model_ids <opencode.json> — renvoie (un par ligne) les identifiants de
-# modèles déclarés par le fichier : clés de provider.albert.models + model +
-# small_model privés de leur préfixe "albert/". Utilise jq + case (pas de pipe
-# dans un chemin de décision).
+# jq_albert_reconcile_program — filtre jq de RÉPARATION (distinct du merge du
+# scaffold : on ne remplace PAS tout provider.albert). Ne retire que les
+# identifiants réellement absents du catalogue (via $valid posé par --arg),
+# conserve ceux qui y figurent, garantit le modèle par défaut deepseek-v4-flash,
+# et repositionne model / small_model sur le défaut s'ils pointaient un id retiré.
+# L'état cible par défaut reste identique à jq_albert_merge_program afin que les
+# deux traitements ne divergent pas (AC-R042).
+jq_albert_reconcile_program() {
+  cat <<'JQ'
+def validids: ($valid | split("\n") | map(select(. != "")));
+def in_valid($m): any(validids[]; . == ($m | sub("^albert/";"")));
+.provider.albert.models =
+  ( .provider.albert.models
+    | to_entries
+    | [ .[] | select(in_valid(.key)) ]
+    | from_entries
+    | if has("deepseek-v4-flash") then .
+      else . + {"deepseek-v4-flash": {"name": "DeepSeek V4 Flash (Albert)", "limit": {"context": 131072, "output": 65536}}}
+      end )
+| .model = ( if (.model != null) and ((.model | type) == "string") and in_valid(.model)
+               then .model else "albert/deepseek-v4-flash" end )
+| .small_model = ( if (.small_model != null) and ((.small_model | type) == "string") and in_valid(.small_model)
+               then .small_model else "albert/deepseek-v4-flash" end )
+JQ
+}
+
+# extract_model_ids <opencode.json> — renvoie (un par ligne, DÉDOUBLONNÉ) les
+# identifiants de modèles déclarés par le fichier : clés de provider.albert.models
+# + model + small_model privés de leur préfixe "albert/". Utilise jq + case
+# (pas de pipe dans un chemin de décision). Bash 3.2 (pas de tableau associatif).
 extract_model_ids() {
   local dest="$1"
-  local ids
-  ids="$(jq -r '.provider.albert.models | keys[]' "$dest" 2>/dev/null || true)"
-  local m sm
+  local out=""
+  local add
+  add() {
+    local v="$1"
+    [ -z "$v" ] && return
+    case $'\n'"$out"$'\n' in
+      *$'\n'"$v"$'\n'*) : ;;
+      *) out="${out:+$out$'\n'}$v" ;;
+    esac
+  }
+  local id m sm
+  while IFS= read -r id || [ -n "$id" ]; do
+    add "$id"
+  done < <(jq -r '.provider.albert.models? // {} | keys[]' "$dest" 2>/dev/null || true)
   m="$(jq -r '.model // empty' "$dest" 2>/dev/null | sed 's#^albert/##' || true)"
   sm="$(jq -r '.small_model // empty' "$dest" 2>/dev/null | sed 's#^albert/##' || true)"
-  [ -n "$m" ] && ids="${ids:+$ids$'\n'}$m"
-  [ -n "$sm" ] && ids="${ids:+$ids$'\n'}$sm"
-  printf '%s' "$ids"
+  add "$m"
+  add "$sm"
+  printf '%s' "$out"
 }
 
 # repair_stale_provider_albert <opencode.json> — compare les identifiants
 # déclarés au catalogue live (AC_CATALOG_IDS posé par fetch_albert_catalog).
-# Si tout est valide : message "déjà à jour", retourne 0 (rien écrit, pas de
-# .bak). Si au moins un id est périmé : avertit, liste, propose la réparation
-# (confirmation), sauvegarde .bak puis applique le MÊME merge jq que le
-# scaffold. En dry-run : annonce sans écrire. Retourne 1 si une réparation a
-# été appliquée/annoncée, 0 sinon.
+# Ne retient QUE les ids absents du catalogue : la réparation retire ces ids et
+# conserve les autres (jamais d'écrasement d'un modèle ajouté à la main).
+# Si model / small_model pointaient un id retiré, il est repositionné sur le
+# défaut. Pose AC_REPAIR_APPLIED=0|1 (une réparation a eu lieu) et retourne 0
+# en cas de succès — réparé ou non ; un code non nul est réservé aux vraies
+# erreurs (catalogue vide). En dry-run : annonce sans écrire, AC_REPAIR_APPLIED=1.
 repair_stale_provider_albert() {
   local dest="$1"
-  local declared stale=""
+  AC_REPAIR_APPLIED=0
+  if [ -z "$AC_CATALOG_IDS" ]; then
+    warn "Catalogue Albert vide — réparation ignorée, fichier non modifié."
+    return 1
+  fi
+
+  local declared
   declared="$(extract_model_ids "$dest")"
-  local d
+  local removed="" kept="" d
   while IFS= read -r d || [ -n "$d" ]; do
     [ -z "$d" ] && continue
     case $'\n'"$AC_CATALOG_IDS"$'\n' in
-      *$'\n'"$d"$'\n'*) : ;;
-      *) stale="${stale:+$stale, }$d" ;;
+      *$'\n'"$d"$'\n'*) kept="${kept:+$kept, }$d" ;;
+      *) removed="${removed:+$removed, }$d" ;;
     esac
   done <<< "$declared"
 
-  if [ -z "$stale" ]; then
+  if [ -z "$removed" ]; then
     ok "%s déjà à jour avec le catalogue Albert — conservé" "$dest"
     return 0
   fi
 
-  warn "Identifiants de modèles périmés dans %s : %s" "$dest" "$stale"
+  warn "Identifiants de modèles périmés dans %s : %s" "$dest" "$removed"
+  info "Conservés : %s" "${kept:-aucun}"
   info "Le catalogue Albert a changé — ces identifiants ne sont plus valides."
   local _bak="${dest}.bak"
   if [ "$DRY_RUN" -eq 1 ]; then
     apply_cp "sauvegarder ${dest} vers ${_bak}" "$dest" "$_bak"
-    info "[dry-run] réparation des identifiants périmés dans ${dest} : $stale"
-    return 1
+    info "[dry-run] réparation des identifiants périmés dans ${dest} : $removed"
+    AC_REPAIR_APPLIED=1
+    return 0
   fi
-  if confirm "Réparer opencode.json avec le catalogue courant (ids périmés : $stale) ?"; then
+  if confirm "Réparer opencode.json avec le catalogue courant (ids retirés : $removed) ?"; then
     apply_cp "sauvegarder ${dest} vers ${_bak}" "$dest" "$_bak"
-    if jq "$(jq_albert_merge_program)" "$dest" > "${dest}.tmp" 2>/dev/null && mv "${dest}.tmp" "$dest"; then
-      ok "Identifiants Albert réparés dans ${dest}. Sauvegarde dans ${_bak}"
-      return 1
+    if jq --arg valid "$AC_CATALOG_IDS" "$(jq_albert_reconcile_program)" "$dest" > "${dest}.tmp" 2>/dev/null && mv "${dest}.tmp" "$dest"; then
+      ok "Identifiants Albert corrigés dans ${dest} (retiré : %s ; conservé : %s). Sauvegarde dans %s" "$removed" "${kept:-aucun}" "$_bak"
+      AC_REPAIR_APPLIED=1
     else
       warn "Echec de la réparation jq (JSON invalide ? ex. commentaires) — fichier restauré."
       mv "$_bak" "$dest" 2>/dev/null || true
-      return 0
     fi
   else
     info "Fichier conservé tel quel. Utilise albert-code update plus tard."
-    return 0
   fi
+  return 0
 }
 
 # scaffold_opencode_json — génère opencode.json avec MCP interactifs
@@ -876,8 +922,8 @@ scaffold_opencode_json() {
           if [ "$DRY_RUN" -eq 1 ]; then
             info "[dry-run] merge du provider albert dans ${dest}"
           # jq : ajoute provider.albert + model + small_model, preserve le reste.
-          # Filtre factorisé (jq_albert_merge_program) : même état cible que la
-          # réparation T9.2 — une seule source de vérité pour le JSON du catalogue.
+          # Filtre cible par défaut (jq_albert_merge_program), source de vérité de
+          # l'état cible pour le provider absent (la réparation T9.2 est distincte).
           # Le message de succes n'est affiche que si le merge a reellement abouti.
           elif jq "$(jq_albert_merge_program)" "$dest" > "${dest}.tmp" 2>/dev/null && mv "${dest}.tmp" "$dest"; then
             ok "Provider Albert ajoute dans ${dest}. Sauvegarde dans ${_bak}"

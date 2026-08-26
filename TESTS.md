@@ -694,23 +694,33 @@ d'un non-admin d'organisation, le README expose l'alternative (jeton classique l
 
 **Préconditions :** jq installé, `ALBERT_API_KEY` valide et joignable (`GET /v1/models` répond) ;
 un dossier de test avec un `opencode.json` contenant le provider `albert` mais **un modèle périmé**
-(ex. `deepseek-v4.5` ou un ancien id non renvoyé par le catalogue), avec en plus un autre provider
-(ex. `scaleway`), un MCP et un bloc `permission`.
+(ex. `deepseek-v4.5` ou un ancien id non renvoyé par le catalogue), avec **en plus** : un modèle ajouté
+à la main et présent dans le catalogue, un autre provider (ex. `scaleway`), un MCP et un bloc
+`permission` ; `model` et `small_model` pointent vers l'id périmé (donc en double).
 
 **Étapes :**
 1. Lancer `bash bin/albert-code setup --dry-run` dans ce dossier → le fichier est détecté comme
-   branché sur Albert, comparé au catalogue → avertissement listant l'id périmé, `[dry-run] réparation`.
-2. Vérifier qu'aucune écrite n'a eu lieu en dry-run (fichier inchangé, pas de `.bak`).
+   branché sur Albert, comparé au catalogue → avertissement listant **une seule fois** l'id périmé
+   (même s'il apparaît dans `models`, `model` ET `small_model`), `[dry-run] réparation`.
+2. Vérifier qu'aucune écriture n'a eu lieu en dry-run (fichier inchangé, pas de `.bak`).
 3. Relancer en réel (`DRY_RUN=0`, HOME sandboxé) et répondre `o` à la confirmation de réparation.
-4. Vérifier le fichier résultant :
-   - Les identifiants déclarés (`provider.albert.models`, `model`, `small_model`) ne contiennent plus
-     QUE des ids présents dans le catalogue (`deepseek-v4-flash`).
+4. Vérifier que le `setup` **se poursuit jusqu'à la fin** : le récapitulatif et les prochaines étapes
+   sont affichés, et `echo $?` rend **0** (étape qui n'abortit pas, malgré `set -e`). C'est le
+   défaut bloquant corrigé : une réparation ne doit JAMAIS couper la phase en cours.
+5. Vérifier le fichier résultant :
+   - L'id périmé a été **retiré** de `provider.albert.models` ; le modèle ajouté à la main ET présent
+     dans le catalogue est **conservé** ; `deepseek-v4-flash` est présent.
+   - `model` / `small_model`, qui pointaient l'id retiré, ont été repositionnés sur
+     `albert/deepseek-v4-flash`.
    - L'autre provider (`scaleway`), le MCP et le bloc `permission` sont **intacts** (non écrasés).
    - La sauvegarde `.bak` existe et contient l'original périmé.
 
-**Attendu :** (1) avertissement + listing de l'id mort, dry-run ne répare pas. (2) aucune écriture ni `.bak`.
-(3) réparation confirmée. (4) les 3 vérifications passent — ids corrigés vers le catalogue, reste du
-fichier préservé, `.bak` présent.
+**Attendu :** (1) avertissement + listing dédupliqué de l'id mort, dry-run ne répare pas. (2) aucune
+écriture ni `.bak`. (3) réparation confirmée. (4) le setup se poursuit (récap + prochaines étapes
+affichés) et le code de sortie est **0** — sinon fail bloquant. (5) les 5 vérifications passent :
+périmé retiré, modèle manuel conservé, model/small_model repris, reste du fichier préservé, `.bak`
+présent.
+
 
 ## S55 — Catalogue injoignable → on avertit, on ne modifie rien (T9.2)
 
