@@ -3,7 +3,7 @@
   "provider": {
     "albert": {
       "npm": "@ai-sdk/openai-compatible",
-      "name": "Albert API (État)",
+      "name": "Albert API (État 🇫🇷)",
       "options": {
         "baseURL": "https://albert.api.etalab.gouv.fr/v1",
         "apiKey": "{env:ALBERT_API_KEY}"
