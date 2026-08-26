@@ -428,45 +428,61 @@ ensure_vm_runtime() {
   fi
 
   if ! file_contains "$RUNTIME_VM_FILE" "$AC_MARKER"; then
+    local _ac_helper=""
+    _ac_helper="$(
+cat <<'AC_HELPER'
+_ac_zsh_set() {
+  [ -z "$2" ] && return 0
+  _f="$HOME/.zshenv"
+  if [ ! -f "$_f" ]; then : > "$_f"; chmod 600 "$_f"; fi
+  _t="${_f}.tmp.$$"
+  : > "$_t"
+  while IFS= read -r _l || [ -n "$_l" ]; do
+    case "$_l" in
+      "export $1="*) : ;;
+      *) printf '%s\n' "$_l" >> "$_t" ;;
+    esac
+  done < "$_f"
+  _v="$2"
+  _e=$(printf '%s' "$_v" | sed "s/'/'\"'\"'/g")
+  printf "export %s='%s'\n" "$1" "$_e" >> "$_t"
+  mv "$_t" "$_f"
+  unset _f _t _l _v _e
+}
+AC_HELPER
+)"
     apply_append "blank line dans runtime.sh" "$RUNTIME_VM_FILE" ""
     apply_append "albert-code block start" "$RUNTIME_VM_FILE" "$AC_MARKER"
+    apply_append "définir helper _ac_zsh_set dans runtime.sh" "$RUNTIME_VM_FILE" "$_ac_helper"
+    # Abstention : si l'hôte n'a pas de valeur, on n'écrit RIEN pour cette
+    # variable — une valeur posée à la main dans la VM est ainsi conservée.
     if [ -n "$albert_val" ]; then
       apply_append "persist ALBERT_API_KEY dans runtime.sh" "$RUNTIME_VM_FILE" \
-        "grep -q 'ALBERT_API_KEY' ~/.zshenv 2>/dev/null || echo \"export ALBERT_API_KEY='${safe_albert}'\" >> ~/.zshenv"
+        "_ac_zsh_set ALBERT_API_KEY '${safe_albert}'"
       apply_append "export ALBERT_API_KEY dans runtime.sh" "$RUNTIME_VM_FILE" \
         "export ALBERT_API_KEY='${safe_albert}'"
-    else
-      apply_append "persist ALBERT_API_KEY (vide) dans runtime.sh" "$RUNTIME_VM_FILE" \
-        "grep -q 'ALBERT_API_KEY' ~/.zshenv 2>/dev/null || echo \"export ALBERT_API_KEY=''\" >> ~/.zshenv"
-      apply_append "export ALBERT_API_KEY (vide) dans runtime.sh" "$RUNTIME_VM_FILE" \
-        "export ALBERT_API_KEY=''"
     fi
     if [ -n "$ctx7_val" ]; then
       apply_append "persist CONTEXT7_API_KEY dans runtime.sh" "$RUNTIME_VM_FILE" \
-        "grep -q 'CONTEXT7_API_KEY' ~/.zshenv 2>/dev/null || echo \"export CONTEXT7_API_KEY='${safe_ctx}'\" >> ~/.zshenv"
+        "_ac_zsh_set CONTEXT7_API_KEY '${safe_ctx}'"
       apply_append "export CONTEXT7_API_KEY dans runtime.sh" "$RUNTIME_VM_FILE" \
         "export CONTEXT7_API_KEY='${safe_ctx}'"
-    else
-      apply_append "persist CONTEXT7_API_KEY (vide) dans runtime.sh" "$RUNTIME_VM_FILE" \
-        "grep -q 'CONTEXT7_API_KEY' ~/.zshenv 2>/dev/null || echo \"export CONTEXT7_API_KEY=''\" >> ~/.zshenv"
-      apply_append "export CONTEXT7_API_KEY (vide) dans runtime.sh" "$RUNTIME_VM_FILE" \
-        "export CONTEXT7_API_KEY=''"
     fi
     if [ -n "$gh_token_val" ]; then
       apply_append "persist GH_TOKEN dans runtime.sh" "$RUNTIME_VM_FILE" \
-        "grep -q 'GH_TOKEN' ~/.zshenv 2>/dev/null || echo \"export GH_TOKEN='${safe_gh}'\" >> ~/.zshenv"
+        "_ac_zsh_set GH_TOKEN '${safe_gh}'"
       apply_append "export GH_TOKEN dans runtime.sh" "$RUNTIME_VM_FILE" \
         "export GH_TOKEN='${safe_gh}'"
     fi
     if [ -n "$git_name_val" ]; then
       apply_append "persist AC_GIT_USER_NAME dans runtime.sh" "$RUNTIME_VM_FILE" \
-        "grep -q 'AC_GIT_USER_NAME' ~/.zshenv 2>/dev/null || echo \"export AC_GIT_USER_NAME='${safe_name}'\" >> ~/.zshenv"
+        "_ac_zsh_set AC_GIT_USER_NAME '${safe_name}'"
       apply_append "export AC_GIT_USER_NAME dans runtime.sh" "$RUNTIME_VM_FILE" \
         "export AC_GIT_USER_NAME='${safe_name}'"
     fi
     if [ -n "$git_email_val" ]; then
       apply_append "persist AC_GIT_USER_EMAIL dans runtime.sh" "$RUNTIME_VM_FILE" \
-        "grep -q 'AC_GIT_USER_EMAIL' ~/.zshenv 2>/dev/null || echo \"export AC_GIT_USER_EMAIL='${safe_email}'\" >> ~/.zshenv"
+        "_ac_zsh_set AC_GIT_USER_EMAIL '${safe_email}'"
       apply_append "export AC_GIT_USER_EMAIL dans runtime.sh" "$RUNTIME_VM_FILE" \
         "export AC_GIT_USER_EMAIL='${safe_email}'"
     fi
@@ -496,15 +512,90 @@ sync_skills_host() {
   sync_skills_cached
 }
 
-# persist_zshenv — ajout idempotent à ~/.zshenv
+# _gh_token_valid <token> : 0 = valide (réponse 2xx), 1 = 401 (révoqué/expiré),
+# 2 = API injoignable ou autre erreur (on ne peut pas affirmer la validité).
+# Capture d'abord : la sortie code HTTP vient via -w, pas de pipe de décision.
+_gh_token_valid() {
+  local token="$1" code=""
+  code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 \
+    -H "Authorization: Bearer ${token}" \
+    -H "Accept: application/vnd.github+json" \
+    "https://api.github.com/user" 2>/dev/null)" || true
+  case "${code:-0}" in
+    20*) return 0 ;;
+    401) return 1 ;;
+    *) return 2 ;;
+  esac
+}
+
+# _zshenv_drop <var> — supprime la ligne ancrée ^export <var>= de ~/.zshenv,
+# conserve toutes les autres lignes. Fichier temporaire (portabilité, pas de
+# sed -i). Ne fait rien si la variable est absente. Respecte le dry-run.
+_zshenv_drop() {
+  local var="$1" tmp=""
+  [ -f "$ZSHENV" ] || return 0
+  if ! file_contains "$ZSHENV" "^export ${var}="; then
+    return 0
+  fi
+  tmp="$(mktemp)"
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in
+      "export ${var}="*) : ;;
+      *) printf '%s\n' "$line" >> "$tmp" ;;
+    esac
+  done < "$ZSHENV"
+  apply "retirer l'ancienne ligne $var de ~/.zshenv" mv "$tmp" "$ZSHENV"
+  if [ "$DRY_RUN" -eq 1 ]; then
+    rm -f "$tmp"
+  fi
+}
+
+# persist_zshenv — ajout/remplacement idempotent à ~/.zshenv (T10.1).
+# Si la variable existe déjà :
+#   - GH_TOKEN valide (2xx) → comportement silencieux actuel (« déjà présente ») ;
+#   - GH_TOKEN invalide (401) → avertit et propose garder/remplacer ;
+#   - GH_TOKEN injoignable (2) → on n'affirme rien, comportement actuel ;
+#   - ALBERT_API_KEY / CONTEXT7_API_KEY / identité → propose garder/remplacer.
 persist_zshenv() {
-  local var="$1" val="$2"
+  local var="$1" val="$2" rc=0
+  local _decision="" existing=""
   [ -z "$val" ] && return 0
   [ "$val" = "<<from-zshenv>>" ] && return 0
   apply_touch "créer $ZSHENV si absent" "$ZSHENV"
   apply_chmod "chmod 600 $ZSHENV (contient une clé)" 600 "$ZSHENV"
   if file_contains "$ZSHENV" "^export ${var}="; then
-    ok "$var déjà présente dans ~/.zshenv"
+    # Secret déjà présent : décider garder ou remplacer.
+    if [ "$var" = "GH_TOKEN" ]; then
+      existing="$(grep -E "^export GH_TOKEN=" "$ZSHENV" | head -1 | sed -E "s/^export GH_TOKEN=['\"]?//; s/['\"]?$//")"
+      _gh_token_valid "$existing" || rc=$?
+      if [ "$rc" -eq 0 ]; then
+        ok "$var déjà présente dans ~/.zshenv (valide)"
+        return 0
+      fi
+      if [ "$rc" -eq 2 ]; then
+        ok "$var déjà présente dans ~/.zshenv"
+        return 0
+      fi
+      warn "$var présent dans ~/.zshenv est invalide (révoqué ou expiré). Recommandé de le remplacer."
+    fi
+    if [ "$DRY_RUN" -eq 1 ]; then
+      printf '%s[dry-run] prompt: garder ou remplacer %s dans ~/.zshenv → garder%s\n' \
+        "${C_GREY}" "$var" "${C_RESET}" >&2
+      _decision="garder"
+    else
+      _decision="$(prompt_choice "$var déjà présente dans ~/.zshenv. Garder ou remplacer ?" "Garder" "Remplacer")"
+    fi
+    case "$_decision" in
+      Remplacer|remplacer)
+        _zshenv_drop "$var"
+        local safe="${val//\'/\'\"\'\"\'}"
+        apply_append "remplacer $var dans ~/.zshenv" "$ZSHENV" "export ${var}='${safe}'"
+        [ "$DRY_RUN" -eq 0 ] && ok "$var remplacée dans ~/.zshenv" || true
+        ;;
+      *)
+        ok "$var conservée (garder)"
+        ;;
+    esac
     return 0
   fi
   local safe="${val//\'/\'\"\'\"\'}"

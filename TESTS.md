@@ -774,3 +774,36 @@ faire » / « à jour ».
 **Attendu :** le dry-run **annonce** la réparation (listing de l'id périmé, mention `[dry-run]`), mais
 n'écrit **rien** : `opencode.json` inchangé, **aucun `.bak`**, runtime inchangé, exit 0.
 
+## S59 — Abstention : clé absente côté hôte → valeur VM manuelle conservée (T10.2)
+
+**Préconditions :** une VM dont `~/.zshenv` contient une ligne `export CONTEXT7_API_KEY='valeur-manuelle'`
+posée à la main, alors que l'hôte ne définit pas `CONTEXT7_API_KEY` (variable absente ou vide).
+
+**Étapes :**
+1. Régénérer le runtime (`albert-code install` / `setup` / `update`).
+2. Inspecter le bloc marqué `$AC_MARKER … $AC_MARKER_END` dans `~/.agent-vm/runtime.sh`.
+3. Relancer un run (le runtime s'exécute à chaque boot de VM) et vérifier `~/.zshenv` de la VM.
+
+**Attendu :** (1) aucune ligne `_ac_zsh_set CONTEXT7_API_KEY …` n'est émise dans le bloc marqué quand
+l'hôte n'a pas de valeur (abstention : l'ancien comportement `export VAR=''` est supprimé). (2) le bloc
+ne référence jamais `CONTEXT7_API_KEY`. (3) la valeur manuelle posée dans la VM est **conservée**
+inchangée après un run : une absence côté hôte ne doit jamais écraser une valeur VM existante par un
+vide.
+
+## S60 — Deux `setup` successifs : bloc runtime ni dupliqué ni empilé (T10.2, idempotence)
+
+**Préconditions :** un `RUNTIME_VM_FILE` cible (réel `~/.agent-vm/runtime.sh` ou fichier sandboxé)
+existant ou absent, avec des valeurs hôte définies pour `ALBERT_API_KEY`, `GH_TOKEN`,
+`CONTEXT7_API_KEY` et l'identité git.
+
+**Étapes :**
+1. Lancer `ensure_vm_runtime` (ou `albert-code setup`) une première fois.
+2. Lancer `ensure_vm_runtime` (ou `albert-code setup`) une seconde fois.
+3. Inspecter le fichier runtime résultat.
+
+**Attendu :** après deux exécutions successives, le fichier contient **exactement** : un seul marqueur
+`$AC_MARKER` (pas de bloc dupliqué), une seule définition de la fonction helper `_ac_zsh_set()` (pas
+d'empilement), et une seule paire `_ac_zsh_set VAR …` + `export VAR='…'` par variable (ex. **2** lignes
+pour `GH_TOKEN`, pas 4+). Le contenu hors bloc marqué n'est pas altéré. Les helpers ne s'empilent donc
+jamais entre deux runs.
+
