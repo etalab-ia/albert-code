@@ -18,7 +18,7 @@
 **Étapes :**
 1. Demander une page d'accueil DSFR.
 2. Vérifier dans les logs OpenCode quel modèle répond aux tâches légères (titre/résumé).
-**Attendu :** page utilisant `@codegouvfr/react-dsfr` (composants natifs, pas de CSS inventé) ; `DeepSeek-V4-Flash` utilisé comme `small_model`, `Mistral-Medium-3.5-128B` pour la génération principale.
+**Attendu :** page utilisant `@codegouvfr/react-dsfr` (composants natifs, pas de CSS inventé) ; `deepseek-v4-flash` utilisé comme `small_model` et pour la génération principale.
 
 ## S3 — `opencode.json` valide (T1.1) ✅ (VM : provider `albert` reconnu, 4 MCP connectés, Albert répond, MCP data.gouv fonctionnel via `data-gouv_search_datasets` — débloqué par T-FIX-8/9)
 **Étapes :**
@@ -578,13 +578,13 @@ un provider non-Albert (ex. Scaleway) et des MCP + permissions, sans `"albert"`.
 3. Observer la sortie : proposition de merge, dry-run affiche `[dry-run] merge du provider albert dans opencode.json`.
 4. Relancer en réel (`DRY_RUN=0` avec un HOME sandboxé) et répondre `o` au confirm.
 5. Vérifier le fichier résultant :
-   - Provider `albert` présent avec ses 3 modèles
+   - Provider `albert` présent avec son unique modèle `deepseek-v4-flash`
    - Provider `scaleway` toujours présent (non écrasé)
    - MCP `data-gouv` toujours présent
    - La sauvegarde `.bak` existe et contient l'original
 6. Relancer le setup : le fichier est détecté comme ayant `"albert"` → message « conservé (non écrasé) ».
 
-**Attendu :** (3) proposition affichée. (4) jq merge réussi. (5) les 3 vérifications passent — albert ajouté, scaleway intact, MCP intact, .bak présent. (6) idempotent, pas de duplication. Sans `jq` → avertissement T7.7 inchangé + info « installe jq ».
+**Attendu :** (3) proposition affichée. (4) jq merge réussi. (5) les 4 vérifications passent — albert ajouté avec son modèle unique, scaleway intact, MCP intact, .bak présent. (6) idempotent, pas de duplication. Sans `jq` → avertissement T7.7 inchangé + info « installe jq ».
 
 ## S47 — Garde-fou OpenCode --auto dans la VM (T8.3, AC-R041)
 
@@ -616,3 +616,11 @@ ancienne d'OpenCode (ex. 1.2.9) ne supportant pas `--auto`.
 
 **Attendu :** (2)(3) le code injecté est correctement placé. (4) opencode 1.2.9 → upgrade auto → TUI.
 (5) opencode à jour → no-op. (6) un échec (hors-ligne, etc.) n'empêche pas le runtime de continuer.
+
+## S48 — Catalogue de modèles canonique dans l'opencode.json généré (T9.1)
+
+**Étapes :**
+1. Dans un dossier de test vierge, lancer `albert-code setup --dry-run` et capturer le JSON qui serait écrit.
+2. Refaire le même contrôle sur un projet ayant déjà un `opencode.json` sans provider albert (chemin du merge jq).
+
+**Attendu :** dans les deux cas, `provider.albert.models` contient exactement `deepseek-v4-flash` ; `model` et `small_model` valent tous deux `albert/deepseek-v4-flash` ; le contexte de `deepseek-v4-flash` est 131072 ; aucun alias (forme `vendor/Nom-Casse`) n'apparaît ; le JSON est valide (`jq .`). Sur le chemin du merge, les autres providers, les MCP et le bloc `permission` préexistants sont préservés.

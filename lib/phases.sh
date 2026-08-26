@@ -713,11 +713,9 @@ scaffold_opencode_json() {
               "name": "Albert API (État)",
               "options": {"baseURL": "https://albert.api.etalab.gouv.fr/v1", "apiKey": "{env:ALBERT_API_KEY}"},
               "models": {
-                "mistralai/Mistral-Medium-3.5-128B": {"name": "Mistral Medium 3.5 (Albert)", "limit": {"context": 131072, "output": 65536}},
-                "deepseek-ai/DeepSeek-V4-Flash": {"name": "DeepSeek V4 Flash (Albert)", "limit": {"context": 393216, "output": 65536}},
-                "Qwen/Qwen3.6-27B": {"name": "Qwen 3.6 27B (Albert)", "limit": {"context": 262144, "output": 65536}}
+                "deepseek-v4-flash": {"name": "DeepSeek V4 Flash (Albert)", "limit": {"context": 131072, "output": 65536}}
               }
-            } | .model = "albert/mistralai/Mistral-Medium-3.5-128B" | .small_model = "albert/deepseek-ai/DeepSeek-V4-Flash"' "$dest" > "${dest}.tmp" 2>/dev/null && mv "${dest}.tmp" "$dest"; then
+            } | .model = "albert/deepseek-v4-flash" | .small_model = "albert/deepseek-v4-flash"' "$dest" > "${dest}.tmp" 2>/dev/null && mv "${dest}.tmp" "$dest"; then
             ok "Provider Albert ajoute dans ${dest}. Sauvegarde dans ${_bak}"
           else
             warn "Echec du merge jq (JSON invalide ? ex. commentaires) - fichier restaure, Albert non cable."
@@ -768,9 +766,9 @@ scaffold_opencode_json() {
 
   local content='{'
   content=$content'"$schema":"https://opencode.ai/config.json",'
-  content=$content'"provider":{"albert":{"npm":"@ai-sdk/openai-compatible","name":"Albert API (État)","options":{"baseURL":"https://albert.api.etalab.gouv.fr/v1","apiKey":"{env:ALBERT_API_KEY}"},"models":{"mistralai/Mistral-Medium-3.5-128B":{"name":"Mistral Medium 3.5 (Albert)","limit":{"context":131072,"output":65536}},"deepseek-ai/DeepSeek-V4-Flash":{"name":"DeepSeek V4 Flash (Albert)","limit":{"context":393216,"output":65536}},"Qwen/Qwen3.6-27B":{"name":"Qwen 3.6 27B (Albert)","limit":{"context":262144,"output":65536}}}}},'
-  content=$content'"model":"albert/mistralai/Mistral-Medium-3.5-128B",'
-  content=$content'"small_model":"albert/deepseek-ai/DeepSeek-V4-Flash",'
+  content=$content'"provider":{"albert":{"npm":"@ai-sdk/openai-compatible","name":"Albert API (État)","options":{"baseURL":"https://albert.api.etalab.gouv.fr/v1","apiKey":"{env:ALBERT_API_KEY}"},"models":{"deepseek-v4-flash":{"name":"DeepSeek V4 Flash (Albert)","limit":{"context":131072,"output":65536}}}}},'
+  content=$content'"model":"albert/deepseek-v4-flash",'
+  content=$content'"small_model":"albert/deepseek-v4-flash",'
   content=$content'"mcp":{'
 
   local first=true
