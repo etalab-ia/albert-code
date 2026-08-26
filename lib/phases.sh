@@ -906,7 +906,12 @@ scaffold_opencode_json() {
       # On ne remplace le "conservé" que si le catalogue est joignable ; sinon on
       # retombe sur le comportement historique (avertir, ne rien écrire).
       if command -v jq >/dev/null 2>&1 && fetch_albert_catalog; then
-        repair_stale_provider_albert "$dest"
+        # repair rend 0 après réparation ET 0 si rien à faire (AC_REPAIR_APPLIED
+        # porte le résultat, comme phase_update :257). Il ne rend non nul que sur
+        # une vraie erreur (catalogue vide) — hors de portée ici car un
+        # fetch_albert_catalog réussi garantit une liste non vide. Garde défensive
+        # : ne jamais rendre le run fatal si ce garde évolue (ligne 909).
+        repair_stale_provider_albert "$dest" || true
       else
         warn "%s existe déjà — conservé (non écrasé)" "$dest"
       fi
