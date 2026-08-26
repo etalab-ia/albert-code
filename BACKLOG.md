@@ -74,13 +74,14 @@ Config MCP de référence :
 - Garde-fou hôte : ne pas allouer plus que ~la moitié de la RAM/CPU de la machine (détecter `sysctl`/`nproc`, capper) — éviter 8 GiB sur un Mac 8 Go.
 **DoD :** une install fraîche produit une VM ≥ `4 CPU / 8 GiB / ≥30 GiB` sans réglage manuel ; valeurs surchargeables par env ; pas de sur-allocation sur petite machine. → `TESTS.md` S20.
 
-### T1.5 🟡 context7 conditionnel selon présence de la clé `<- AC-R011`
+### T1.5 🟡 context7 conditionnel selon présence de la clé `<- AC-R011` ✅ implémenté
 **But :** `context7` est `enabled: true` en dur dans `config/opencode.template.json` ; sans `CONTEXT7_API_KEY`, le MCP échoue au démarrage dans la VM (401 / bearer vide) et s'affiche « cassé ». Répond à la note de T1.1 restée ouverte.
 **Tâches :** au scaffold (Phase B, pose de `opencode.json`), fixer `context7.enabled` selon la présence de `CONTEXT7_API_KEY` (env ou `~/.zshenv`) — `false` (ou MCP retiré) si absente ; `true` si présente. Post-patch du fichier posé (sed/jq) ou template conditionnel. Documenter le comportement.
 **DoD :** install **sans** clé context7 → `opencode.json` posé a `context7.enabled: false` → aucun MCP en erreur dans la VM ; **avec** clé → `enabled: true`. → `TESTS.md` S21.
+**Implémenté** — la conditionnalité a évolué vers un opt-in plus strict que le ticket : les 4 MCP du template sont désormais `enabled: false` par défaut (`config/opencode.template.json:24-48`), et le scaffold n'écrit un MCP que si l'utilisateur le choisit ; la clé Context7 n'est demandée que si context7 est coché (`scaffold_opencode_json`, `lib/phases.sh:784-792`). Une personne sans clé répond simplement N à context7 → aucun MCP en erreur (objectif du ticket atteint).
 
-### T1.6 🟠 Scaffold : `opencode.json` existant sans provider `albert` `<- AC-R012` → **absorbé par T7.7**
-> Traité dans T7.7 (garde-fou générique run + setup) : l'avertissement au `setup` pour un `opencode.json` existant sans `albert` y est implémenté (`scaffold_opencode_json`).
+### T1.6 🟠 Scaffold : `opencode.json` existant sans provider `albert` `<- AC-R012` ✅ absorbé par T7.7
+> Traité dans T7.7 (garde-fou générique run + setup) : l'avertissement au `setup` pour un `opencode.json` existant sans `albert` y est implémenté (`scaffold_opencode_json`, `lib/phases.sh:729-733`). Clôturé comme absorbé par T7.7 (DoD couverte : message explicite au `setup` + option de merge en T8.2).
 **But :** dans un repo ayant déjà un `opencode.json`, le scaffold le conserve (non-destructif) → le provider `albert` n'est jamais ajouté → Albert ne se connecte pas dans la VM, sans alerte (juste « conservé »). Footgun silencieux.
 **Tâches :** en Phase B, si `./opencode.json` existe déjà, détecter s'il contient le provider `albert` ; sinon → **avertir clairement** (« opencode.json existant sans provider Albert → Albert non câblé ») et proposer/documenter le merge du bloc `provider.albert` + `model`/`small_model` (jq/sed) sans écraser le reste. Ne jamais écraser silencieusement.
 **DoD :** scaffold dans un repo avec `opencode.json` sans `albert` → message explicite (+ option de merge) ; avec `albert` déjà présent → info « rien à faire ». → `TESTS.md` S22.
@@ -100,7 +101,7 @@ Config MCP de référence :
 **DoD :** dans une VM fraîche, l'agent fait un commit de la bonne identité + push + `gh pr create` sans config manuelle. → `TESTS.md` S23.
 **✅ Validé (06/07/2026)** — dogfood réel : la PR [#2](https://github.com/etalab-ia/albert-code/pull/2) (le câblage lui-même) a été commitée, poussée et ouverte **intégralement depuis la VM**. Voir `TESTS.md` S23. Suite → T1.8.
 
-### T1.8 🟠 Intégrer l'auth GitHub à l'installeur (zéro config manuelle) `<- T1.7`
+### T1.8 🟠 Intégrer l'auth GitHub à l'installeur (zéro config manuelle) `<- T1.7` ✅ implémenté
 **But :** T1.7 a livré le *câblage* (`setup_github_auth` dans le runtime), mais l'utilisateur doit encore **créer un PAT et coller un bloc à la main** dans `~/.agent-vm/runtime.sh` (section README « Push & PR depuis la VM »). Sans cette étape, push/PR restent indisponibles (échec désormais *explicite* : « GH_TOKEN absent → voir README », plus silencieux). Objectif : rendre l'auth GitHub aussi transparente que les clés Albert, posées d'office par `install.sh`.
 **Tâches :**
 1. **Prompt token à l'install** (`ensure_vm_runtime`, Phase A) : proposer (optionnel, skippable) de saisir un `GH_TOKEN`, l'écrire dans le **bloc géré** `# --- albert-code : clés VM ---` aux côtés d'`ALBERT_API_KEY` (même pattern grep-guard + `chmod 600`, jamais loggé). Supprime la fragilité actuelle du **2ᵉ bloc manuel qui partage le marqueur de fin** `# --- /albert-code ---`.
@@ -108,11 +109,11 @@ Config MCP de référence :
 3. **Gotcha de rotation** : documenter (README) + garde-fou — un `GH_TOKEN`/email déjà persisté dans le `~/.zshenv` de la VM n'est **pas** mis à jour par un changement côté hôte (grep-guard). Prévoir un chemin de mise à jour (réécrire la ligne `~/.zshenv` de la VM, ou `agent-vm rm` documenté).
 4. **Next-steps de l'install** : mentionner l'auth GitHub dans « Prochaines étapes » (actuellement absente).
 **DoD :** sur un poste vierge, `install.sh` propose l'auth GitHub ; après acceptation, une VM fraîche pushe + ouvre une PR sans aucune édition manuelle de `runtime.sh` ; un email non-noreply est refusé avec un message clair. → `TESTS.md` S24.
-**Implémenté (06/07/2026, branche `feat/github-auth-installer`)** — sous-points 1 (prompt token dans Phase A), 2 (identité + garde-fou email noreply, 3 tentatives) et 4 (next-steps) faits ; token jamais loggé (vérifié par canari en dry-run). **Reste** : sous-point 3 (gotcha de rotation) → PR séparée. Validation S24 absorbée par T2-CH2.
+**Implémenté (06/07/2026, branche `feat/github-auth-installer`)** — sous-points 1 (prompt token dans Phase A), 2 (identité + garde-fou email noreply, 3 tentatives) et 4 (next-steps) faits, dans `_github_auth` (`lib/phases.sh:476-587`) ; token jamais loggé (vérifié par canari en dry-run). **Gotcha de rotation (sous-point 3, resté ouvert)** : désormais tracé par l'EPIC 10 (`BACKLOG.md` T10.1) — cf. cause racine scrutée le 2026-08-26. Validation S24 absorbée par T2-CH2.
 
 ---
 
-### T2-CH2 🟠 Simplifier et fiabiliser l'auth GitHub du wizard `<- AC-R036`
+### T2-CH2 🟠 Simplifier et fiabiliser l'auth GitHub du wizard `<- AC-R036` ✅ implémenté
 **But :** le bloc GitHub de `phase_a` est redondant et fragile : après la dérivation API réussie, il redemande quand même le nom et l'email (pré-remplis, donc inutiles). Et si l'utilisateur colle son token à la question o/N (cas réel bêta-testeur), le token est silencieusement ignoré.
 **Tâches :**
 1. **#1 — Supprimer les 2 prompts quand la dérivation réussit** : après curl 2xx + login + id, utiliser directement `git_name = login` et `git_email = <id>+<login>@users.noreply.github.com`. Afficher un seul récap `ok "Compte GitHub : login <email>"`. Persister GH_TOKEN, AC_GIT_USER_NAME, AC_GIT_USER_EMAIL.
@@ -255,8 +256,9 @@ Config MCP de référence :
 **But :** valider hors du poste de développement habituel (machine vierge).
 **DoD :** install réussie par ≥1 early adopter externe.
 
-### T5.3 🟡 Publication `etalab-ia/albert-code`
+### T5.3 🟡 Publication `etalab-ia/albert-code` ✅ implémenté
 **DoD :** repo public, LICENSE MIT, CI verte.
+**Implémenté** — le dépôt `github.com/etalab-ia/albert-code` est public (`api.github.com` → `private: false`, rendu public le 01/07/2026), `LICENSE` est MIT, et la dernière run de CI est verte (`conclusion: success`, 2026-08-26).
 
 ---
 
@@ -282,7 +284,7 @@ Config MCP de référence :
 **But :** l'utilisateur ne voit plus « agent-vm » dans les messages, juste des références à « la VM isolée » / « le moteur de VM d'Albert Code ».
 **DoD :** tous les messages utilisateur dans `lib/phases.sh`, `lib/ui.sh`, `install.sh`, `README.md` sont reformulés. Le nom « agent-vm » reste dans les commentaires de code, la LICENSE et `vendor/vm/`.
 
-### T7.6 🟠 Ne pas repasser les flags ressources au `run` si la VM projet tourne déjà `<- AC-R037`
+### T7.6 🟠 Ne pas repasser les flags ressources au `run` si la VM projet tourne déjà `<- AC-R037` ✅ implémenté
 **But :** sur une VM projet déjà `Running`, chaque `albert-code run` affiche le prompt agent-vm « VM is currently running. It must be stopped to apply new resource settings. Stop the VM and apply changes? [y/N] » alors que rien ne change (ressources demandées = ressources courantes). Faux positif agaçant à chaque lancement.
 
 **Cause :** `phase_run` passe toujours `--cpus/--memory/--disk` (`lib/phases.sh:236`), et le vendored ne compare jamais aux valeurs courantes : `vendor/vm/agent-vm.sh:374` déclenche dès qu'un flag ressource est présent ET que la VM tourne (le commentaire « if ... changed » est faux). Le vendored est figé (pin 6f20194) → correction côté Albert Code uniquement.
@@ -320,8 +322,9 @@ Config MCP de référence :
 **DoD :** VM projet **présente** (Running **ou** Stopped) → `albert-code run` n'affiche plus « must be stopped » et lance OpenCode directement (message « rattachement »). VM **inexistante** (1er run du projet) → flags passés, la VM projet est créée dimensionnée. Validation en run **réel** (le bug ne se voit pas en test isolé à froid : course SIGPIPE, cf. post-mortem). → `TESTS.md` S41 (VM running → plus de prompt, message rattachement) + S42 (VM inexistante → flags passés, création OK).
 
 **Extension (même racine SIGPIPE) :** `base_vm_exists()` portait le même anti-pattern `limactl list -q | grep -q '^agent-vm-base$'`, et il est appelé par `phase_run`/`check_base_vm` en amont → un faux négatif reproposait la création de la VM de base à chaque `run` (symptôme observé chez un bêta-testeur). Aligné sur le même correctif capture-first + `case` bash pur. → `TESTS.md` S43.
+**Implémenté** — `phase_run` capture `_vm_list` puis `case` bash pur : VM présente → rattachement sans flags ; inexistante → flags (`lib/phases.sh:237-248`). `base_vm_exists` aligné capture-first + `case` (`lib/phases.sh:278-286`).
 
-### T7.7 🟠 Garde-fou : avertir quand un projet n'est pas câblé pour Albert (au `run` et au `setup`) `<- AC-R040` (absorbe T1.6)
+### T7.7 🟠 Garde-fou : avertir quand un projet n'est pas câblé pour Albert (au `run` et au `setup`) `<- AC-R040` (absorbe T1.6) ✅ implémenté
 **But :** `albert-code run` dans un dossier sans `opencode.json` (jamais `setup`) — ou avec un `opencode.json` sans provider `albert` — ouvre OpenCode sur ses modèles par défaut, **Albert absent de `/models`, sans aucune alerte**. Footgun silencieux : 2 bêta-testeurs piégés (dont un power user), longue session de debug à chaque fois. Généralise T1.6 (fichier existant sans `albert`) au cas « pas de fichier du tout ».
 
 **Tâches :**
@@ -331,12 +334,23 @@ Config MCP de référence :
 **Règles :** ne rien écraser (non-destructif) ; `grep` sur fichier uniquement (jamais `limactl | grep`) ; bash 3.2 / `set -euo pipefail` ; accents FR corrects ; dry-run : le garde-fou n'ouvre pas OpenCode sans config.
 
 **DoD :** `run` dans un dossier sans `opencode.json` **ou** sans provider `albert` → avertissement + confirmation (pas de lancement silencieux) ; `run` dans un projet câblé → aucun changement. `setup` sur un `opencode.json` existant sans `albert` → message explicite. → `TESTS.md` S44 (garde-fou run) + S45 (avertissement setup, ex-T1.6/S22).
+**Implémenté** — garde-fou `run` en tête de `phase_run` (`lib/phases.sh:204-211`, détection sur fichier `grep -q '"albert"'`) ; avertissement `setup` sur fichier existant sans `albert` (`lib/phases.sh:729-733`, généralisé en merge jq par T8.2).
+
+### T7.8 🔴 Détecter une VM projet clonée d'une base périmée et proposer un reset `<- AC-R044`
+**But :** la VM de base est reconstruite, mais la VM projet préexistante reste clonée de l'ancienne. Le moteur de VM le signale lui-même (« Existing VMs were not updated. Use --reset to re-clone them from the new base. » et « Warning: Base VM has been updated since this VM was cloned. »). Comme le runtime est lancé via `limactl shell … zsh -l` et que l'ancienne base n'a ni zsh ni opencode, on obtient `zsh: command not found` puis `opencode: command not found` : le runtime ne s'exécute jamais, donc pas de clé, pas de skills, pas d'OpenCode. Albert Code n'expose aucun `--reset` et n'en propose jamais.
+
+**Tâches :** comparer la version de la base et celle de la VM projet (fichiers de version du répertoire d'état du moteur de VM), détecter le décalage, et proposer explicitement de recréer la VM projet. Vérifier aussi la présence de `zsh` et d'`opencode` dans la VM avant de lancer le runtime, avec un message actionnable plutôt qu'un `command not found` silencieux.
+
+**Règles :** ne pas toucher `vendor/vm/` (vendored figé) ; bash 3.2 / `set -euo pipefail` ; accents FR corrects ; pas de tiret cadratin ; non-destructif ; dry-run OK.
+
+**DoD :** une VM projet clonée d'une base antérieure est détectée au `run`, et l'utilisateur se voit proposer la recréation. → `TESTS.md` S49.
+**Source :** Bêta-test juillet 2026, cause racine élucidée le 15/07 → `FEEDBACK.md` AC-R044.
 
 ---
 
 ## EPIC 6 — Interface 3 verbes & simplification profils `<- AC-R014, AC-R015, AC-R016, AC-R017`
 
-### T6.1 🔴 Commande `albert-code` à 3 verbes `<- AC-R014`
+### T6.1 🔴 Commande `albert-code` à 3 verbes `<- AC-R014` ✅ implémenté
 **But :** une commande unique `albert-code` avec 3 verbes : `install` (bootstrap poste), `setup` (scaffold projet), `run` (lancement VM) — au lieu de mémoriser `install.sh` + `agent-vm setup` + `agent-vm opencode`.
 **Tâches :**
 - Créer `bin/albert-code` : dispatcher en `case "$1" in install|setup|run|--help)`.
@@ -345,15 +359,17 @@ Config MCP de référence :
 - `phase_run` : reprend le bloc « Prochaines étapes » (créer la VM de base si absente, puis `agent-vm --cpus "$EFF_CPUS" --memory "$EFF_MEM" --disk "$AC_VM_DISK" opencode`).
 - Mettre à jour `usage_install` et `README.md` pour documenter les 3 verbes.
 **DoD :** `albert-code install` = Phase A ; `albert-code setup` = Phase B ; `albert-code run` = lance la VM ; `albert-code --help` documente tout. install.sh devient mince. → `TESTS.md` S25.
+**Implémenté** — dispatcher `bin/albert-code` (`case "$verb" in install|setup|run`, `bin/albert-code:35,47-65`) ; `phase_a`/`phase_b`/`phase_run` extraits dans `lib/phases.sh`, sourçés par `bin/albert-code:25-26`.
 
-### T6.2 🟡 Pédagogie agent-vm en phase A `<- AC-R015`
+### T6.2 🟡 Pédagogie agent-vm en phase A `<- AC-R015` ✅ implémenté
 **But :** avant d'installer Lima/agent-vm, afficher un encart en français simple expliquant ce qu'est cette VM et pourquoi c'est indispensable.
 **Tâches :**
 - Dans `phase_a`, avant le `confirm` Lima, afficher un encart `title` + `info` : « une bulle isolée (VM légère Lima) où l'assistant tourne sans accès à tes fichiers perso, clés SSH, cookies. Permet de le laisser tourner en autonomie. Installe : Lima, agent-vm, clé Albert révocable. »
 - Garder le `confirm` avant d'installer Lima.
 **DoD :** un non-dev comprend pourquoi on installe une VM avant le premier `confirm`. → `TESTS.md` S26.
+**Implémenté** — encart FR « À propos de l'isolation » (`lib/phases.sh:45-56`, `title` + `info` : bulle isolée, pas d'accès aux fichiers perso/clés SSH/cookies, autonomie) affiché avant le `confirm` Lima (`lib/phases.sh:69`).
 
-### T6.3 🔴 Supprimer les profils → un seul AGENTS.md par défaut `<- AC-R016`
+### T6.3 🔴 Supprimer les profils → un seul AGENTS.md par défaut `<- AC-R016` ✅ implémenté
 **But :** remplacer le choix de profil (beta.gouv / La Suite / IAE) par un unique `templates/AGENTS.default.md` avec sécurité, conventions de code et accessibilité — neutre, applicable à tout projet.
 **Tâches :**
 - Supprimer `profiles/beta.gouv/`, `profiles/lasuite/`, `profiles/iae/`.
@@ -362,8 +378,9 @@ Config MCP de référence :
 - `phase_b` copie `templates/AGENTS.default.md` vers `./AGENTS.md` via `copy_template` (n'écrase jamais un AGENTS.md existant).
 - Nettoyer les références aux profils dans `README.md`, `AGENTS.md` (repo), `BACKLOG.md`, `TESTS.md` (retirer S7, S6).
 **DoD :** plus de menu contexte ; un seul AGENTS.md par défaut ; profils physiquement supprimés du dépôt ; re-setup non-destructif (AGENTS.md conservé). → `TESTS.md` S27.
+**Implémenté** — dossier `profiles/` absent du dépôt ; `templates/AGENTS.default.md` présent ; `phase_b` pose ce template via `copy_template` non-destructif (`lib/phases.sh:155`).
 
-### T6.4 🟠 Choix Y/N skills + MCP au `setup` (phase_b) `<- AC-R017`
+### T6.4 🟠 Choix Y/N skills + MCP au `setup` (phase_b) `<- AC-R017` ✅ implémenté
 **But :** au lieu d'activer toutes les skills et MCP en aveugle, demander à l'utilisateur ce qu'il veut brancher.
 **MCP (par projet, dans opencode.json) :**
 - Passe les 4 MCP de `config/opencode.template.json` en `enabled: false` par défaut.
@@ -374,6 +391,7 @@ Config MCP de référence :
 - Écrit la sélection dans `./.albert-code/skills.txt` (une skill par ligne).
 - Modifie `sync_skills` du runtime : au boot, ne symlinke QUE les skills listées dans `./.albert-code/skills.txt` du projet courant ; réconcilie le dossier global skills/ (retire les symlinks albert-code non sélectionnés, JAMAIS les skills perso). Si aucun manifeste → comportement actuel (toutes) pour rétrocompat.
 **DoD :** un « non » à un MCP/skill ne l'écrit pas ; re-setup conserve les choix ; skills perso jamais touchées par la réconciliation. → `TESTS.md` S28.
+**Implémenté** — MCP : 4 `confirm` dans `scaffold_opencode_json` (`lib/phases.sh:745,752,758,763`), bloc MCP généré en bash sans jq, `enabled:true` seulement si coché. Skills : `confirm` par skill (`lib/phases.sh:944`), sélection écrite dans `.albert-code/skills.txt` (`lib/phases.sh:956`) ; `sync_skills` lit ce manifeste et réconcilie les symlinks sans toucher aux skills perso (`runtime/agent-vm.runtime.sh:168-232`).
 
 ### T6.5 🟡 Encart FR de transition avant wizard agent-vm `<- AC-R018` ✅ implémenté
 **But :** quand `install.sh` passe la main à `agent-vm setup`, le wizard natif (en anglais) s'affiche sans prévenir. Déroutant pour un public non-tech francophone.
@@ -433,7 +451,7 @@ Option : ajouter un paramètre `install_shim` pour mode "exec" vs "source", ou d
 **Tâches :** dans `install_shim` (`lib/ui.sh`), avant de skip un shim existant, comparer les 3 premières lignes du fichier existant avec le `shim_content` attendu. Si différent : réécrire. Si identique : skip.
 **DoD :** après un changement de contenu du shim, `./install.sh` réécrit le fichier (au lieu de « déjà présent »). → `TESTS.md` S36.
 
-### T6.12-p 🟠 Polish UX sortie setup `<- AC-R027 AC-R028 AC-R029 AC-R030`
+### T6.12-p 🟠 Polish UX sortie setup `<- AC-R027 AC-R028 AC-R029 AC-R030` ✅ implémenté
 **But :** 4 retouches UX sur la sortie de `albert-code setup`, issues de dogfood.
 
 **Tâches :**
@@ -443,13 +461,14 @@ Option : ajouter un paramètre `install_shim` pour mode "exec" vs "source", ou d
 4. Déplacer le statut GitHub (push/PR configuré ou non) JUSTE AVANT « ✓ Projet configuré. » dans `phase_b()`.
 
 **DoD :** les 4 retouches visibles en dry-run. L'ASCII art apparaît en Phase B. La clé Context7 est demandée quand on choisit le MCP sans clé préexistante. L'ordre des lignes en fin de Phase B est : statut GitHub → ✓ Projet configuré → Prochaines étapes → albert-code run → NB skills. → `TESTS.md` S37.
+**Implémenté** — ASCII art en tête de Phase B (`lib/phases.sh:144`) ; clé Context7 demandée quand context7 coché sans clé (`lib/phases.sh:784-792`) ; `print_next_steps` allégé (`lib/phases.sh:991-996`) ; ordre fin de Phase B statut GitHub → ✓ Projet configuré → panneau récap → next steps (`lib/phases.sh:179-190`).
 
 ### T6.13 🟡 Bruit de debug « name= » dans sync_skills `<- AC-R026` ✅ implémenté
 **But :** au boot VM (`runtime/agent-vm.runtime.sh`, sync_skills), des lignes « name=<skill> » parasites apparaissent dans la sortie (ex. name=datagouv-apis). Bruit dû aux variables `local name` + `name=$(basename …)` en bash 3.2.
 **Tâches :** remplacer les déclarations `local name` puis `name="$(basename …)"` par `local name="$(basename …)"` (fusion local+assignation), et idem pour `local ename`, `local resolved`. Supprime la source probable du bruit.
 **DoD :** la sortie de sync_skills n'affiche que les messages _ok/_info/_warn, plus de lignes « name= ». → `TESTS.md` S36 (vérification sortie propre).
 
-### T6.14 🟡 Polish visuel du wizard `<- AC-R031 AC-R032 AC-R033 AC-R034`
+### T6.14 🟡 Polish visuel du wizard `<- AC-R031 AC-R032 AC-R033 AC-R034` ✅ implémenté
 **But :** 4 retouches visuelles sur le wizard install/setup (feedback Leo Guillaume, Tech Lead Albert API). Gains de confiance utilisateur sans dépendance ajoutée — reste 100% bash, bash 3.2, non-destructif, dry-run OK.
 
 **Tâches :**
@@ -465,6 +484,7 @@ Option : ajouter un paramètre `install_shim` pour mode "exec" vs "source", ou d
 - Dry-run : spinner dégradé (pas d'animation), récap affiché quand même
 
 **DoD :** art <=76 col, spinner dégrade en non-TTY/dry-run, compteur [1/4]..[4/4] visible, récap affiche les bons choix. → `TESTS.md` S38.
+**Implémenté** — ASCII art figlet slant (`banner`, `lib/ui.sh:231-240`) ; spinner braille avec dégradation non-TTY/dry-run (`with_spinner`, `lib/ui.sh:248-285`) ; compteur `[1/4]`..`[4/4]` (`lib/phases.sh:154,159,164,169`) ; panneau récap (`print_setup_summary`, `lib/phases.sh:962-989`, utilisé à `lib/phases.sh:188`).
 
 ### T6.15 🟠 Clé Context7 : plus jamais à l'install, seulement au setup si le MCP est choisi `<- AC-R038` ✅ implémenté
 **But :** `albert-code install` (phase A.4) demande la clé Context7 avant toute explication et avant que l'utilisateur ait choisi de brancher ce MCP (onboarding Adrien 21/07). La clé ne doit être demandée qu'au `setup`, après un Y à la question context7.
@@ -489,7 +509,7 @@ Option : ajouter un paramètre `install_shim` pour mode "exec" vs "source", ou d
 
 **Fait de code clé :** Le SEUL fichier rafraîchi à l'existant est le runtime USER `~/.agent-vm/runtime.sh` : son bloc marqué (`$AC_MARKER … $AC_MARKER_END`) est réécrit par `ensure_vm_runtime()` à chaque phase A ET B. Toute logique évolutive doit passer par là.
 
-### T8.1 🟡 (doc) Convention zone gérée vs fichiers figés
+### T8.1 🟡 (doc) Convention zone gérée vs fichiers figés ✅ implémenté
 
 **But :** Documenter dans ce ticket l'architecture de rafraîchissement du bundle, pour que tout contributeur sache où et comment ajouter une logique évolutive.
 
@@ -504,18 +524,21 @@ Option : ajouter un paramètre `install_shim` pour mode "exec" vs "source", ou d
 | `templates/` | ❌ Non (versionnés) | Versionné dans le repo | Utilisés uniquement au premier `setup` |
 
 **DoD :** cette documentation est présente dans `BACKLOG.md`.
+**Implémenté** — le tableau « Architecture de rafraîchissement » figure ci-dessus dans ce ticket (DoD satisfaite). Décision de l'EPIC 10 (T10.2) : le runtime doit réécrire systématiquement la ligne dans le `.zshenv` de la VM (cf. EPIC 10).
 
-### T8.2 🟠 opencode.json — réparer, pas seulement avertir (généralise T1.6/T7.7)
+### T8.2 🟠 opencode.json — réparer, pas seulement avertir (généralise T1.6/T7.7) ✅ implémenté
 
 **But :** Dans `scaffold_opencode_json()`, branche « fichier existe sans albert » (ajoutée par T7.7) : si `jq` est présent, proposer (confirm) puis **merger** `provider.albert` + `model` + `small_model` du template dans l'`opencode.json` existant, sans toucher les autres clés (MCP, permissions, autres providers). Sauvegarder l'original (`.bak`). Si `jq` absent → garder l'avertissement T7.7 (fallback). Non-destructif.
 
 **DoD :** `opencode.json` perso avec provider scaleway → après setup, provider albert ajouté ET scaleway préservé. → `TESTS.md` S46.
+**Implémenté** — merge jq dans `scaffold_opencode_json` : sauvegarde `.bak` puis `jq '.provider.albert = {...} | .model = ... | .small_model = ...'` (n'écrase pas les autres clés), fallback avertissement si jq absent (`lib/phases.sh:699-733`).
 
-### T8.3 🟠 Garde-fou version OpenCode dans le bloc marqué du runtime USER (absorbe AC-R041)
+### T8.3 🟠 Garde-fou version OpenCode dans le bloc marqué du runtime USER (absorbe AC-R041) ✅ implémenté
 
 **But :** `ensure_vm_runtime()` écrit un garde-fou exécuté dans la VM au boot, à l'intérieur du bloc marqué `~/.agent-vm/runtime.sh` (après les exports, avant `$AC_MARKER_END`). Logique : capture `opencode --help`, si `--auto` absent → upgrade auto.
 
 **DoD :** VM avec opencode trop vieux → au boot, upgrade auto → `run` ouvre le TUI, plus de help. → `TESTS.md` S47 `<- AC-R041`.
+**Implémenté** — garde-fou OpenCode `--auto` écrit dans le bloc marqué `~/.agent-vm/runtime.sh` par `ensure_vm_runtime` (`lib/phases.sh:430-443`).
 
 ### T8.4 🟠 (OPTION) Verbe `albert-code update` pour rafraîchir un projet existant → **promu en T9.3**
 
@@ -576,3 +599,43 @@ Rappels : le contexte DeepSeek passe de 393216 à **131072** (correction, sinon 
 ### T9.4 🟡 Garde-fou au `run`
 
 **But :** avant de lancer le TUI, vérifier que le `model` configuré est `green` dans `GET /health/models` et proposer une bascule sinon, au lieu de laisser l'utilisateur sur un 502 opaque. (Documenté — PAS implémenté dans cette PR.)
+
+---
+
+## EPIC 10 — Auth GitHub de l'agent `<- AC-R043`
+
+**Problème de fond :** Albert Code ne peut plus pousser ni ouvrir de PR depuis la VM. Diagnostiqué le 2026-08-26, cause racine prouvée par comparaison d'empreintes de jetons :
+
+- le `GH_TOKEN` de l'hôte (`~/.zshenv`) est valide (`api.github.com/user` renvoie 200) ;
+- le `GH_TOKEN` présent dans le `~/.zshenv` de la VM est un autre jeton, périmé, qui renvoie 401 (`gh auth status` : « Failed to log in to github.com using token »).
+
+Deux gardes « ne rien faire si la variable existe déjà » se combinent :
+
+1. `persist_zshenv` (`lib/phases.sh`) sort avec « déjà présente » dès qu'une ligne `export GH_TOKEN=` existe sur l'hôte. Un jeton révoqué ou expiré ne peut donc pas être remplacé par le wizard.
+2. La ligne écrite dans le runtime (`lib/phases.sh:413-414`) est `grep -q 'GH_TOKEN' ~/.zshenv || echo "export GH_TOKEN=..." >> ~/.zshenv`, exécutée dans la VM. Une fois posée, elle n'est plus jamais rafraîchie.
+
+Le shadowing rend le bug invisible : `lib/phases.sh:415-416` exporte bien le jeton frais dans `runtime.sh`, mais zsh source `~/.zshenv` à chaque invocation de shell. Le `zsh -l` du TUI ressource donc le `.zshenv` de la VM, dont l'`export GH_TOKEN=<périmé>` écrase la valeur fraîche héritée. C'est le piège agent-vm PR#16 retourné : `.zshenv` n'est plus le correctif, il est devenu la source de la panne.
+
+Conséquence : sur les dernières PR, l'agent s'est arrêté avant le push et un humain a poussé à la main à chaque fois.
+
+### T10.1 🔴 Rafraîchir un secret existant, sur l'hôte et dans la VM `<- AC-R043`
+**But :** `persist_zshenv` doit pouvoir remplacer une valeur existante : détecter un `GH_TOKEN` présent mais invalide (`curl api.github.com/user` renvoie 401) et proposer « garder / remplacer ». Même logique pour la ligne posée dans le `.zshenv` de la VM : réécrire au lieu de sauter si la valeur diffère de celle du bloc marqué. Généraliser aux autres secrets (`ALBERT_API_KEY`, `CONTEXT7_API_KEY`), qui ont le même défaut.
+**DoD :** un jeton révoqué est remplacé de bout en bout par le wizard, sans édition manuelle d'aucun `.zshenv`, ni sur l'hôte ni dans la VM. → `TESTS.md` S50.
+
+### T10.2 🟠 Ne plus faire dépendre le push du `.zshenv` de la VM
+**But :** soit le runtime réécrit systématiquement la ligne dans le `.zshenv` de la VM (source unique), soit le bundle cesse d'écrire dans ce fichier et passe le secret autrement. Trancher et documenter la décision dans T8.1.
+**DoD :** après rotation d'un jeton côté hôte, un run suffit à ce que la VM voie le nouveau jeton. → `TESTS.md` S51.
+
+### T10.3 🟠 Jeton dédié à l'agent, à permissions minimales
+**But :** le bundle persiste aujourd'hui dans la VM le jeton personnel de l'utilisateur, souvent large. Trois raisons de changer : le moindre privilège (un agent n'a besoin que de pousser une branche et d'ouvrir une PR sur les dépôts du projet), la révocabilité (couper l'agent sans casser le compte de la personne), et la traçabilité (distinguer ce que fait l'agent de ce que fait la personne). Un incident de fuite de jeton personnel depuis `runtime.sh` a déjà eu lieu en juillet 2026 et a imposé une rotation.
+**Tâches :** cible = un jeton fine-grained dédié, limité aux dépôts nécessaires, avec les permissions minimales pour `push` et `gh pr create`. Documenter la marche à suivre dans le README et le demander explicitement au wizard comme un jeton dédié. Prendre en compte le cas du non-admin d'organisation, qui ne peut pas créer de fine-grained.
+**DoD :** le README décrit un jeton dédié à permissions minimales, et le wizard le réclame comme tel. → `TESTS.md` S52.
+
+### T10.4 🟡 Tracer le modèle dans les commits produits par l'agent
+**But :** les commits produits par Albert Code ne portent aucune trace du modèle qui a généré le code. Ajouter à `templates/AGENTS.default.md` une consigne de trailer `Co-Authored-By` nommant le modèle Albert utilisé, pour retrouver a posteriori le code produit par un modèle donné (utile en cas de régression de qualité ou de retrait d'un modèle du catalogue, cas déjà vécu).
+**Note :** c'est une consigne de prompt, donc un garde-fou faible ; un contrôle côté forge serait la version robuste.
+**DoD :** un commit produit par Albert Code porte le trailer nommant le modèle. → `TESTS.md` S53.
+
+### T10.5 🟡 Détection de secrets imposée techniquement, pas par consigne
+**But :** la détection de secrets avant commit repose sur une ligne de `templates/AGENTS.default.md`. Une consigne dans le contexte de l'agent peut être ignorée ou altérée : elle ne peut pas être l'unique garde-fou sur les secrets. Étudier la pose d'un hook de pré-commit au setup.
+**DoD :** ticket documenté, décision d'opportunité tranchée.
