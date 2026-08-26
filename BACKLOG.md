@@ -461,7 +461,7 @@ Option : ajouter un paramètre `install_shim` pour mode "exec" vs "source", ou d
 4. Déplacer le statut GitHub (push/PR configuré ou non) JUSTE AVANT « ✓ Projet configuré. » dans `phase_b()`.
 
 **DoD :** les 4 retouches visibles en dry-run. L'ASCII art apparaît en Phase B. La clé Context7 est demandée quand on choisit le MCP sans clé préexistante. L'ordre des lignes en fin de Phase B est : statut GitHub → ✓ Projet configuré → Prochaines étapes → albert-code run → NB skills. → `TESTS.md` S37.
-**Implémenté** — ASCII art en tête de Phase B (`lib/phases.sh:144`) ; clé Context7 demandée quand context7 coché sans clé (`lib/phases.sh:784-792`) ; `print_next_steps` allégé (`lib/ui.sh:991-996`) ; ordre fin de Phase B statut GitHub → ✓ Projet configuré → panneau récap → next steps (`lib/phases.sh:179-190`).
+**Implémenté** — ASCII art en tête de Phase B (`lib/phases.sh:144`) ; clé Context7 demandée quand context7 coché sans clé (`lib/phases.sh:784-792`) ; `print_next_steps` allégé (`lib/phases.sh:991-996`) ; ordre fin de Phase B statut GitHub → ✓ Projet configuré → panneau récap → next steps (`lib/phases.sh:179-190`).
 
 ### T6.13 🟡 Bruit de debug « name= » dans sync_skills `<- AC-R026` ✅ implémenté
 **But :** au boot VM (`runtime/agent-vm.runtime.sh`, sync_skills), des lignes « name=<skill> » parasites apparaissent dans la sortie (ex. name=datagouv-apis). Bruit dû aux variables `local name` + `name=$(basename …)` en bash 3.2.
@@ -484,7 +484,7 @@ Option : ajouter un paramètre `install_shim` pour mode "exec" vs "source", ou d
 - Dry-run : spinner dégradé (pas d'animation), récap affiché quand même
 
 **DoD :** art <=76 col, spinner dégrade en non-TTY/dry-run, compteur [1/4]..[4/4] visible, récap affiche les bons choix. → `TESTS.md` S38.
-**Implémenté** — ASCII art figlet slant (`banner`, `lib/ui.sh:231-240`) ; spinner braille avec dégradation non-TTY/dry-run (`with_spinner`, `lib/ui.sh:248-285`) ; compteur `[1/4]`..`[4/4]` (`lib/phases.sh:154,159,164,169`) ; panneau récap (`print_setup_summary`, `lib/ui.sh:962-989`, utilisé à `lib/phases.sh:188`).
+**Implémenté** — ASCII art figlet slant (`banner`, `lib/ui.sh:231-240`) ; spinner braille avec dégradation non-TTY/dry-run (`with_spinner`, `lib/ui.sh:248-285`) ; compteur `[1/4]`..`[4/4]` (`lib/phases.sh:154,159,164,169`) ; panneau récap (`print_setup_summary`, `lib/phases.sh:962-989`, utilisé à `lib/phases.sh:188`).
 
 ### T6.15 🟠 Clé Context7 : plus jamais à l'install, seulement au setup si le MCP est choisi `<- AC-R038` ✅ implémenté
 **But :** `albert-code install` (phase A.4) demande la clé Context7 avant toute explication et avant que l'utilisateur ait choisi de brancher ce MCP (onboarding Adrien 21/07). La clé ne doit être demandée qu'au `setup`, après un Y à la question context7.
