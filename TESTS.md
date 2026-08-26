@@ -578,13 +578,13 @@ un provider non-Albert (ex. Scaleway) et des MCP + permissions, sans `"albert"`.
 3. Observer la sortie : proposition de merge, dry-run affiche `[dry-run] merge du provider albert dans opencode.json`.
 4. Relancer en réel (`DRY_RUN=0` avec un HOME sandboxé) et répondre `o` au confirm.
 5. Vérifier le fichier résultant :
-   - Provider `albert` présent avec ses 3 modèles
+   - Provider `albert` présent avec son unique modèle `deepseek-v4-flash`
    - Provider `scaleway` toujours présent (non écrasé)
    - MCP `data-gouv` toujours présent
    - La sauvegarde `.bak` existe et contient l'original
 6. Relancer le setup : le fichier est détecté comme ayant `"albert"` → message « conservé (non écrasé) ».
 
-**Attendu :** (3) proposition affichée. (4) jq merge réussi. (5) les 3 vérifications passent — albert ajouté, scaleway intact, MCP intact, .bak présent. (6) idempotent, pas de duplication. Sans `jq` → avertissement T7.7 inchangé + info « installe jq ».
+**Attendu :** (3) proposition affichée. (4) jq merge réussi. (5) les 4 vérifications passent — albert ajouté avec son modèle unique, scaleway intact, MCP intact, .bak présent. (6) idempotent, pas de duplication. Sans `jq` → avertissement T7.7 inchangé + info « installe jq ».
 
 ## S47 — Garde-fou OpenCode --auto dans la VM (T8.3, AC-R041)
 
