@@ -19,7 +19,7 @@ Deux tentatives de bundle de mars 2026 étaient en pause pour deux raisons, aujo
 
 | Blocage mars 2026 | Statut |
 |---|---|
-| Modèles Albert trop faibles (GPT-OSS 120B échoue sur multi-fichiers / react-dsfr) | Levé : `mistral-medium-3-5-128b` et `deepseek-v4-flash` disponibles sur Albert API |
+| Modèles Albert trop faibles (GPT-OSS 120B échoue sur multi-fichiers / react-dsfr) | Levé par l'arrivée de nouveaux modèles sur Albert API |
 | Mistral Medium plantait sur le tool calling (`strict: null` rejeté par Albert) | Levé, prouvé par 2 PR réelles |
 
 Preuves de bout en bout (agent souverain produisant une vraie PR) :
@@ -97,7 +97,7 @@ Corollaire pratique : un utilisateur déjà équipé peut faire tourner le spike
 ### Hors périmètre v1
 - Pas de commandes custom type `/cadrer /build /preview /save` (inspiration template-proto non reprise) : Albert Code = OpenCode nu + skills + MCP.
 - Pas de MCP Docs La Suite.
-- Pas d'autre modèle Albert que `deepseek-v4-flash` (principal et small_model), `qwen3-coder-30b-A3b-instruct` (spécialisé code) et `mistral-medium-3-5-128b` (alternatif).
+- Pas d'autre modèle Albert que `deepseek-v4-flash` (principal et small_model).
 
 ## Le chaînon manquant à construire
 

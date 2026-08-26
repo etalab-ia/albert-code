@@ -147,15 +147,13 @@ MCP (**Model Context Protocol**) est un standard qui **branche l'agent sur un ou
 ## Sous le capot
 
 - **Harness** : OpenCode uniquement. Provider Albert via `@ai-sdk/openai-compatible`.
-- **Modèles Albert embarqués** : trois modèles, sélectionnables dans OpenCode via `/models`.
+- **Modèles Albert embarqués** : un modèle embarqué, `deepseek-v4-flash`, celui qui est prouvé en usage réel.
 
   | Modèle | Rôle | Usage type | Contexte |
   |---|---|---|---|
   | `deepseek-v4-flash` | **`model`** (défaut) **et `small_model`** | Usage agentique principal : édition multi-fichiers, refacto, tool calling, tâches légères. | 131k |
-  | `qwen3-coder-30b-A3b-instruct` | disponible (non défaut) | Modèle spécialisé code. Sélection : `albert/qwen3-coder-30b-A3b-instruct`. | 262k |
-  | `mistral-medium-3-5-128b` | disponible (non défaut) | Modèle de code alternatif. | 131k |
 
-  Pour changer le modèle par défaut d'un projet, édite `model` dans son `opencode.json`.
+  Pour changer le modèle par défaut d'un projet, édite `model` dans son `opencode.json`. Pour en ajouter un autre à la main, ajoute un bloc dans `provider.albert.models` du projet en récupérant d'abord son `id` canonique via `GET /v1/models` (jamais un alias) : ex. `"models": { "deepseek-v4-flash": { "name": "DeepSeek V4 Flash (Albert)", "limit": { "context": 131072, "output": 65536 } } }`.
 - **Config** : `opencode.json` de **portée projet** (jamais le global de l'utilisateur, qui peut avoir d'autres providers).
 - **Skills** : `etalab-ia/skills` cloné dans un cache (`~/.config/opencode/.albert-skills-cache`) et symliqué dans le dossier scanné par OpenCode. Au `setup`, chaque skill est proposée en Y/N avec son objectif. La sélection est écrite dans `.albert-code/skills.txt` à la racine du projet. Au boot de la VM, `sync_skills` ne symlinke que les skills sélectionnées puis réconcilie (retire les symlinks des skills non sélectionnées, sans jamais toucher les skills perso). Sans manifeste `.albert-code/skills.txt`, toutes les skills sont installées (rétrocompat). Mise à jour à chaque démarrage de VM.
 - **MCP** : les 4 connecteurs sont désormais **tous opt-in**. Au `setup`, chaque MCP est proposé en Y/N avec son objectif : `data-gouv` (accès aux données publiques), `context7` (doc à jour des librairies ; si tu le choisis, la clé gratuite est demandée à ce moment-là : https://context7.com/plans), `playwright` (navigateur headless), `chrome-devtools` (debug navigateur). Seuls les MCP acceptés sont écrits dans `opencode.json` du projet (`enabled:false` par défaut). Note : le MCP `chrome-devtools` peut aussi apparaître dans OpenCode même si non coché — il est préinstallé par le moteur d'isolation en amont et n'est pas sous le contrôle d'Albert Code.

@@ -546,22 +546,22 @@ Option : ajouter un paramètre `install_shim` pour mode "exec" vs "source", ou d
 
 **Problème de fond :** Le catalogue de modèles d'Albert API a churné pendant l'été 2026. Les trois identifiants embarqués dans le bundle (`deepseek-ai/DeepSeek-V4-Flash`, `Qwen/Qwen3.6-27B`, `mistralai/Mistral-Medium-3.5-128B`) sont morts en production (404 / 404 / 502). Le schéma OpenAPI d'Albert distingue formellement `id` (canonique, référençable) et `aliases` (commodité utilisateur non contractuelle). **Doctrine : on ne code QUE l'`id` canonique renvoyé par `GET /v1/models`, jamais un alias.**
 
-**Matrice de modèles autorisée (trois modèles de code, DeepSeek par défaut) :**
+**Matrice de modèles autorisée (un seul modèle embarqué, DeepSeek par défaut) :**
 
 | id canonique | rôle | contexte | output |
 |---|---|---|---|
 | `deepseek-v4-flash` | `model` (défaut) ET `small_model` | 131072 | 65536 |
-| `qwen3-coder-30b-A3b-instruct` | disponible, spécialisé code | 262144 | 65536 |
-| `mistral-medium-3-5-128b` | disponible, actuellement en panne côté Albert | 131072 | 65536 |
 
-Rappels : le contexte DeepSeek passe de 393216 à **131072** (correction, sinon OpenCode envoie des requêtes qui dépassent). Ne PAS ajouter d'autre modèle (pas de gemma, pas de ministral, pas de modèle de vision) : le bundle ne porte que des modèles de code.
+> **Un seul modèle embarqué.** Décision du 2026-08-26 : le bundle ne livre que `deepseek-v4-flash`. Ajouter un autre modèle reste possible à la main dans l'`opencode.json` du projet.
+
+Rappels : le contexte DeepSeek passe de 393216 à **131072** (correction, sinon OpenCode envoie des requêtes qui dépassent). Ne PAS ajouter d'autre modèle (pas de gemma, pas de ministral, pas de modèle de vision) : le bundle ne porte qu'un seul modèle de code.
 
 ### T9.1 🔴 Aligner le repo sur le catalogue réel ✅ implémenté
 
 **But :** remplacer partout les identifiants morts par les id canoniques en minuscules ; DeepSeek par défaut ; retirer `Qwen/Qwen3.6-27B` (remplacé par `qwen3-coder-30b-A3b-instruct`) et toute mention de multimodal/vision (le bundle n'a plus de modèle de vision).
 **Fichiers :** `config/opencode.template.json`, `lib/phases.sh` (jq merge + fallback concaténation), `README.md`, `AGENTS.md`, `TESTS.md` (S48), `docs/PLAN.md`.
 **Règles :** ne coder QUE les id canoniques en minuscules ; DeepSeek `model` + `small_model` ; contexte DeepSeek = 131072 ; ne pas toucher `vendor/vm/` ; ne pas modifier `opencode.json` racine (gitignoré, déjà corrigé) ; vérifier `bash -n lib/phases.sh` et `jq . config/opencode.template.json`.
-**DoD :** plus aucune occurrence de `Qwen/Qwen3.6-27B`, `deepseek-ai/DeepSeek-V4-Flash` ni `mistralai/Mistral-Medium-3.5-128B` dans le repo hors `vendor/` ; un `setup` en dry-run produit les trois id canoniques (DeepSeek par défaut). → `TESTS.md` S48.
+**DoD :** plus aucune occurrence de `Qwen/Qwen3.6-27B`, `deepseek-ai/DeepSeek-V4-Flash` ni `mistralai/Mistral-Medium-3.5-128B` dans le repo hors `vendor/` ; un `setup` en dry-run produit l'unique id canonique `deepseek-v4-flash` (défaut). → `TESTS.md` S48.
 
 ### T9.2 🟠 Étendre T8.2 : réparer aussi un `provider.albert` périmé
 

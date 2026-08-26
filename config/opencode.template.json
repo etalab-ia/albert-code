@@ -15,20 +15,6 @@
             "context": 131072,
             "output": 65536
           }
-        },
-        "qwen3-coder-30b-A3b-instruct": {
-          "name": "Qwen3 Coder 30B A3B (Albert)",
-          "limit": {
-            "context": 262144,
-            "output": 65536
-          }
-        },
-        "mistral-medium-3-5-128b": {
-          "name": "Mistral Medium 3.5 (Albert)",
-          "limit": {
-            "context": 131072,
-            "output": 65536
-          }
         }
       }
     }
