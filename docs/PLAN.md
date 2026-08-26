@@ -97,7 +97,7 @@ Corollaire pratique : un utilisateur déjà équipé peut faire tourner le spike
 ### Hors périmètre v1
 - Pas de commandes custom type `/cadrer /build /preview /save` (inspiration template-proto non reprise) : Albert Code = OpenCode nu + skills + MCP.
 - Pas de MCP Docs La Suite.
-- Pas d'autre modèle Albert que `deepseek-v4-flash` (principal) et `qwen3-coder-30b-A3b-instruct` (spécialisé code).
+- Pas d'autre modèle Albert que `deepseek-v4-flash` (principal et small_model), `qwen3-coder-30b-A3b-instruct` (spécialisé code) et `mistral-medium-3-5-128b` (alternatif).
 
 ## Le chaînon manquant à construire
 

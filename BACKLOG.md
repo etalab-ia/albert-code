@@ -559,9 +559,9 @@ Rappels : le contexte DeepSeek passe de 393216 à **131072** (correction, sinon 
 ### T9.1 🔴 Aligner le repo sur le catalogue réel ✅ implémenté
 
 **But :** remplacer partout les identifiants morts par les id canoniques en minuscules ; DeepSeek par défaut ; retirer `Qwen/Qwen3.6-27B` (remplacé par `qwen3-coder-30b-A3b-instruct`) et toute mention de multimodal/vision (le bundle n'a plus de modèle de vision).
-**Fichiers :** `config/opencode.template.json`, `lib/phases.sh` (jq merge + fallback concaténation), `README.md`, `AGENTS.md`, `TESTS.md` (S2), `docs/PLAN.md`.
+**Fichiers :** `config/opencode.template.json`, `lib/phases.sh` (jq merge + fallback concaténation), `README.md`, `AGENTS.md`, `TESTS.md` (S48), `docs/PLAN.md`.
 **Règles :** ne coder QUE les id canoniques en minuscules ; DeepSeek `model` + `small_model` ; contexte DeepSeek = 131072 ; ne pas toucher `vendor/vm/` ; ne pas modifier `opencode.json` racine (gitignoré, déjà corrigé) ; vérifier `bash -n lib/phases.sh` et `jq . config/opencode.template.json`.
-**DoD :** plus aucune occurrence de `Qwen/Qwen3.6-27B`, `deepseek-ai/DeepSeek-V4-Flash` ni `mistralai/Mistral-Medium-3.5-128B` dans le repo hors `vendor/` ; un `setup` en dry-run produit les trois id canoniques (DeepSeek par défaut). → `TESTS.md` S2.
+**DoD :** plus aucune occurrence de `Qwen/Qwen3.6-27B`, `deepseek-ai/DeepSeek-V4-Flash` ni `mistralai/Mistral-Medium-3.5-128B` dans le repo hors `vendor/` ; un `setup` en dry-run produit les trois id canoniques (DeepSeek par défaut). → `TESTS.md` S48.
 
 ### T9.2 🟠 Étendre T8.2 : réparer aussi un `provider.albert` périmé
 

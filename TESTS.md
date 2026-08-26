@@ -616,3 +616,11 @@ ancienne d'OpenCode (ex. 1.2.9) ne supportant pas `--auto`.
 
 **Attendu :** (2)(3) le code injecté est correctement placé. (4) opencode 1.2.9 → upgrade auto → TUI.
 (5) opencode à jour → no-op. (6) un échec (hors-ligne, etc.) n'empêche pas le runtime de continuer.
+
+## S48 — Catalogue de modèles canonique dans l'opencode.json généré (T9.1)
+
+**Étapes :**
+1. Dans un dossier de test vierge, lancer `albert-code setup --dry-run` et capturer le JSON qui serait écrit.
+2. Refaire le même contrôle sur un projet ayant déjà un `opencode.json` sans provider albert (chemin du merge jq).
+
+**Attendu :** dans les deux cas, `provider.albert.models` contient exactement `deepseek-v4-flash`, `qwen3-coder-30b-A3b-instruct` et `mistral-medium-3-5-128b` ; `model` et `small_model` valent tous deux `albert/deepseek-v4-flash` ; le contexte de `deepseek-v4-flash` est 131072 ; aucun alias (forme `vendor/Nom-Casse`) n'apparaît ; le JSON est valide (`jq .`). Sur le chemin du merge, les autres providers, les MCP et le bloc `permission` préexistants sont préservés.
