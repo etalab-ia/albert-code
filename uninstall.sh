@@ -21,8 +21,8 @@ source "$SELF_DIR/lib/ui.sh"
 
 SKILLS_DIR="$HOME/.config/opencode/skills"
 SKILLS_CACHE="$HOME/.config/opencode/.albert-skills-cache"
-RUNTIME_VM_FILE="$HOME/.agent-vm/runtime.sh"
-ZSHENV="$HOME/.zshenv"
+RUNTIME_VM_FILE="${RUNTIME_VM_FILE:-$HOME/.agent-vm/runtime.sh}"
+ZSHENV="${ZSHENV:-$HOME/.zshenv}"
 AGENT_VM_DIR="${AGENT_VM_DIR:-$SELF_DIR/vendor/vm}"
 AC_MARKER="# --- albert-code : clés VM ---"
 

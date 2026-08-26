@@ -807,3 +807,50 @@ d'empilement), et une seule paire `_ac_zsh_set VAR …` + `export VAR='…'` par
 pour `GH_TOKEN`, pas 4+). Le contenu hors bloc marqué n'est pas altéré. Les helpers ne s'empilent donc
 jamais entre deux runs.
 
+## S61 — Le helper `_ac_zsh_set` est régénéré sans here-doc imbriqué dans `$()` (non-régression bash 3.2)
+
+**Préconditions :** `lib/phases.sh` et `lib/ui.sh` disponibles hors dépôt ; un bac à sable `$SB` ;
+`RUNTIME_VM_FILE` et `ZSHENV` redirigés vers des fichiers temporaires.
+
+**Pourquoi :** la racine du bug était le here-doc construit dans une substitution de commande
+(`_ac_helper="$(cat <<'AC_HELPER' … )"`). Sous bash 3.2 (macOS) ce motif n'est pas parse correctement,
+le corps du helper est évalué comme du code et le `*) printf …` fait exploser `$1` sous `set -u`
+(« unbound variable » en ligne 448). `bash -n` ne détecte rien : c'est l'évaluation qui dérape.
+
+**Étapes :**
+1. Sourcer `lib/ui.sh` puis `lib/phases.sh` dans un shell `set -euo pipefail`.
+2. Poser `RUNTIME_VM_FILE="$SB/runtime.sh"` et `ZSHENV="$SB/.zshenv"` (fichiers vides ou absents),
+   avec au moins une valeur hôte (`ALBERT_API_KEY` en variable d'environnement).
+3. Appeler `ensure_vm_runtime` et noter le code de retour.
+4. Inspecter le bloc marqué `$AC_MARKER … $AC_MARKER_END` de `$SB/runtime.sh`.
+
+**Attendu :** (1) `ensure_vm_runtime` se termine avec un **code 0**, sans erreur « unbound variable ».
+(2) le bloc marqué contient bien la **définition complète** de la fonction `_ac_zsh_set()` (motif
+`_ac_zsh_set() {`…`}`) telle qu'embarquée dans `lib/phases.sh`, et non du code exécuté.
+(3) la définition extraite du bloc passe `bash -n` et fait **453 octets**.
+
+## S62 — Échec en cours de régénération : le bloc runtime d'origine reste intact (atomicité)
+
+**Préconditions :** `lib/phases.sh` et `lib/ui.sh` disponibles ; un bac à sable `$SB` ; un
+`RUNTIME_VM_FILE` contenant **déjà** un bloc marqué précédent (ex. une ligne
+`# --- albert-code : clés VM ---` et le bloc helper qui suit), entouré de contenu hors bloc
+(« head » avant, « tail » après).
+
+**Étapes :**
+1. Forcer un échec **en cours de construction** : s'aviser que `ensure_vm_runtime` construit d'abord
+   tout le nouveau contenu dans un fichier temporaire puis ne remplace le runtime qu'à la toute fin.
+   Pour le provoquer, masquer `mktemp` pour qu'il renvoie un chemin non inscriptible :
+   `mktemp() { printf '/nonexistent-dir/fail.$$'; }`, puis appeler `ensure_vm_runtime` sous
+   `set -euo pipefail` (l'écriture du gabarit échoue → la fonction s'interrompt **avant** le `mv`).
+2. Inspecter `$RUNTIME_VM_FILE` après l'échec.
+
+**Attendu :** (1) `ensure_vm_runtime` échoue (code non nul, « No such file or directory »). (2) le
+fichier runtime d'origine est **intact et complet** : le bloc marqué précédent est **toujours présent**,
+y compris la définition de `_ac_zsh_set()`, et le contenu hors bloc (« head » / « tail ») n'a pas été
+altéré ni tronqué. (3) la réécriture n'a donc **jamais** lieu en cas d'échec de construction : le
+runtime n'est jamais laissé vide ou incomplet.
+
+**Note dry-run :** avec `DRY_RUN=1`, l'exécution est sans effet (runtime inchangé) et **aucun fichier
+temporaire ne subsiste** à l'issue de la fonction (les gabarits `mktemp` créés au vol sont nettoyés
+quoi qu'il arrive).
+

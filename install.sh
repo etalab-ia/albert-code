@@ -36,8 +36,8 @@ AC_VM_MEMORY="${AC_VM_MEMORY:-8}"
 AC_VM_DISK="${AC_VM_DISK:-32}"
 
 AGENT_VM_DIR="${AGENT_VM_DIR:-$SELF_DIR/vendor/vm}"
-RUNTIME_VM_FILE="$HOME/.agent-vm/runtime.sh"
-ZSHENV="$HOME/.zshenv"
+RUNTIME_VM_FILE="${RUNTIME_VM_FILE:-$HOME/.agent-vm/runtime.sh}"
+ZSHENV="${ZSHENV:-$HOME/.zshenv}"
 
 # Source les phases (contient phase_a, phase_b, phase_run)
 if [ -f "$LIB_DIR/phases.sh" ]; then

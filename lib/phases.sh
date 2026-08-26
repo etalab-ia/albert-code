@@ -410,10 +410,24 @@ ensure_vm_runtime() {
   [ -n "$git_name_val" ] && safe_name="${git_name_val//\'/\'\"\'\"\'}"
   [ -n "$git_email_val" ] && safe_email="${git_email_val//\'/\'\"\'\"\'}"
 
+  # --- Construction atomique du runtime ---------------------------------------
+  # On reconstruit le contenu complet dans un fichier temporaire sans toucher au
+  # fichier réel : la coquille (ancien bloc marqué exclu) est copiée d'abord,
+  # puis le nouveau bloc y est ajouté. Le fichier réel n'est remplacé qu'à la
+  # toute fin, uniquement si toute la construction a réussi (atomicité : sur
+  # échec, l'ancien runtime reste intact et complet).
+  #
+  # Le helper est écrit via un here-doc DIRECT dans un fichier temporaire
+  # (redirection simple), jamais dans une substitution $() : sous bash 3.2
+  # (macOS) un here-doc imbriqué dans $( ) n'est pas parse correctement et son
+  # corps est évalué comme du code (crash « unbound variable » sous set -u).
+  local _new_runtime _ac_helper_file
+  _new_runtime="$(mktemp)"
+  _ac_helper_file="$(mktemp)"
+
   if file_contains "$RUNTIME_VM_FILE" "$AC_MARKER"; then
-    _tmp="$(mktemp)"
     if file_contains "$RUNTIME_VM_FILE" "$AC_MARKER_END"; then
-      sed -E "\|^${AC_MARKER}$|,\|^${AC_MARKER_END}$|d" "$RUNTIME_VM_FILE" > "$_tmp"
+      sed -E "\|^${AC_MARKER}$|,\|^${AC_MARKER_END}$|d" "$RUNTIME_VM_FILE" > "$_new_runtime"
     else
       awk -v marker="$AC_MARKER" '
         $0 == marker { in_block=1; next }
@@ -421,16 +435,15 @@ ensure_vm_runtime() {
         in_block && $0 ~ /^[[:space:]]*$/ { next }
         in_block { in_block=0 }
         { print }
-      ' "$RUNTIME_VM_FILE" > "$_tmp"
+      ' "$RUNTIME_VM_FILE" > "$_new_runtime"
     fi
-    mv "$_tmp" "$RUNTIME_VM_FILE"
-    info "Ancien bloc runtime.sh supprimé (migration ou réécriture)."
+    info "Ancien bloc runtime.sh repéré, régénération atomique."
+  else
+    cp "$RUNTIME_VM_FILE" "$_new_runtime"
   fi
 
-  if ! file_contains "$RUNTIME_VM_FILE" "$AC_MARKER"; then
-    local _ac_helper=""
-    _ac_helper="$(
-cat <<'AC_HELPER'
+  if ! file_contains "$_new_runtime" "$AC_MARKER"; then
+    cat > "$_ac_helper_file" <<'AC_HELPER'
 _ac_zsh_set() {
   [ -z "$2" ] && return 0
   _f="$HOME/.zshenv"
@@ -450,58 +463,66 @@ _ac_zsh_set() {
   unset _f _t _l _v _e
 }
 AC_HELPER
-)"
-    apply_append "blank line dans runtime.sh" "$RUNTIME_VM_FILE" ""
-    apply_append "albert-code block start" "$RUNTIME_VM_FILE" "$AC_MARKER"
-    apply_append "définir helper _ac_zsh_set dans runtime.sh" "$RUNTIME_VM_FILE" "$_ac_helper"
+    apply_append "blank line dans runtime.sh" "$_new_runtime" ""
+    apply_append "albert-code block start" "$_new_runtime" "$AC_MARKER"
+    apply_append "définir helper _ac_zsh_set dans runtime.sh" "$_new_runtime" "$(cat "$_ac_helper_file")"
     # Abstention : si l'hôte n'a pas de valeur, on n'écrit RIEN pour cette
     # variable — une valeur posée à la main dans la VM est ainsi conservée.
     if [ -n "$albert_val" ]; then
-      apply_append "persist ALBERT_API_KEY dans runtime.sh" "$RUNTIME_VM_FILE" \
+      apply_append "persist ALBERT_API_KEY dans runtime.sh" "$_new_runtime" \
         "_ac_zsh_set ALBERT_API_KEY '${safe_albert}'"
-      apply_append "export ALBERT_API_KEY dans runtime.sh" "$RUNTIME_VM_FILE" \
+      apply_append "export ALBERT_API_KEY dans runtime.sh" "$_new_runtime" \
         "export ALBERT_API_KEY='${safe_albert}'"
     fi
     if [ -n "$ctx7_val" ]; then
-      apply_append "persist CONTEXT7_API_KEY dans runtime.sh" "$RUNTIME_VM_FILE" \
+      apply_append "persist CONTEXT7_API_KEY dans runtime.sh" "$_new_runtime" \
         "_ac_zsh_set CONTEXT7_API_KEY '${safe_ctx}'"
-      apply_append "export CONTEXT7_API_KEY dans runtime.sh" "$RUNTIME_VM_FILE" \
+      apply_append "export CONTEXT7_API_KEY dans runtime.sh" "$_new_runtime" \
         "export CONTEXT7_API_KEY='${safe_ctx}'"
     fi
     if [ -n "$gh_token_val" ]; then
-      apply_append "persist GH_TOKEN dans runtime.sh" "$RUNTIME_VM_FILE" \
+      apply_append "persist GH_TOKEN dans runtime.sh" "$_new_runtime" \
         "_ac_zsh_set GH_TOKEN '${safe_gh}'"
-      apply_append "export GH_TOKEN dans runtime.sh" "$RUNTIME_VM_FILE" \
+      apply_append "export GH_TOKEN dans runtime.sh" "$_new_runtime" \
         "export GH_TOKEN='${safe_gh}'"
     fi
     if [ -n "$git_name_val" ]; then
-      apply_append "persist AC_GIT_USER_NAME dans runtime.sh" "$RUNTIME_VM_FILE" \
+      apply_append "persist AC_GIT_USER_NAME dans runtime.sh" "$_new_runtime" \
         "_ac_zsh_set AC_GIT_USER_NAME '${safe_name}'"
-      apply_append "export AC_GIT_USER_NAME dans runtime.sh" "$RUNTIME_VM_FILE" \
+      apply_append "export AC_GIT_USER_NAME dans runtime.sh" "$_new_runtime" \
         "export AC_GIT_USER_NAME='${safe_name}'"
     fi
     if [ -n "$git_email_val" ]; then
-      apply_append "persist AC_GIT_USER_EMAIL dans runtime.sh" "$RUNTIME_VM_FILE" \
+      apply_append "persist AC_GIT_USER_EMAIL dans runtime.sh" "$_new_runtime" \
         "_ac_zsh_set AC_GIT_USER_EMAIL '${safe_email}'"
-      apply_append "export AC_GIT_USER_EMAIL dans runtime.sh" "$RUNTIME_VM_FILE" \
+      apply_append "export AC_GIT_USER_EMAIL dans runtime.sh" "$_new_runtime" \
         "export AC_GIT_USER_EMAIL='${safe_email}'"
     fi
     # T8.3: Garde-fou OpenCode --auto execute dans la VM au boot
     # Si opencode est trop ancien pour --auto, upgrade auto.
-    apply_append "garde-fou OpenCode --auto (T8.3)" "$RUNTIME_VM_FILE" \
+    apply_append "garde-fou OpenCode --auto (T8.3)" "$_new_runtime" \
       "  _oc_help=\"\$(opencode --help 2>&1 || true)\""
-    apply_append "garde-fou OpenCode --auto (T8.3)" "$RUNTIME_VM_FILE" \
+    apply_append "garde-fou OpenCode --auto (T8.3)" "$_new_runtime" \
       "  case \"\$_oc_help\" in"
-    apply_append "garde-fou OpenCode --auto (T8.3)" "$RUNTIME_VM_FILE" \
+    apply_append "garde-fou OpenCode --auto (T8.3)" "$_new_runtime" \
       "    *--auto*) : ;;"
-    apply_append "garde-fou OpenCode --auto (T8.3)" "$RUNTIME_VM_FILE" \
+    apply_append "garde-fou OpenCode --auto (T8.3)" "$_new_runtime" \
       "    *) echo \"OpenCode trop ancien pour --auto - mise a jour...\"; opencode upgrade || true ;;"
-    apply_append "garde-fou OpenCode --auto (T8.3)" "$RUNTIME_VM_FILE" \
+    apply_append "garde-fou OpenCode --auto (T8.3)" "$_new_runtime" \
       "  esac"
-    apply_append "garde-fou OpenCode --auto (T8.3)" "$RUNTIME_VM_FILE" \
+    apply_append "garde-fou OpenCode --auto (T8.3)" "$_new_runtime" \
       "  unset _oc_help"
-    apply_append "albert-code block end" "$RUNTIME_VM_FILE" "$AC_MARKER_END"
+    apply_append "albert-code block end" "$_new_runtime" "$AC_MARKER_END"
   fi
+
+  # Finalisation atomique : le fichier réel n'est remplacé qu'ici, et seulement
+  # si toute la construction ci-dessus a réussi (set -e a déjà fait échouer la
+  # fonction sinon, $RUNTIME_VM_FILE restant alors intact). Jamais en dry-run.
+  if _dry_gate "remplacer $RUNTIME_VM_FILE (runtime régénéré)"; then
+    mv "$_new_runtime" "$RUNTIME_VM_FILE"
+  fi
+  # Nettoyage des fichiers temporaires quoi qu'il arrive (dry-run compris).
+  rm -f "$_ac_helper_file" "$_new_runtime"
 
   ok "Runtime VM configuré"
   [ "$DRY_RUN" -eq 0 ] || true
