@@ -624,3 +624,67 @@ ancienne d'OpenCode (ex. 1.2.9) ne supportant pas `--auto`.
 2. Refaire le même contrôle sur un projet ayant déjà un `opencode.json` sans provider albert (chemin du merge jq).
 
 **Attendu :** dans les deux cas, `provider.albert.models` contient exactement `deepseek-v4-flash` ; `model` et `small_model` valent tous deux `albert/deepseek-v4-flash` ; le contexte de `deepseek-v4-flash` est 131072 ; aucun alias (forme `vendor/Nom-Casse`) n'apparaît ; le JSON est valide (`jq .`). Sur le chemin du merge, les autres providers, les MCP et le bloc `permission` préexistants sont préservés.
+
+## S49 — Recréation propre de la VM projet après pane OpenCode (T7.8, AC-R044)
+
+**Préconditions :** une VM projet dont `zsh` ou `opencode` n'est plus disponible (après une mise à
+jour du moteur de VM, symptôme `zsh: command not found : opencode` ou `opencode: command not found`).
+
+**Étapes :**
+1. Lancer `albert-code run` dans le dossier projet concerné.
+2. Observer la sortie : un avertissement compare la version d'OpenCode de la VM de base avec celle
+   de la VM projet.
+3. Répondre à la proposition de recréer la VM projet sur la base nominée.
+
+**Attendu :** l'avertissement affiche clairement le décalage de version, propose la recréation, et
+une recréation rétablit `zsh` et `opencode` fonctionnels dans la VM projet. Aucun message opaque
+`command not found` sans explication.
+
+## S50 — Rafraîchir un secret existant hôte + VM (T10.1, AC-R043)
+
+**Préconditions :** un `GH_TOKEN` présent dans `~/.zshenv` (ou le runtime) mais invalide
+(`curl api.github.com/user` renvoie 401).
+
+**Étapes :**
+1. Lancer `albert-code install` (ou `setup`), étape du wizard secret.
+2. Observer : un prompt propose « garder / remplacer » un jeton présent mais invalide.
+3. Répondre « remplacer », coller un jeton valide.
+4. Vérifier `~/.zshenv` et le `.zshenv` de la VM : la valeur périmée est remplacée.
+
+**Attendu :** aucun prompt ne saute la question sous prétexte qu'une ligne `export GH_TOKEN=` existe ;
+un jeton révoqué est remplacé de bout en bout par le wizard, sans édition manuelle d'aucun `.zshenv`,
+ni sur l'hôte ni dans la VM. Même logique pour `ALBERT_API_KEY` et `CONTEXT7_API_KEY`.
+
+## S51 — Le push ne dépend plus d'un `.zshenv` de VM périmé (T10.2)
+
+**Préconditions :** une VM dont la ligne `export GH_TOKEN=` du `.zshenv` est périmée.
+
+**Étapes :**
+1. Remplacer le jeton côté hôte (`~/.zshenv` du poste).
+2. Lancer `albert-code run` une fois (un seul run).
+
+**Attendu :** après rotation d'un jeton côté hôte, un seul run suffit pour que la VM voie le nouveau
+jeton ; `gh auth status` dans la VM renvoie 200, plus 401.
+
+## S52 — Jeton dédié à permissions minimales documenté et demandé (T10.3)
+
+**Préconditions :** un compte GitHub administrateur d'organisation (peut créer un fine-grained token).
+
+**Étapes :**
+1. Lire le README § Push & PR depuis la VM.
+2. Lancer le wizard de connexion GitHub.
+
+**Attendu :** le README décrit un jeton dédié (fine-grained) à permissions minimales (pousser la
+branche + `gh pr create` sur les dépôts du projet), et le wizard le réclame comme tel. Dans le cas
+d'un non-admin d'organisation, le README expose l'alternative (jeton classique limité).
+
+## S53 — Les commits produits par Albert Code portent le trailer Co-Authored-By (T10.4)
+
+**Préconditions :** `templates/AGENTS.default.md` pose la consigne de trailer.
+
+**Étapes :**
+1. Laisser l'agent produire et commiter un changement dans un projet scaffoldé.
+2. Inspecter `git log -1 --format=%B`.
+
+**Attendu :** chaque commit porte un trailer `Co-Authored-By` nommant le modèle Albert utilisé
+(ex. `albert/deepseek-v4-flash`).
