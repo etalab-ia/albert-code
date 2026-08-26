@@ -248,6 +248,48 @@ phase_run() {
   esac
 }
 
+# phase_update — rafraîchit un projet déjà configuré (EPIC 9, T9.3).
+# Non interactif côté configuration : ne repose NI les questions MCP NI les
+# questions skills. Applique la réparation du catalogue (T9.2) sur ./opencode.json
+# (confirmation avant d'écrire, comme T9.2), puis régénère le bloc runtime marqué
+# via ensure_vm_runtime (embarque le garde-fou OpenCode T8.3). Affiche un
+# récapitulatif des changements, ou "rien à faire" si le projet était déjà à jour.
+phase_update() {
+  title "Albert Code — mise à jour du projet"
+  echo
+
+  local changed=0
+
+  # 1. opencode.json : vérifier / réparer les identifiants du catalogue Albert.
+  if [ -f ./opencode.json ] && grep -q '"albert"' ./opencode.json 2>/dev/null; then
+    if command -v jq >/dev/null 2>&1 && fetch_albert_catalog; then
+      if ! repair_stale_provider_albert ./opencode.json; then
+        changed=1
+      fi
+    else
+      warn "Vérification du catalogue ignorée — opencode.json non modifié (jq, clé ou réseau)."
+    fi
+  elif [ -f ./opencode.json ]; then
+    warn "./opencode.json ne déclare pas le provider Albert — rien à réparer ici."
+  else
+    warn "Aucun opencode.json — fais d'abord albert-code setup dans ce dossier."
+  fi
+
+  # 2. Runtime VM : régénérer le bloc marqué (idempotent, garde-fou OpenCode T8.3).
+  #    Recalcule ALBERT_API_KEY depuis l'environnement si besoin, pas de question.
+  echo
+  ensure_vm_runtime
+
+  echo
+  if [ "$changed" -eq 1 ]; then
+    ok "Mise à jour effectuée : opencode.json réparé, bloc runtime VM régénéré."
+  else
+    info "Rien à faire : opencode.json à jour, bloc runtime VM régénéré."
+  fi
+  print_next_steps
+  echo
+}
+
 # =============================================================================
 # Fonctions helpers (extraites de install.sh ou nouvelles)
 # =============================================================================
@@ -689,12 +731,139 @@ check_disk_space_warning() {
   fi
 }
 
+# jq_albert_merge_program — filtre jq cible du provider Albert (unique source de
+# vérité). Pose provider.albert + model + small_model SANS toucher aux autres
+# clés (MCP, permissions, autres providers). Factorise le scaffold (merge quand
+# le provider est absent) ET la réparation (T9.2) pour éviter de dupliquer le
+# JSON du catalogue, qui avait laissé passer des identifiants morts (AC-R042).
+jq_albert_merge_program() {
+  cat <<'JQ'
+.provider.albert = {
+    "npm": "@ai-sdk/openai-compatible",
+    "name": "Albert API (État)",
+    "options": {"baseURL": "https://albert.api.etalab.gouv.fr/v1", "apiKey": "{env:ALBERT_API_KEY}"},
+    "models": {
+      "deepseek-v4-flash": {"name": "DeepSeek V4 Flash (Albert)", "limit": {"context": 131072, "output": 65536}}
+    }
+  } | .model = "albert/deepseek-v4-flash" | .small_model = "albert/deepseek-v4-flash"
+JQ
+}
+
+# fetch_albert_catalog — interroge GET /v1/models avec la clé en main et pose la
+# liste des id canoniques (un par ligne) dans AC_CATALOG_IDS. Retourne 0 si le
+# catalogue est joignable et lisible, 1 sinon (avertit sans rien modifier, jamais
+# de dépendance à un catalogue injoignable pour un setup ou un lancement).
+# Règles AGENTS.md : on ne code QUE l'id renvoyé par GET /v1/models, jamais un
+# alias. Capture d'abord (aucun pipe dans un chemin de décision, cf. T7.6).
+fetch_albert_catalog() {
+  AC_CATALOG_IDS=""
+  if ! command -v jq >/dev/null 2>&1; then
+    warn "jq absent — comparaison au catalogue Albert impossible, configuration conservée."
+    return 1
+  fi
+  local api_key="${ALBERT_API_KEY:-}"
+  if [ -z "$api_key" ] && file_contains "$ZSHENV" "ALBERT_API_KEY"; then
+    api_key="$(grep -E "^export ALBERT_API_KEY=" "$ZSHENV" | head -1 | sed -E "s/^export ALBERT_API_KEY=['\"]?//; s/['\"]?$//")"
+  fi
+  if [ -z "$api_key" ]; then
+    warn "ALBERT_API_KEY absente — vérification du catalogue Albert ignorée."
+    return 1
+  fi
+  local body
+  body="$(curl -fsS --max-time 10 -H "Authorization: Bearer $api_key" \
+    https://albert.api.etalab.gouv.fr/v1/models 2>/dev/null || true)"
+  if [ -z "$body" ]; then
+    warn "Catalogue Albert injoignable (API en panne, clé invalide ou réseau) — configuration conservée."
+    return 1
+  fi
+  local ids
+  ids="$(printf '%s' "$body" | jq -r '.data[].id' 2>/dev/null || true)"
+  if [ -z "$ids" ]; then
+    warn "Réponse du catalogue Albert illisible — configuration conservée."
+    return 1
+  fi
+  AC_CATALOG_IDS="$ids"
+  return 0
+}
+
+# extract_model_ids <opencode.json> — renvoie (un par ligne) les identifiants de
+# modèles déclarés par le fichier : clés de provider.albert.models + model +
+# small_model privés de leur préfixe "albert/". Utilise jq + case (pas de pipe
+# dans un chemin de décision).
+extract_model_ids() {
+  local dest="$1"
+  local ids
+  ids="$(jq -r '.provider.albert.models | keys[]' "$dest" 2>/dev/null || true)"
+  local m sm
+  m="$(jq -r '.model // empty' "$dest" 2>/dev/null | sed 's#^albert/##' || true)"
+  sm="$(jq -r '.small_model // empty' "$dest" 2>/dev/null | sed 's#^albert/##' || true)"
+  [ -n "$m" ] && ids="${ids:+$ids$'\n'}$m"
+  [ -n "$sm" ] && ids="${ids:+$ids$'\n'}$sm"
+  printf '%s' "$ids"
+}
+
+# repair_stale_provider_albert <opencode.json> — compare les identifiants
+# déclarés au catalogue live (AC_CATALOG_IDS posé par fetch_albert_catalog).
+# Si tout est valide : message "déjà à jour", retourne 0 (rien écrit, pas de
+# .bak). Si au moins un id est périmé : avertit, liste, propose la réparation
+# (confirmation), sauvegarde .bak puis applique le MÊME merge jq que le
+# scaffold. En dry-run : annonce sans écrire. Retourne 1 si une réparation a
+# été appliquée/annoncée, 0 sinon.
+repair_stale_provider_albert() {
+  local dest="$1"
+  local declared stale=""
+  declared="$(extract_model_ids "$dest")"
+  local d
+  while IFS= read -r d || [ -n "$d" ]; do
+    [ -z "$d" ] && continue
+    case $'\n'"$AC_CATALOG_IDS"$'\n' in
+      *$'\n'"$d"$'\n'*) : ;;
+      *) stale="${stale:+$stale, }$d" ;;
+    esac
+  done <<< "$declared"
+
+  if [ -z "$stale" ]; then
+    ok "%s déjà à jour avec le catalogue Albert — conservé" "$dest"
+    return 0
+  fi
+
+  warn "Identifiants de modèles périmés dans %s : %s" "$dest" "$stale"
+  info "Le catalogue Albert a changé — ces identifiants ne sont plus valides."
+  local _bak="${dest}.bak"
+  if [ "$DRY_RUN" -eq 1 ]; then
+    apply_cp "sauvegarder ${dest} vers ${_bak}" "$dest" "$_bak"
+    info "[dry-run] réparation des identifiants périmés dans ${dest} : $stale"
+    return 1
+  fi
+  if confirm "Réparer opencode.json avec le catalogue courant (ids périmés : $stale) ?"; then
+    apply_cp "sauvegarder ${dest} vers ${_bak}" "$dest" "$_bak"
+    if jq "$(jq_albert_merge_program)" "$dest" > "${dest}.tmp" 2>/dev/null && mv "${dest}.tmp" "$dest"; then
+      ok "Identifiants Albert réparés dans ${dest}. Sauvegarde dans ${_bak}"
+      return 1
+    else
+      warn "Echec de la réparation jq (JSON invalide ? ex. commentaires) — fichier restauré."
+      mv "$_bak" "$dest" 2>/dev/null || true
+      return 0
+    fi
+  else
+    info "Fichier conservé tel quel. Utilise albert-code update plus tard."
+    return 0
+  fi
+}
+
 # scaffold_opencode_json — génère opencode.json avec MCP interactifs
 scaffold_opencode_json() {
   local dest="./opencode.json"
   if [ -f "$dest" ]; then
     if grep -q '"albert"' "$dest" 2>/dev/null; then
-      warn "%s existe déjà — conservé (non écrasé)" "$dest"
+      # T9.2 : fichier déjà branché sur Albert → vérifier les ids du catalogue.
+      # On ne remplace le "conservé" que si le catalogue est joignable ; sinon on
+      # retombe sur le comportement historique (avertir, ne rien écrire).
+      if command -v jq >/dev/null 2>&1 && fetch_albert_catalog; then
+        repair_stale_provider_albert "$dest"
+      else
+        warn "%s existe déjà — conservé (non écrasé)" "$dest"
+      fi
     else
       # T8.2 (generalise T1.6/T7.7) : tenter le merge du provider albert
       if command -v jq >/dev/null 2>&1; then
@@ -707,15 +876,10 @@ scaffold_opencode_json() {
           if [ "$DRY_RUN" -eq 1 ]; then
             info "[dry-run] merge du provider albert dans ${dest}"
           # jq : ajoute provider.albert + model + small_model, preserve le reste.
+          # Filtre factorisé (jq_albert_merge_program) : même état cible que la
+          # réparation T9.2 — une seule source de vérité pour le JSON du catalogue.
           # Le message de succes n'est affiche que si le merge a reellement abouti.
-          elif jq '.provider.albert = {
-              "npm": "@ai-sdk/openai-compatible",
-              "name": "Albert API (État)",
-              "options": {"baseURL": "https://albert.api.etalab.gouv.fr/v1", "apiKey": "{env:ALBERT_API_KEY}"},
-              "models": {
-                "deepseek-v4-flash": {"name": "DeepSeek V4 Flash (Albert)", "limit": {"context": 131072, "output": 65536}}
-              }
-            } | .model = "albert/deepseek-v4-flash" | .small_model = "albert/deepseek-v4-flash"' "$dest" > "${dest}.tmp" 2>/dev/null && mv "${dest}.tmp" "$dest"; then
+          elif jq "$(jq_albert_merge_program)" "$dest" > "${dest}.tmp" 2>/dev/null && mv "${dest}.tmp" "$dest"; then
             ok "Provider Albert ajoute dans ${dest}. Sauvegarde dans ${_bak}"
           else
             warn "Echec du merge jq (JSON invalide ? ex. commentaires) - fichier restaure, Albert non cable."

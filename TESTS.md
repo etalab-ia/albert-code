@@ -159,11 +159,12 @@ et le bloc marqueur a disparu.
 **Préconditions :** dépôt albert-code disponible, `install.sh` exécutable.
 **Étapes :**
 1. `./install.sh --dry-run` → vérifier que la sortie mentionne « Phase A » et « shim albert-code ».
-2. `bash bin/albert-code --help --dry-run` → vérifier les 3 verbes documentés.
+2. `bash bin/albert-code --help --dry-run` → vérifier les 4 verbes documentés.
 3. `bash bin/albert-code install --dry-run` → même comportement que `./install.sh --dry-run` (Phase A, finit par la pose du shim).
 4. `bash bin/albert-code setup --dry-run` (depuis un dossier hors dépôt) → Phase B : pose AGENTS.md, pose opencode.json, pose .agent-vm.runtime.sh, sans prompt interactif (dry-run → défauts non).
 5. `bash bin/albert-code run --dry-run` (depuis un dossier projet) → détecte VM de base, calcule les ressources, affiche la commande de lancement.
-**Attendu :** (1) Phase A + shim affichés. (2) 3 verbes documentés dans `--help`. (3) idem (1). (4) 3 fichiers posés, sans erreur. (5) ressources affichées, VM de base non créée (dry-run). Aucun échec bash (exit 0).
+6. `bash bin/albert-code update --dry-run` (depuis un dossier hors dépôt) → avertit « Aucun opencode.json », sans prompt interactif.
+**Attendu :** (1) Phase A + shim affichés. (2) 4 verbes documentés dans `--help` (`install`/`setup`/`run`/`update`). (3) idem (1). (4) 3 fichiers posés, sans erreur. (5) ressources affichées, VM de base non créée (dry-run). (6) avertissement « Aucun opencode.json », exit 0. Aucun échec bash (exit 0).
 **Validé le :** — (non exécuté).
 
 ## S26 — Pédagogie agent-vm (T6.2) ☐
@@ -688,3 +689,78 @@ d'un non-admin d'organisation, le README expose l'alternative (jeton classique l
 
 **Attendu :** chaque commit porte un trailer `Co-Authored-By` nommant le modèle Albert utilisé
 (ex. `albert/deepseek-v4-flash`).
+
+## S54 — Détection et réparation des identifiants périmés dans un opencode.json existant (T9.2)
+
+**Préconditions :** jq installé, `ALBERT_API_KEY` valide et joignable (`GET /v1/models` répond) ;
+un dossier de test avec un `opencode.json` contenant le provider `albert` mais **un modèle périmé**
+(ex. `deepseek-v4.5` ou un ancien id non renvoyé par le catalogue), avec en plus un autre provider
+(ex. `scaleway`), un MCP et un bloc `permission`.
+
+**Étapes :**
+1. Lancer `bash bin/albert-code setup --dry-run` dans ce dossier → le fichier est détecté comme
+   branché sur Albert, comparé au catalogue → avertissement listant l'id périmé, `[dry-run] réparation`.
+2. Vérifier qu'aucune écrite n'a eu lieu en dry-run (fichier inchangé, pas de `.bak`).
+3. Relancer en réel (`DRY_RUN=0`, HOME sandboxé) et répondre `o` à la confirmation de réparation.
+4. Vérifier le fichier résultant :
+   - Les identifiants déclarés (`provider.albert.models`, `model`, `small_model`) ne contiennent plus
+     QUE des ids présents dans le catalogue (`deepseek-v4-flash`).
+   - L'autre provider (`scaleway`), le MCP et le bloc `permission` sont **intacts** (non écrasés).
+   - La sauvegarde `.bak` existe et contient l'original périmé.
+
+**Attendu :** (1) avertissement + listing de l'id mort, dry-run ne répare pas. (2) aucune écriture ni `.bak`.
+(3) réparation confirmée. (4) les 3 vérifications passent — ids corrigés vers le catalogue, reste du
+fichier préservé, `.bak` présent.
+
+## S55 — Catalogue injoignable → on avertit, on ne modifie rien (T9.2)
+
+**Préconditions :** un `opencode.json` existant avec un modèle périmé, mais **réseau coupé** pour
+`albert.api.etalab.gouv.fr` (ou `ALBERT_API_KEY` absente).
+
+**Étapes :**
+1. Lancer `bash bin/albert-code setup` dans ce dossier.
+2. Observer la sortie.
+
+**Attendu :** un avertissement (« Catalogue Albert injoignable », « ALBERT_API_KEY absente » ou
+« jq absent ») précède le message « conservé (non écrasé) ». Le fichier n'est **pas modifié**, aucun
+`.bak` créé, exit 0. Un catalogue injoignable ne casse jamais un setup.
+
+## S56 — opencode.json déjà à jour → no-op (T9.2)
+
+**Préconditions :** un `opencode.json` branché sur Albert dont **tous** les identifiants correspondent
+exactement au catalogue (`provider.albert.models = deepseek-v4-flash`, `model`/`small_model` =
+`albert/deepseek-v4-flash`).
+
+**Étapes :**
+1. Lancer `bash bin/albert-code setup` dans ce dossier.
+
+**Attendu :** message « déjà à jour avec le catalogue Albert — conservé », **aucune écriture**, **aucun
+`.bak`** créé, exit 0.
+
+## S57 — `albert-code update` répare + régénère le runtime, sans questions (T9.3)
+
+**Préconditions :** un dossier projet avec un `opencode.json` branché sur Albert contenant un modèle
+périmé ; `~/.zshenv` avec `ALBERT_API_KEY` ; `~/.agent-vm/runtime.sh` existant (bloc marqué).
+
+**Étapes :**
+1. Lancer `bash bin/albert-code update` dans ce dossier et répondre `o` à la confirmation.
+2. Observer : **aucune** question MCP, **aucune** question skills (non interactif côté config).
+3. Vérifier `opencode.json` → ids corrigés vers le catalogue, `.bak` présent.
+4. Vérifier `~/.agent-vm/runtime.sh` → le bloc `$AC_MARKER … $AC_MARKER_END` est régénéré
+   (exports + garde-fou OpenCode `--auto` T8.3), **sans duplication** du bloc.
+5. Relancer `albert-code update` → le projet est à jour → « rien à faire ».
+
+**Attendu :** (1) réparation appliquée. (2) aucune question MCP/skills. (3) opencode.json réparé avec
+`.bak`. (4) bloc runtime régénéré, pas de doublon. (5) second run no-op avec récapitulatif « rien à
+faire » / « à jour ».
+
+## S58 — `albert-code update --dry-run` annonce sans rien écrire (T9.3)
+
+**Préconditions :** un dossier projet avec un `opencode.json` à modèle périmé.
+
+**Étapes :**
+1. Lancer `bash bin/albert-code update --dry-run` dans ce dossier.
+
+**Attendu :** le dry-run **annonce** la réparation (listing de l'id périmé, mention `[dry-run]`), mais
+n'écrit **rien** : `opencode.json` inchangé, **aucun `.bak`**, runtime inchangé, exit 0.
+

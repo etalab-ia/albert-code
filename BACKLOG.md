@@ -546,7 +546,7 @@ Option : ajouter un paramètre `install_shim` pour mode "exec" vs "source", ou d
 
 > **Promu en 🟠 et détaillé dans T9.3 (EPIC 9)** : c'est le seul canal possible pour distribuer un correctif de catalogue de modèles aux projets déjà configurés (cf. AC-R042). Voir `BACKLOG.md` EPIC 9, T9.3.
 
-**DoD :** ticket documenté mais pas implémenté.
+**DoD :** ticket documenté mais pas implémenté — **T9.3 implémenté** (voir EPIC 9) : `phase_update` (`lib/phases.sh:257-291`) répare `opencode.json` (T9.2) + régénère le bloc runtime (T8.3) sans questions MCP/skills. Voir note de promotion ci-dessus et T9.3.
 **But :** chaque option d'installation doit être compréhensible sans contexte préalable. Format cible : « Installer Context7 ? Context7 est un MCP qui permet de [...]. Y/n ».
 
 **Tâches :**
@@ -590,11 +590,13 @@ Rappels : le contexte DeepSeek passe de 393216 à **131072** (correction, sinon 
 
 **But :** aujourd'hui `scaffold_opencode_json` ne merge que si le provider `albert` est ABSENT. Il faut aussi réparer quand il est présent mais que ses id ne sont plus dans le catalogue courant (c'est le cas de tous les projets déjà setupés des bêta-testeurs, cassés aujourd'hui).
 **Tâches :** appel `GET /v1/models` avec la clé déjà en main, comparaison des clés de `provider.albert.models` ; si l'appel réseau échoue, ne rien casser et se contenter d'un avertissement.
-**DoD :** un projet setupé avec l'ancien catalogue est réparé au `setup` suivant (ids remis à jour) ; sans réseau, avertissement et aucun écrasement. (Documenté — PAS implémenté dans cette PR.)
+**DoD :** un projet setupé avec l'ancien catalogue est réparé au `setup` suivant (ids remis à jour) ; sans réseau, avertissement et aucun écrasement.
+**✅ Implémenté** — `scaffold_opencode_json` (`lib/phases.sh:857-869`) : quand l'`opencode.json` existant contient `"albert"`, si `fetch_albert_catalog` aboutit → `repair_stale_provider_albert` ; sinon repli « conservé ». `fetch_albert_catalog` (`lib/phases.sh:753-787`) interroge `GET /v1/models`, capture la réponse avant tout traitement (T7.6), replis jq absent / clé absente / injoignable / illisible = avertir sans rien écrire. `repair_stale_provider_albert` (`lib/phases.sh:812-852`) compare les ids déclarés au catalogue (case, sans `| grep` en chemin de décision), liste les périmés, `.bak` puis répare avec le merge factorisé ; dry-run → annonce seule. Le filtre jq est factorisé dans `jq_albert_merge_program` (`lib/phases.sh:735-750`), unique source de vérité pour le merge scaffold ET la réparation (pas de 3ᵉ duplication du JSON). → `TESTS.md` S54, S55, S56.
 
 ### T9.3 🟠 Promouvoir T8.4 `albert-code update` (ex 🟡)
 
-**But :** verbe non interactif qui rafraîchit `opencode.json` (T9.2) et le bloc marqué du runtime USER (T8.3) sans repasser les questions MCP/skills. C'est le seul canal possible pour distribuer un correctif de catalogue aux projets existants. (Documenté — PAS implémenté dans cette PR.)
+**But :** verbe non interactif qui rafraîchit `opencode.json` (T9.2) et le bloc marqué du runtime USER (T8.3) sans repasser les questions MCP/skills. C'est le seul canal possible pour distribuer un correctif de catalogue aux projets existants.
+**✅ Implémenté** — `phase_update` (`lib/phases.sh:257-291`) : applique `fetch_albert_catalog` + `repair_stale_provider_albert` sur `./opencode.json` (confirmation avant écriture), puis `ensure_vm_runtime` régénère le bloc marqué (embarque le garde-fou OpenCode T8.3) ; récap « mise à jour effectuée » / « rien à faire ». Dispatch dans `bin/albert-code:36` (verbe `update`), `bin/albert-code:67-68` (case → `phase_update`), message de fin d'install `bin/albert-code:54-61` ; aide `lib/ui.sh:467-468` (`usage_albert_code`) + `lib/ui.sh:437` (`usage_install`) ; `README.md:45-65` (« à 4 verbes ») ; `AGENTS.md:76`. Non interactif côté config (aucune question MCP/skills), `--dry-run` respecté. → `TESTS.md` S25, S57, S58.
 
 ### T9.4 🟡 Garde-fou au `run`
 
