@@ -19,7 +19,7 @@ Deux tentatives de bundle de mars 2026 étaient en pause pour deux raisons, aujo
 
 | Blocage mars 2026 | Statut |
 |---|---|
-| Modèles Albert trop faibles (GPT-OSS 120B échoue sur multi-fichiers / react-dsfr) | Levé : `Mistral-Medium-3.5-128B` et `DeepSeek-V4-Flash` disponibles sur Albert API |
+| Modèles Albert trop faibles (GPT-OSS 120B échoue sur multi-fichiers / react-dsfr) | Levé : `mistral-medium-3-5-128b` et `deepseek-v4-flash` disponibles sur Albert API |
 | Mistral Medium plantait sur le tool calling (`strict: null` rejeté par Albert) | Levé, prouvé par 2 PR réelles |
 
 Preuves de bout en bout (agent souverain produisant une vraie PR) :
@@ -38,7 +38,7 @@ Agents publics : devs en ministère, PM/CPO prototypeurs, équipes incubées (AL
 |---|---|---|
 | Sandbox | [agent-vm](https://github.com/sylvinus/agent-vm) (Lima) | Chemin du dépôt sans espace requis (contrainte agent-vm/Lima). Clé Albert persistée dans `~/.zshenv` |
 | Harness | **OpenCode uniquement** | Pas de Vibe, pas de Claude Code |
-| Provider | Albert API via `@ai-sdk/openai-compatible` | `model` = `Mistral-Medium-3.5-128B`, `small_model` = `DeepSeek-V4-Flash` |
+| Provider | Albert API via `@ai-sdk/openai-compatible` | `model` = `deepseek-v4-flash`, `small_model` = `deepseek-v4-flash` |
 | Skills | [etalab-ia/skills](https://github.com/etalab-ia/skills) | Dossiers locaux scannés (voir Synchro des skills) |
 | MCP v1 | data.gouv, context7, playwright, chrome-devtools | Pas de MCP Docs La Suite en v1 |
 | Conventions | Fichier `AGENTS.md` (pas `CLAUDE.md`) | OpenCode ignore `CLAUDE.md` si `AGENTS.md` présent |
@@ -53,7 +53,7 @@ agent-vm (Lima)  ->  sandbox, isolation noyau, mode autonome sûr
 │
 └── OpenCode
     ├── Provider  = Albert API (@ai-sdk/openai-compatible)
-    │     model = Mistral-Medium-3.5-128B, small_model = DeepSeek-V4-Flash
+    │     model = deepseek-v4-flash, small_model = deepseek-v4-flash
     ├── AGENTS.md = profil choisi au bootstrap (beta.gouv | lasuite | iae | autre)
     ├── Skills    = ~/.config/opencode/skills/ (clone etalab-ia/skills, pull au boot)
     └── MCP       = data.gouv, context7, playwright, chrome-devtools
@@ -97,7 +97,7 @@ Corollaire pratique : un utilisateur déjà équipé peut faire tourner le spike
 ### Hors périmètre v1
 - Pas de commandes custom type `/cadrer /build /preview /save` (inspiration template-proto non reprise) : Albert Code = OpenCode nu + skills + MCP.
 - Pas de MCP Docs La Suite.
-- Pas d'autre modèle Albert que Mistral Medium 3.5 (principal) et DeepSeek V4 Flash (small).
+- Pas d'autre modèle Albert que `deepseek-v4-flash` (principal) et `qwen3-coder-30b-A3b-instruct` (spécialisé code).
 
 ## Le chaînon manquant à construire
 

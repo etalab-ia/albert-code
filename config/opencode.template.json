@@ -9,32 +9,32 @@
         "apiKey": "{env:ALBERT_API_KEY}"
       },
       "models": {
-        "mistralai/Mistral-Medium-3.5-128B": {
-          "name": "Mistral Medium 3.5 (Albert)",
+        "deepseek-v4-flash": {
+          "name": "DeepSeek V4 Flash (Albert)",
           "limit": {
             "context": 131072,
             "output": 65536
           }
         },
-        "deepseek-ai/DeepSeek-V4-Flash": {
-          "name": "DeepSeek V4 Flash (Albert)",
+        "qwen3-coder-30b-A3b-instruct": {
+          "name": "Qwen3 Coder 30B A3B (Albert)",
           "limit": {
-            "context": 393216,
+            "context": 262144,
             "output": 65536
           }
         },
-        "Qwen/Qwen3.6-27B": {
-          "name": "Qwen 3.6 27B (Albert)",
+        "mistral-medium-3-5-128b": {
+          "name": "Mistral Medium 3.5 (Albert)",
           "limit": {
-            "context": 262144,
+            "context": 131072,
             "output": 65536
           }
         }
       }
     }
   },
-  "model": "albert/mistralai/Mistral-Medium-3.5-128B",
-  "small_model": "albert/deepseek-ai/DeepSeek-V4-Flash",
+  "model": "albert/deepseek-v4-flash",
+  "small_model": "albert/deepseek-v4-flash",
   "mcp": {
     "data-gouv": {
       "type": "remote",

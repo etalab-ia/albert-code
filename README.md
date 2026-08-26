@@ -151,9 +151,9 @@ MCP (**Model Context Protocol**) est un standard qui **branche l'agent sur un ou
 
   | Modèle | Rôle | Usage type | Contexte |
   |---|---|---|---|
-  | `Mistral-Medium-3.5-128B` | **`model`** (défaut) | Usage agentique principal : édition multi-fichiers, refacto, tool calling. | 128k |
-  | `DeepSeek-V4-Flash` | **`small_model`** | Tâches légères et rapides (titres, résumés, sous-étapes). | 384k |
-  | `Qwen/Qwen3.6-27B` | disponible (non défaut) | **Multimodal (vision)** : lire un screenshot, une maquette DSFR, un rendu d'UI. Sélection : `albert/Qwen/Qwen3.6-27B`. | 256k |
+  | `deepseek-v4-flash` | **`model`** (défaut) **et `small_model`** | Usage agentique principal : édition multi-fichiers, refacto, tool calling, tâches légères. | 131k |
+  | `qwen3-coder-30b-A3b-instruct` | disponible (non défaut) | Modèle spécialisé code. Sélection : `albert/qwen3-coder-30b-A3b-instruct`. | 262k |
+  | `mistral-medium-3-5-128b` | disponible (non défaut) | Modèle de code alternatif. | 131k |
 
   Pour changer le modèle par défaut d'un projet, édite `model` dans son `opencode.json`.
 - **Config** : `opencode.json` de **portée projet** (jamais le global de l'utilisateur, qui peut avoir d'autres providers).

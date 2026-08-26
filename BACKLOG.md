@@ -517,9 +517,11 @@ Option : ajouter un paramètre `install_shim` pour mode "exec" vs "source", ou d
 
 **DoD :** VM avec opencode trop vieux → au boot, upgrade auto → `run` ouvre le TUI, plus de help. → `TESTS.md` S47 `<- AC-R041`.
 
-### T8.4 🟡 (OPTION, nice-to-have) Verbe `albert-code update` pour rafraîchir un projet existant
+### T8.4 🟠 (OPTION) Verbe `albert-code update` pour rafraîchir un projet existant → **promu en T9.3**
 
-**But :** Proposer un verbe simple pour rafraîchir un projet existant sans repasser tout le setup interactif. `albert-code update` (ou `--update`) exécute les logiques de rafraîchissement (T8.2 merge opencode.json + T8.3 garde-fou runtime) sans les questions MCP/skills. Non implémenté dans cette EPIC, ouvert pour le futur.
+**But :** Proposer un verbe simple pour rafraîchir un projet existant sans repasser tout le setup interactif. `albert-code update` (ou `--update`) exécute les logiques de rafraîchissement (T8.2 merge opencode.json + T8.3 garde-fou runtime) sans les questions MCP/skills.
+
+> **Promu en 🟠 et détaillé dans T9.3 (EPIC 9)** : c'est le seul canal possible pour distribuer un correctif de catalogue de modèles aux projets déjà configurés (cf. AC-R042). Voir `BACKLOG.md` EPIC 9, T9.3.
 
 **DoD :** ticket documenté mais pas implémenté.
 **But :** chaque option d'installation doit être compréhensible sans contexte préalable. Format cible : « Installer Context7 ? Context7 est un MCP qui permet de [...]. Y/n ».
@@ -537,3 +539,40 @@ Option : ajouter un paramètre `install_shim` pour mode "exec" vs "source", ou d
 **DoD :** en dry-run, chaque question MCP est précédée d'une ligne d'explication ; les questions sont de la forme « Installer <nom> ? ». → `TESTS.md` S-ctx-5.
 
 **Validé le :** 2026-07-21 — dry-run setup affiche les 4 paires explication+confirm avec les libellés exacts du ticket. Skills déjà avec description inline dans le confirm. `bash -n lib/phases.sh` OK.
+
+---
+
+## EPIC 9 — Aligner le catalogue sur les id canoniques Albert `<- AC-R042`
+
+**Problème de fond :** Le catalogue de modèles d'Albert API a churné pendant l'été 2026. Les trois identifiants embarqués dans le bundle (`deepseek-ai/DeepSeek-V4-Flash`, `Qwen/Qwen3.6-27B`, `mistralai/Mistral-Medium-3.5-128B`) sont morts en production (404 / 404 / 502). Le schéma OpenAPI d'Albert distingue formellement `id` (canonique, référençable) et `aliases` (commodité utilisateur non contractuelle). **Doctrine : on ne code QUE l'`id` canonique renvoyé par `GET /v1/models`, jamais un alias.**
+
+**Matrice de modèles autorisée (trois modèles de code, DeepSeek par défaut) :**
+
+| id canonique | rôle | contexte | output |
+|---|---|---|---|
+| `deepseek-v4-flash` | `model` (défaut) ET `small_model` | 131072 | 65536 |
+| `qwen3-coder-30b-A3b-instruct` | disponible, spécialisé code | 262144 | 65536 |
+| `mistral-medium-3-5-128b` | disponible, actuellement en panne côté Albert | 131072 | 65536 |
+
+Rappels : le contexte DeepSeek passe de 393216 à **131072** (correction, sinon OpenCode envoie des requêtes qui dépassent). Ne PAS ajouter d'autre modèle (pas de gemma, pas de ministral, pas de modèle de vision) : le bundle ne porte que des modèles de code.
+
+### T9.1 🔴 Aligner le repo sur le catalogue réel ✅ implémenté
+
+**But :** remplacer partout les identifiants morts par les id canoniques en minuscules ; DeepSeek par défaut ; retirer `Qwen/Qwen3.6-27B` (remplacé par `qwen3-coder-30b-A3b-instruct`) et toute mention de multimodal/vision (le bundle n'a plus de modèle de vision).
+**Fichiers :** `config/opencode.template.json`, `lib/phases.sh` (jq merge + fallback concaténation), `README.md`, `AGENTS.md`, `TESTS.md` (S2), `docs/PLAN.md`.
+**Règles :** ne coder QUE les id canoniques en minuscules ; DeepSeek `model` + `small_model` ; contexte DeepSeek = 131072 ; ne pas toucher `vendor/vm/` ; ne pas modifier `opencode.json` racine (gitignoré, déjà corrigé) ; vérifier `bash -n lib/phases.sh` et `jq . config/opencode.template.json`.
+**DoD :** plus aucune occurrence de `Qwen/Qwen3.6-27B`, `deepseek-ai/DeepSeek-V4-Flash` ni `mistralai/Mistral-Medium-3.5-128B` dans le repo hors `vendor/` ; un `setup` en dry-run produit les trois id canoniques (DeepSeek par défaut). → `TESTS.md` S2.
+
+### T9.2 🟠 Étendre T8.2 : réparer aussi un `provider.albert` périmé
+
+**But :** aujourd'hui `scaffold_opencode_json` ne merge que si le provider `albert` est ABSENT. Il faut aussi réparer quand il est présent mais que ses id ne sont plus dans le catalogue courant (c'est le cas de tous les projets déjà setupés des bêta-testeurs, cassés aujourd'hui).
+**Tâches :** appel `GET /v1/models` avec la clé déjà en main, comparaison des clés de `provider.albert.models` ; si l'appel réseau échoue, ne rien casser et se contenter d'un avertissement.
+**DoD :** un projet setupé avec l'ancien catalogue est réparé au `setup` suivant (ids remis à jour) ; sans réseau, avertissement et aucun écrasement. (Documenté — PAS implémenté dans cette PR.)
+
+### T9.3 🟠 Promouvoir T8.4 `albert-code update` (ex 🟡)
+
+**But :** verbe non interactif qui rafraîchit `opencode.json` (T9.2) et le bloc marqué du runtime USER (T8.3) sans repasser les questions MCP/skills. C'est le seul canal possible pour distribuer un correctif de catalogue aux projets existants. (Documenté — PAS implémenté dans cette PR.)
+
+### T9.4 🟡 Garde-fou au `run`
+
+**But :** avant de lancer le TUI, vérifier que le `model` configuré est `green` dans `GET /health/models` et proposer une bascule sinon, au lieu de laisser l'utilisateur sur un 502 opaque. (Documenté — PAS implémenté dans cette PR.)

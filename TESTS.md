@@ -18,7 +18,7 @@
 **Étapes :**
 1. Demander une page d'accueil DSFR.
 2. Vérifier dans les logs OpenCode quel modèle répond aux tâches légères (titre/résumé).
-**Attendu :** page utilisant `@codegouvfr/react-dsfr` (composants natifs, pas de CSS inventé) ; `DeepSeek-V4-Flash` utilisé comme `small_model`, `Mistral-Medium-3.5-128B` pour la génération principale.
+**Attendu :** page utilisant `@codegouvfr/react-dsfr` (composants natifs, pas de CSS inventé) ; `deepseek-v4-flash` utilisé comme `small_model` et pour la génération principale.
 
 ## S3 — `opencode.json` valide (T1.1) ✅ (VM : provider `albert` reconnu, 4 MCP connectés, Albert répond, MCP data.gouv fonctionnel via `data-gouv_search_datasets` — débloqué par T-FIX-8/9)
 **Étapes :**
