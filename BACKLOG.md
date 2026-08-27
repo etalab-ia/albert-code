@@ -518,7 +518,7 @@ Option : ajouter un paramètre `install_shim` pour mode "exec" vs "source", ou d
 |---|---|---|---|
 | `~/.agent-vm/runtime.sh` bloc marqué | ✅ Oui, à chaque phase A ET B | `ensure_vm_runtime()` supprime le bloc `$AC_MARKER … $AC_MARKER_END` et le réécrit | Clés API + GH_TOKEN doivent être à jour au boot VM |
 | `./opencode.json` | 🟡 Merge conditionnel (T8.2) | Si `jq` présent → merge provider.albert dans existant, sinon avertissement | Provider Albert doit pouvoir être ajouté sans écraser les MCP/permissions |
-| `./AGENTS.md` | 🔴 Zone gérée par `update` (T8.5) | Bloc marqué réécrit par le verbe `albert-code update` (cf. T8.5) | Le projet peut avoir un AGENTS.md personnalisé — le bundle n'en gère qu'une zone délimitée |
+| `./AGENTS.md` | ❌ Non (jamais écrasé) | `copy_template()` → non-destructif pur | Le projet peut avoir un AGENTS.md personnalisé — angle mort (les évolutions du template n'atteignent pas les projets déjà installés), traité par T8.5 (à venir) |
 | `./.agent-vm.runtime.sh` (projet) | ❌ Non (jamais écrasé) | `copy_template()` → non-destructif pur | Idem, fichier figé chez l'existant |
 | `vendor/vm/` (moteur VM) | ❌ Non (vendored figé) | Versionné dans le repo albert-code | Mis à jour par `git pull` du dépôt albert-code |
 | `templates/` | ❌ Non (versionnés) | Versionné dans le repo | Utilisés uniquement au premier `setup` |
@@ -785,8 +785,14 @@ pour tout.
 agent** de l'`opencode.json`, pas `small_model`. Syntaxe officielle :
 `"agent": { "plan": { "mode": "primary", "model": "<provider>/<id>" },
 "build": { "mode": "primary", "model": "<provider>/<id>" } }`. Un agent
-sans `model` explicite hérite du modèle global. Le mode plan a par défaut
-`edit` et `bash` à `deny`. `small_model` reste ce qu'il est : les tâches
+sans `model` explicite hérite du modèle global. Les agents plan et build
+ont des permissions d'outils **différentes par défaut** ; les valeurs
+exactes (la doc montre `edit` et `bash` à `deny` dans un exemple de
+configuration explicite, sans les affirmer comme défaut) sont à vérifier
+sur la version embarquée avant de s'appuyer dessus — le point est
+critique, une expérimentation à crédits limités (cf. plus bas) suppose
+que le mode plan ne puisse pas exécuter. `small_model` reste ce qu'il est :
+les tâches
 utilitaires internes (titres de session, résumés — vérification du ticket
 original confirmée : il n'est **pas** un levier d'exécution).
 
