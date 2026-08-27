@@ -54,6 +54,7 @@ Face à un bug : le corriger directement. Pointer les logs, erreurs et tests en 
 - Commits atomiques, messages en Conventional Commits (`type(scope): …`).
 - Une PR = une intention. Décrire le quoi/pourquoi, lister ce qui a été testé.
 - Ne jamais `git push --force` sur une branche partagée.
+- À chaque commit, joindre en dernière ligne (précédée d'une ligne vide) le trailer `Co-Authored-By: Albert Code (<id-modèle>) <noreply@numerique.gouv.fr>`, avec l'id canonique Albert du modèle courant.
 
 ## Accessibilité & conformité
 
