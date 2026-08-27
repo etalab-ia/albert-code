@@ -643,3 +643,139 @@ Conséquence : sur les dernières PR, l'agent s'est arrêté avant le push et un
 ### T10.5 🟡 Détection de secrets imposée techniquement, pas par consigne
 **But :** la détection de secrets avant commit repose sur une ligne de `templates/AGENTS.default.md`. Une consigne dans le contexte de l'agent peut être ignorée ou altérée : elle ne peut pas être l'unique garde-fou sur les secrets. Étudier la pose d'un hook de pré-commit au setup.
 **DoD :** ticket documenté, décision d'opportunité tranchée.
+
+---
+
+## EPIC 11 — Catalogue de modèles adaptés au code (rôles plan / exécution)
+
+**Problème de fond :** depuis l'EPIC 9, le bundle n'embarque plus qu'un
+seul modèle, `deepseek-v4-flash`, utilisé à la fois comme `model` et comme
+`small_model`. C'est un pis-aller assumé le temps de réparer le catalogue,
+pas une cible. DeepSeek Flash est un gros modèle : le faire porter aussi
+les tâches d'exécution répétitives (édition de fichiers, appels d'outils,
+boucles de correction) coûte des tokens et de la latence sans bénéfice de
+qualité.
+
+En production, Albert API appliquera des limites de débit **différenciées
+par modèle** : plus le modèle est gros, plus le débit autorisé est faible.
+Un utilisateur qui met le même gros modèle partout épuisera donc son quota
+sur des tâches qui ne le justifient pas.
+
+Le débit est appliqué **par clé**, côté Albert API : le bundle ne peut ni
+le contourner ni le lisser. Ses deux seuls leviers sont donc
+l'**onboarding** (quel modèle pour quel rôle) et la **visibilité de la
+consommation**.
+
+### T11.1 🟠 Doctrine de catalogue : quel modèle pour quel rôle
+
+**But :** trancher, sur la base du catalogue réel renvoyé par
+`GET /v1/models`, quel modèle le bundle recommande pour le rôle « plan »
+(raisonnement, gros contexte, peu d'appels) et lequel pour le rôle
+« exécution » (édition, outils, gros volume d'appels). La matrice de
+l'EPIC 9 ne contient aujourd'hui qu'une seule ligne.
+**Tâches :** relever le catalogue courant (id canoniques, fenêtre de
+contexte, output max) ; évaluer au moins un candidat « petit modèle » pour
+l'exécution ; documenter le critère de choix retenu (contexte utile, coût
+en tokens, débit anticipé).
+**DoD :** la matrice de l'EPIC 9 nomme un modèle par rôle, avec son id
+canonique et la justification du choix.
+
+### T11.2 🟠 Rôles de modèles différenciés, proposés au setup
+
+**But :** permettre, et proposer au setup, que la phase de **plan** (peu
+d'appels, gros contexte, raisonnement) et la phase d'**exécution**
+(beaucoup d'appels, édition de fichiers, outils) tournent sur deux modèles
+différents. Aujourd'hui `config/opencode.template.json` fixe un seul id
+pour tout.
+**Tâches :** commencer par **identifier le bon levier OpenCode** avant
+d'écrire quoi que ce soit. Deux candidats, à trancher sur la doc de la
+version embarquée, pas de mémoire : la configuration de modèle **par
+agent / par mode** (l'agent de plan et l'agent de build peuvent porter
+chacun le leur), et `small_model`, dont il faut vérifier s'il vise bien
+l'exécution ou seulement les tâches utilitaires internes (titres de
+session, résumés). Ne pas câbler `small_model` sur l'exécution sans avoir
+vérifié ce point : si c'est un modèle utilitaire, on mettrait le petit
+modèle sur la génération de titres tout en laissant l'exécution sur le
+gros, soit l'inverse de l'effet recherché. Une fois le levier confirmé :
+embarquer les deux id retenus en T11.1 dans `provider.albert.models` ;
+câbler les deux rôles ; ajouter au setup une question unique, précédée de
+sa ligne d'explication (cf. T6.16), entre « répartition recommandée » et
+« un seul modèle partout » ; garder un défaut fonctionnel sans réseau.
+**Point de vigilance :** le programme jq de réconciliation de T9.2
+(`jq_albert_reconcile_program`) code en dur `deepseek-v4-flash` comme
+unique modèle de repli, et `repair_stale_provider_albert` remonte le
+modèle par défaut sur ce seul id. Les deux doivent connaître la paire de
+rôles, sinon la réparation d'un projet périmé écrasera la répartition.
+**DoD :** le levier retenu est documenté dans le ticket avec sa source ;
+un setup en dry-run affiche la question et produit une configuration où le
+plan et l'exécution pointent deux id distincts quand la répartition est
+choisie ; un `albert-code update` ne casse pas un projet mono-modèle et ne
+perd pas le second rôle sur un projet réparti. → `TESTS.md` (nouveaux
+scénarios)
+
+### T11.3 🟡 Suivi de consommation par modèle
+
+**But :** OpenCode affiche la consommation globale de la session, pas sa
+répartition par modèle. Dès qu'un projet jongle entre un modèle de plan et
+un modèle d'exécution (T11.2), cette agrégation ne dit plus où part le
+quota, ni si la répartition recommandée est effectivement suivie.
+**Tâches :** vérifier ce qu'OpenCode expose déjà dans son stockage de
+session ; à défaut, regarder ce que l'API Albert renvoie par clé et par
+modèle ; trancher entre une commande portée par le bundle et un simple
+renvoi vers un outil existant.
+**DoD :** ticket instruit, décision d'opportunité tranchée. Si une
+commande est retenue, elle est non interactive et n'affiche aucun secret.
+
+### T11.4 🟡 Limites de débit expliquées à l'onboarding
+
+**But :** le débit est appliqué par Albert API sur la clé. Un utilisateur
+qui prend un 429 sans contexte l'attribuera au bundle. Documenter dans le
+README l'ordre de grandeur par modèle et la répartition recommandée
+(T11.1), et rendre explicite un 429 qui transite par le bundle.
+**DoD :** le README porte une section « quotas et répartition des
+modèles » ; un 429 rencontré au setup, à l'update ou au run est traduit en
+message actionnable et non en erreur brute.
+
+---
+
+## EPIC 12 — Aide à la spécification pour les non-développeurs
+
+**Problème de fond :** le bundle livre un agent de code à des utilisateurs
+dont une partie ne sont pas développeurs. Un non-développeur devant un TUI
+vide ne sait pas quoi demander : il décrit un besoin flou, l'agent code
+trop tôt, et le résultat n'est pas revoyable. La revue humaine avant toute
+mise en production, qui est le garde-fou de tout l'édifice, suppose que ce
+qui a été produit soit spécifié : sans spec écrite, il n'y a rien contre
+quoi relire.
+
+Pattern éprouvé sur un projet antérieur : un agent « conception » qui
+interroge l'utilisateur jusqu'à obtenir une spec exploitable, un agent
+« développement » qui applique les règles techniques, et une commande de
+bascule de l'un à l'autre.
+
+### T12.1 🟠 Portage de l'agent de conception dans OpenCode
+
+**But :** rapatrier la partie spec de ce pattern dans le bundle, sous une
+forme native OpenCode, pour qu'un utilisateur non-développeur arrive au
+code avec une spec écrite.
+**Tâches :** identifier le support OpenCode adapté (agent, commande ou
+skill) ; porter l'agent de conception ; produire un artefact de spec
+**versionné dans le dépôt de l'utilisateur**, pas seulement présent dans
+le contexte de la session ; décider s'il est embarqué par défaut ou
+proposé au setup au même titre que les skills (T6.4).
+**DoD :** depuis un projet vide, un utilisateur non-développeur obtient
+une spec écrite puis un premier squelette de code, sans avoir eu à rédiger
+le prompt initial. → `TESTS.md` (nouveau scénario)
+
+### T12.2 🟡 Rappel des règles d'usage au setup
+
+**But :** les règles que le bundle applique déjà (revue humaine avant mise
+en production, jeton dédié à permissions minimales en T10.3, traçabilité
+du modèle dans les commits en T10.4, détection de secrets en T10.5) sont
+aujourd'hui soit implicites, soit enfouies dans
+`templates/AGENTS.default.md`. L'utilisateur qui installe ne les voit
+jamais. Les rappeler au setup, au moment où elles sont actionnables.
+**Note :** rappel court, pas mur de texte. La sobriété du wizard (T6.14)
+et la limite de 80 colonnes s'appliquent.
+**DoD :** le setup affiche un encart de rappel tenant en quelques lignes ;
+le README porte la version longue.
