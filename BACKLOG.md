@@ -635,10 +635,11 @@ Conséquence : sur les dernières PR, l'agent s'est arrêté avant le push et un
 **Tâches :** cible = un jeton fine-grained dédié, limité aux dépôts nécessaires, avec les permissions minimales pour `push` et `gh pr create`. Documenter la marche à suivre dans le README et le demander explicitement au wizard comme un jeton dédié. Prendre en compte le cas du non-admin d'organisation, qui ne peut pas créer de fine-grained.
 **DoD :** le README décrit un jeton dédié à permissions minimales, et le wizard le réclame comme tel. → `TESTS.md` S52.
 
-### T10.4 🟡 Tracer le modèle dans les commits produits par l'agent
+### T10.4 🟡 Tracer le modèle dans les commits produits par l'agent ✅ implémenté
 **But :** les commits produits par Albert Code ne portent aucune trace du modèle qui a généré le code. Ajouter à `templates/AGENTS.default.md` une consigne de trailer `Co-Authored-By` nommant le modèle Albert utilisé, pour retrouver a posteriori le code produit par un modèle donné (utile en cas de régression de qualité ou de retrait d'un modèle du catalogue, cas déjà vécu).
 **Note :** c'est une consigne de prompt, donc un garde-fou faible ; un contrôle côté forge serait la version robuste.
 **DoD :** un commit produit par Albert Code porte le trailer nommant le modèle. → `TESTS.md` S53.
+**✅ Implémenté** — consigne ajoutée dans la section « Git & commits » (`templates/AGENTS.default.md:57`, trailer `Co-Authored-By: Albert Code (<id-modèle>) <albert-code@users.noreply.github.com>`, précédé d'une ligne vide). **Source déclarative, non vérifiable** : la version d'OpenCode embarquée n'expose aucun identifiant du modèle courant à l'agent (aucune variable d'env type `OPENCODE_MODEL`, aucune substitution dans le contenu d'`AGENTS.md` — seules `{env:}`/`{file:}` existent et uniquement dans `opencode.json` ; le contexte système injecte seulement cwd/root/git/plateforme/date). La consigne demande donc à l'agent de noter l'**id canonique Albert** du modèle tel qu'il le connaît ; l'EPIC 11 multipliera les rôles de modèles, mais ce garde-fou reste faible (à compléter par un hook de pré-commit en T10.5). → `TESTS.md` S53.
 
 ### T10.5 🟡 Détection de secrets imposée techniquement, pas par consigne
 **But :** la détection de secrets avant commit repose sur une ligne de `templates/AGENTS.default.md`. Une consigne dans le contexte de l'agent peut être ignorée ou altérée : elle ne peut pas être l'unique garde-fou sur les secrets. Étudier la pose d'un hook de pré-commit au setup.
