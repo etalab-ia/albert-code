@@ -518,7 +518,7 @@ Option : ajouter un paramètre `install_shim` pour mode "exec" vs "source", ou d
 |---|---|---|---|
 | `~/.agent-vm/runtime.sh` bloc marqué | ✅ Oui, à chaque phase A ET B | `ensure_vm_runtime()` supprime le bloc `$AC_MARKER … $AC_MARKER_END` et le réécrit | Clés API + GH_TOKEN doivent être à jour au boot VM |
 | `./opencode.json` | 🟡 Merge conditionnel (T8.2) | Si `jq` présent → merge provider.albert dans existant, sinon avertissement | Provider Albert doit pouvoir être ajouté sans écraser les MCP/permissions |
-| `./AGENTS.md` | ❌ Non (jamais écrasé) | `copy_template()` → non-destructif pur | Le projet peut avoir un AGENTS.md personnalisé |
+| `./AGENTS.md` | ❌ Non (jamais écrasé) | `copy_template()` → non-destructif pur | Le projet peut avoir un AGENTS.md personnalisé — angle mort (les évolutions du template n'atteignent pas les projets déjà installés), traité par T8.5 (à venir) |
 | `./.agent-vm.runtime.sh` (projet) | ❌ Non (jamais écrasé) | `copy_template()` → non-destructif pur | Idem, fichier figé chez l'existant |
 | `vendor/vm/` (moteur VM) | ❌ Non (vendored figé) | Versionné dans le repo albert-code | Mis à jour par `git pull` du dépôt albert-code |
 | `templates/` | ❌ Non (versionnés) | Versionné dans le repo | Utilisés uniquement au premier `setup` |
@@ -547,6 +547,41 @@ Option : ajouter un paramètre `install_shim` pour mode "exec" vs "source", ou d
 > **Promu en 🟠 et détaillé dans T9.3 (EPIC 9)** : c'est le seul canal possible pour distribuer un correctif de catalogue de modèles aux projets déjà configurés (cf. AC-R042). Voir `BACKLOG.md` EPIC 9, T9.3.
 
 **DoD :** ticket documenté mais pas implémenté — **T9.3 implémenté** (voir EPIC 9) : `phase_update` (`lib/phases.sh:257-292`) répare `opencode.json` (T9.2) + régénère le bloc runtime (T8.3) sans questions MCP/skills. Voir note de promotion ci-dessus et T9.3.
+
+### T8.5 🔴 Propager les évolutions du bundle aux AGENTS.md existants
+
+**Problème :** le tableau « Architecture de rafraîchissement » de T8.1
+qualifie `./AGENTS.md` de « jamais écrasé » : `copy_template()` est non
+destructif pur, car le projet peut en avoir personnalisé le contenu.
+Conséquence non traitée : **toute évolution des règles portées par
+`templates/AGENTS.default.md` n'atteint aucun utilisateur déjà installé**.
+Exemple concret et actuel : le trailer `Co-Authored-By` de T10.4, mergé
+le 27/08, ne sera vu par aucun projet scaffoldé avant cette date. Le futur
+hook de pré-commit de T10.6 non plus. Le bundle accumule donc des
+garanties que ses utilisateurs historiques n'ont pas.
+
+**Piste à instruire :** transposer au `./AGENTS.md` le motif de **zone
+délimitée** déjà éprouvé sur `~/.agent-vm/runtime.sh` (marqueurs
+`AC_MARKER` / `AC_MARKER_END`, `lib/ui.sh:32-33`), et faire réécrire cette
+zone par le verbe `albert-code update` — dont c'est exactement le contrat
+(rafraîchir un projet existant sans repasser les questions MCP/skills).
+
+**Tâches :**
+1. **Migration.** Les `AGENTS.md` existants n'ont aucun marqueur. Le
+   premier `update` doit trancher : insérer le bloc et à quel endroit,
+   demander confirmation, ou avertir et passer. Même classe de problème
+   que T9.2 face aux catalogues périmés.
+2. **Frontière.** Décider ce qui entre dans la zone gérée (les garanties
+   du bundle : règles de sécurité, conventions de commit, trailer
+   `Co-Authored-By` de T10.4) et ce qui n'y entre pas (le contenu propre
+   au projet). Une zone trop large écraserait des personnalisations
+   légitimes.
+
+**DoD :** après un `albert-code update` sur un projet scaffoldé avant une
+évolution, les règles gérées par le bundle sont à jour et tout ce que
+l'utilisateur a écrit hors de la zone est intact. → scénarios `TESTS.md`
+à créer (S64 et suivants — S63 est déjà réservé à T10.6).
+
 **But :** chaque option d'installation doit être compréhensible sans contexte préalable. Format cible : « Installer Context7 ? Context7 est un MCP qui permet de [...]. Y/n ».
 
 **Tâches :**
@@ -672,6 +707,37 @@ Conséquence : sur les dernières PR, l'agent s'est arrêté avant le push et un
 **DoD :** la politique de rétention de `opencode.db` est tranchée et documentée, et sa purge est implémentée (ou explicitement écartée avec justification) ; aucun secret connu ne persiste indéfiniment dans la base d'une session. → scénario `TESTS.md` à créer.
 **← incident 26/08.**
 
+### T10.8 🟠 Permettre à l'utilisateur de déclarer des secrets supplémentaires
+
+**Problème (fait C) :** la liste des variables propagées vers la VM est
+écrite **en dur** dans `lib/phases.sh:473-497`. Elle transporte
+exactement cinq variables (`ALBERT_API_KEY`, `CONTEXT7_API_KEY`,
+`GH_TOKEN`, `AC_GIT_USER_NAME`, `AC_GIT_USER_EMAIL`) ; il n'y a aucune
+boucle sur des secrets déclarés par l'utilisateur. Si l'utilisateur ajoute
+un provider tiers (cas de la répartition plan/build de T11.2), son secret
+n'atteint jamais la VM. Il doit poser la ligne à la main dans le
+`~/.zshenv` de la VM. Ça marche — la règle d'abstention de T10.2 garantit
+qu'une valeur posée à la main n'est pas écrasée quand l'hôte n'a pas la
+variable (`TESTS.md` S59) — mais c'est une étape manuelle fragile, dont
+l'échec se manifeste par une erreur d'authentification opaque du
+fournisseur tiers.
+
+**But :** un mécanisme **déclaratif** (liste de noms de variables dans une
+configuration du projet ou du bundle) qui **étend le pont existant** sans
+toucher au code à chaque nouveau fournisseur.
+
+**Tâches à esquisser :**
+1. Choisir où la déclaration vit (configuration du projet ou du bundle).
+2. Ne transporter que des **noms** de variables, jamais de valeurs, dans
+   un fichier versionné.
+3. Conserver la règle d'abstention : pas de valeur côté hôte → aucune
+   ligne émise.
+4. Conserver l'idempotence du bloc marqué.
+
+**DoD :** un secret déclaré par l'utilisateur atteint la VM par le même
+chemin que les cinq variables existantes, sans autre modification de
+`lib/phases.sh`.
+
 ---
 
 ## EPIC 11 — Catalogue de modèles adaptés au code (rôles plan / exécution)
@@ -715,25 +781,58 @@ d'appels, gros contexte, raisonnement) et la phase d'**exécution**
 (beaucoup d'appels, édition de fichiers, outils) tournent sur deux modèles
 différents. Aujourd'hui `config/opencode.template.json` fixe un seul id
 pour tout.
-**Tâches :** commencer par **identifier le bon levier OpenCode** avant
-d'écrire quoi que ce soit. Deux candidats, à trancher sur la doc de la
-version embarquée, pas de mémoire : la configuration de modèle **par
-agent / par mode** (l'agent de plan et l'agent de build peuvent porter
-chacun le leur), et `small_model`, dont il faut vérifier s'il vise bien
-l'exécution ou seulement les tâches utilitaires internes (titres de
-session, résumés). Ne pas câbler `small_model` sur l'exécution sans avoir
-vérifié ce point : si c'est un modèle utilitaire, on mettrait le petit
-modèle sur la génération de titres tout en laissant l'exécution sur le
-gros, soit l'inverse de l'effet recherché. Une fois le levier confirmé :
-embarquer les deux id retenus en T11.1 dans `provider.albert.models` ;
-câbler les deux rôles ; ajouter au setup une question unique, précédée de
-sa ligne d'explication (cf. T6.16), entre « répartition recommandée » et
-« un seul modèle partout » ; garder un défaut fonctionnel sans réseau.
-**Point de vigilance :** le programme jq de réconciliation de T9.2
-(`jq_albert_reconcile_program`) code en dur `deepseek-v4-flash` comme
-unique modèle de repli, et `repair_stale_provider_albert` remonte le
-modèle par défaut sur ce seul id. Les deux doivent connaître la paire de
-rôles, sinon la réparation d'un projet périmé écrasera la répartition.
+**Levier tranché (2026-08-27) :** la configuration de modèle **par
+agent** de l'`opencode.json`, pas `small_model`. Syntaxe officielle :
+`"agent": { "plan": { "mode": "primary", "model": "<provider>/<id>" },
+"build": { "mode": "primary", "model": "<provider>/<id>" } }`. Un agent
+sans `model` explicite hérite du modèle global. Les agents plan et build
+ont des permissions d'outils **différentes par défaut** ; les valeurs
+exactes (la doc montre `edit` et `bash` à `deny` dans un exemple de
+configuration explicite, sans les affirmer comme défaut) sont à vérifier
+sur la version embarquée avant de s'appuyer dessus — le point est
+critique, une expérimentation à crédits limités (cf. plus bas) suppose
+que le mode plan ne puisse pas exécuter. `small_model` reste ce qu'il est :
+les tâches
+utilitaires internes (titres de session, résumés — vérification du ticket
+original confirmée : il n'est **pas** un levier d'exécution).
+
+**Tâches :** embarquer les id retenus en T11.1 dans
+`provider.albert.models` ; câbler la répartition via le bloc `agent`
+(`plan` → modèle de raisonnement, `build` → modèle d'exécution) ; ajouter
+au setup une question unique, précédée de sa ligne d'explication
+(cf. T6.16), entre « répartition recommandée » et « un seul modèle
+partout » ; garder un défaut fonctionnel sans réseau.
+
+**Répartition cible (raison d'être), débits en ordre de grandeur
+anticipé, à confirmer :**
+
+| Rôle | Modèle visé | Débit anticipé |
+|---|---|---|
+| `agent.plan` | GLM (gros modèle de raisonnement) | ~5 RPM |
+| `agent.build` | DeepSeek Flash, ou le nouveau Qwen | ~50 RPM |
+| `small_model` | petit Qwen / Mistral (tâches utilitaires du build) | ~200 RPM |
+
+Le débit est appliqué **par clé** côté fournisseur : le bundle ne peut ni
+le contourner ni le lisser, son seul levier est l'**onboarding**.
+
+**Point de vigilance (nuancé par le fait B) :** le programme jq de
+réconciliation de T9.2 (`jq_albert_reconcile_program`) code en dur
+`deepseek-v4-flash` comme unique modèle de repli, et
+`repair_stale_provider_albert` remonte le modèle par défaut sur ce seul
+id. Mais ces deux programmes n'écrivent que dans `provider.albert.models`
+et `.model` (en racine) : **un bloc `agent` et un provider tiers
+restent intacts à la réparation** (déjà couvert par `TESTS.md` S46).
+Le risque résiduel ne porte donc que sur `.model` en racine, pas sur le
+bloc `agent` — lier les modèles au niveau agent est plus durable que via
+`model` en racine. À confirmer à l'implémentation pour s'assurer que la
+réparation d'un projet périmé n'écrase pas une répartition déjà en place.
+
+**Expérimentation prévue :** une montée en charge réelle avec cinq
+alpha-testeurs équipés d'une clé tierce pour le rôle plan, le build
+restant sur Albert. La répartition peut en effet mobiliser deux
+fournisseurs distincts (ex. GLM chez un tiers pour le plan, Albert pour
+le build), ce qui suppose un second bloc provider et donc un second
+secret — renvoie à T10.8.
 **DoD :** le levier retenu est documenté dans le ticket avec sa source ;
 un setup en dry-run affiche la question et produit une configuration où le
 plan et l'exécution pointent deux id distincts quand la répartition est
