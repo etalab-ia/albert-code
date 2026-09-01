@@ -260,6 +260,10 @@ Config MCP de référence :
 **DoD :** repo public, LICENSE MIT, CI verte.
 **Implémenté** — le dépôt `github.com/etalab-ia/albert-code` est public (`api.github.com` → `private: false`, rendu public le 01/07/2026), `LICENSE` est MIT, et la dernière run de CI est verte (`conclusion: success`, 2026-08-26).
 
+### T5.4 🟠 Écrire le PATH du shim dans le bon fichier de shell `<- AC-R045`
+**But :** `install_shim` écrit l'ajout de `~/.local/bin` au `PATH` dans `~/.zshenv`, invisible pour un utilisateur bash (cas nominal sur Linux). Détecter le shell (`$SHELL`) et écrire dans `~/.bashrc`, `~/.zshenv` ou `~/.profile` selon le cas, sans jamais dupliquer une ligne déjà présente dans l'un d'eux. Le contournement est documenté dans le README depuis 2026-09-01 ; ce ticket le rend inutile.
+**DoD :** sur une machine Linux avec bash et aucun dossier writable dans le `PATH`, `command -v albert-code` répond après un nouveau shell, sans intervention manuelle. → scénario `TESTS.md` à créer.
+
 ---
 
 ## EPIC 7 — Absorption d'agent-vm dans le bundle (vendoring)
