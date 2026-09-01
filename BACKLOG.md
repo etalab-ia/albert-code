@@ -214,6 +214,16 @@ Config MCP de référence :
 **Tâches :** dans `install.sh` (A.7), retirer le check host-opencode + les warns « absent du PATH » (×2) + l'info `npm i -g opencode-ai`. Optionnel : une seule ligne positive « OpenCode s'exécute dans la bulle agent-vm — rien à installer sur ton poste ». Vérifier qu'aucun message n'oriente vers une exécution d'OpenCode hors VM.
 **DoD :** `grep -n 'opencode-ai\|absent du PATH' install.sh` ne renvoie rien ; l'install ne mentionne plus d'OpenCode hôte.
 
+### T-FIX-16 🔴 `opencode: command not found` au `run` (PATH bash Lima) `<- AC-R047` ✅ implémenté
+**But :** `albert-code run` échoue avec `/bin/bash: line 1: opencode: command not found` alors qu'OpenCode EST installé dans la VM (`~/.opencode/bin/opencode`). Cause : `limactl shell` enveloppe la commande dans `/bin/bash -c` (non-login, ne lit pas `~/.zshenv`) ; le PATH OpenCode n'est écrit que dans `~/.zshrc` / `~/.zshenv`. Distinct de T7.8 (binaire vraiment absent après clone périmé).
+**Tâches :**
+- `phase_run` : lancer via `_vm run --tty zsh -l -c "opencode --auto"` (login zsh = PATH chargé, TUI avec `--tty`). Ne plus appeler le verbe vendored `opencode`.
+- `check_opencode` : symlink idempotent `~/.local/bin/opencode` → `~/.opencode/bin/opencode` (`~/.local/bin` est déjà dans le PATH bash Lima). Plus de suggestion `npm i -g`.
+- Bloc marqué `ensure_vm_runtime` : même symlink, pour les projets dont `./.agent-vm.runtime.sh` est figé (T8.1).
+**Règles :** ne pas toucher `vendor/vm/` ; bash 3.2 ; accents FR ; dry-run OK ; non-destructif (ne pas écraser un binaire réel dans `~/.local/bin`).
+**DoD :** `command -v opencode` répond dans un bash Lima après le runtime ; `albert-code run` ouvre le TUI, plus de `command not found`. → `TESTS.md` S65.
+**Implémenté** — lancement `zsh -l` (`lib/phases.sh:phase_run`) ; symlink dans `runtime/agent-vm.runtime.sh:check_opencode` et le bloc marqué `ensure_vm_runtime`.
+
 ---
 
 ### T4.1 🟠 Skill `conventions-iae` (dans etalab-ia/skills)

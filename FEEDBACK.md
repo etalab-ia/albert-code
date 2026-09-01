@@ -67,6 +67,7 @@
 | AC-R044 | 🐛 | 🔴 | La VM projet peut perdre `zsh` ou `opencode` après une mise à jour du moteur de VM : symptômes `zsh: command not found : opencode` / `opencode: command not found`, ou messages du moteur de VM. La VM projet n'est pas recréée automatiquement sur la base nominée, laissant l'utilisateur sans issue claire. | Bêta-test juillet 2026, cause racine élucidée le 15/07 | 📥 backlogué | `BACKLOG.md` T7.8 |
 | AC-R045 | 🎛️ | 🟠 | Sous Linux avec bash, install_shim pose le shim dans ~/.local/bin et écrit l'ajout au PATH dans ~/.zshenv, jamais lu par bash : albert-code: command not found après une installation pourtant réussie, sans message d'aide. | Revue de parcours Linux 2026-09-01 | 📥 backlogué | README.md Dépannage · BACKLOG.md T5.4 |
 | AC-R046 | 🎛️ | 🟡 | Prérequis Linux non documentés : le README promet que le script installe Lima, ce qui n'est vrai que via Homebrew ; QEMU et l'accès à /dev/kvm, vérifiés par le code, ne sont annoncés nulle part. | Revue de parcours Linux 2026-09-01 | ✅ traité | README.md Prérequis |
+| AC-R047 | 🐛 | 🔴 | `albert-code run` affiche `/bin/bash: line 1: opencode: command not found` alors qu'OpenCode est installé dans la VM (`~/.opencode/bin`). `limactl shell` lance via `/bin/bash` non-login, qui ne lit pas `~/.zshenv` où le PATH est posé. Distinct de AC-R044 (binaire absent après clone périmé). | Dogfood 2026-09-01 | ✅ traité | `BACKLOG.md` T-FIX-16 · `TESTS.md` S65 |
 
 ## Notes
 
