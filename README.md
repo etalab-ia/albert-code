@@ -27,7 +27,8 @@ Ce n'est pas un IDE ni un fork : de l'orchestration mince (scripts + config) au-
 ## Prérequis
 
 - macOS ou Linux (pas de Windows).
-- [Lima](https://lima-vm.io) (installé par le script si absent, via Homebrew).
+- [Lima](https://lima-vm.io) : sur macOS, installé par le script si absent (via Homebrew). Sur Linux, à installer à la main avant : https://lima-vm.io/docs/installation/
+- **Linux uniquement** : QEMU (`sudo apt-get install qemu-system-x86`, ou `qemu-system-arm` sur ARM) et l'accès à `/dev/kvm`. Si `/dev/kvm` n'existe pas, la virtualisation est désactivée dans le BIOS ou tu es déjà dans une VM. S'il existe mais refuse l'accès : `sudo usermod -aG kvm "$USER"` puis reconnexion.
 - Node.js (pour les serveurs MCP lancés via `npx`).
 - Une **clé Albert API** (réservée aux agents publics : demande sur https://albert.api.etalab.gouv.fr).
 - Un compte GitHub (pour que l'agent pousse des PR depuis la VM).
@@ -41,6 +42,8 @@ cd ~/albert-code
 ```
 
 > Le chemin d'installation ne doit **pas contenir d'espace** (contrainte du moteur de VM/Lima, qui monte le répertoire de travail dans la VM).
+
+> **Vérifie ensuite que la commande répond** : `command -v albert-code`. Si elle ne renvoie rien (cas fréquent sous Linux avec bash), le raccourci a été posé dans `~/.local/bin` et l'ajout au `PATH` a été écrit dans `~/.zshenv`, que bash ne lit pas. Corrige avec `echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc` puis `source ~/.bashrc`.
 
 Après installation, tu disposes de la commande `albert-code` à 4 verbes :
 
@@ -165,6 +168,8 @@ Docs : [OpenCode](https://opencode.ai/docs/fr) · [Albert API](https://doc.incub
 
 ## Dépannage
 
+- **`albert-code: command not found` juste après l'installation** → le shim est dans `~/.local/bin`, absent de ton `PATH` (l'ajout automatique va dans `~/.zshenv`, que bash ne lit pas). Ajoute `export PATH="$HOME/.local/bin:$PATH"` à ton `~/.bashrc`, puis `source ~/.bashrc`.
+- **`Error: Lima needs 'qemu-system-x86_64' on PATH` ou `Error: /dev/kvm does not exist` (Linux)** → prérequis manquants, voir [Prérequis](#prérequis).
 - **`Base VM not found`** → lance `albert-code run` une fois ; la VM de base se crée automatiquement.
 - **Je suis dans OpenCode mais pas connecté à Albert (pas de `/models`, `/mcp`, `/skills`)** → tu as lancé `albert-code run` dans un dossier **sans `opencode.json`** (ex. le dépôt albert-code lui-même, ou un projet jamais scaffoldé). Scaffolde d'abord : `cd <ton-projet> && albert-code setup`, puis relance `albert-code run`.
 - **Mon projet a déjà un `opencode.json`** → il est **conservé** (non-destructif). Vérifie qu'il contient le provider albert ; sinon Albert n'est pas câblé — ajoute à la main le bloc `provider.albert` + `model`/`small_model`.
