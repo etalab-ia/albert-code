@@ -170,7 +170,10 @@ Docs : [OpenCode](https://opencode.ai/docs/fr) · [Albert API](https://doc.incub
 
 - **`albert-code: command not found` juste après l'installation** → le shim est dans `~/.local/bin`, absent de ton `PATH` (l'ajout automatique va dans `~/.zshenv`, que bash ne lit pas). Ajoute `export PATH="$HOME/.local/bin:$PATH"` à ton `~/.bashrc`, puis `source ~/.bashrc`.
 - **`Error: Lima needs 'qemu-system-x86_64' on PATH` ou `Error: /dev/kvm does not exist` (Linux)** → prérequis manquants, voir [Prérequis](#prérequis).
-- **`opencode: command not found` (préfixe `/bin/bash`)** → Lima lance OpenCode via bash, qui ne lit pas le PATH zsh. Relance `albert-code run` (le bundle lance désormais via `zsh -l`). Si l'erreur persiste, `albert-code update` puis relance.
+- **`opencode: command not found` (préfixe `/bin/bash`)** → ton bundle est antérieur au correctif du lancement (Lima ≥ 2.2.0 n'utilise plus `zsh -l` automatiquement). Mets à jour ton bundle puis relance :
+  1. `cd ~/albert-code && git pull`
+  2. `albert-code run`
+  Si l'erreur persiste après mise à jour, `albert-code update` puis relance.
 - **`Base VM not found`** → lance `albert-code run` une fois ; la VM de base se crée automatiquement.
 - **Je suis dans OpenCode mais pas connecté à Albert (pas de `/models`, `/mcp`, `/skills`)** → tu as lancé `albert-code run` dans un dossier **sans `opencode.json`** (ex. le dépôt albert-code lui-même, ou un projet jamais scaffoldé). Scaffolde d'abord : `cd <ton-projet> && albert-code setup`, puis relance `albert-code run`.
 - **Mon projet a déjà un `opencode.json`** → il est **conservé** (non-destructif). Vérifie qu'il contient le provider albert ; sinon Albert n'est pas câblé — ajoute à la main le bloc `provider.albert` + `model`/`small_model`.

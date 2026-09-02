@@ -854,7 +854,7 @@ runtime n'est jamais laissé vide ou incomplet.
 temporaire ne subsiste** à l'issue de la fonction (les gabarits `mktemp` créés au vol sont nettoyés
 quoi qu'il arrive).
 
-## S65 — OpenCode visible du bash Lima (T-FIX-16, AC-R047)
+## S65 — OpenCode lancé via `zsh -l`, sans filet symlink bash (T-FIX-16, AC-R047)
 
 **Préconditions :** `runtime/agent-vm.runtime.sh` et `lib/phases.sh` du dépôt. Pas de VM requise
 pour la partie automatisée (`tests/s65_opencode_bash_path.sh`).
@@ -862,15 +862,18 @@ pour la partie automatisée (`tests/s65_opencode_bash_path.sh`).
 **Étapes (automatisé) :**
 1. `bash tests/s65_opencode_bash_path.sh`
 2. Vérifier que `phase_run` lance via `zsh -l -c "opencode --auto"`, plus via `_vm opencode`.
-3. Dans un HOME sandboxé : binaire factice dans `~/.opencode/bin`, PATH bash sans ce dossier
-   → `check_opencode` pose `~/.local/bin/opencode` → `command -v opencode` réussit.
-4. Relancer `check_opencode` → no-op, symlink intact. Aucune suggestion `npm i -g`.
+3. Vérifier que `ensure_vm_runtime` (`lib/phases.sh`) ne contient plus d'`apply_append` posant un
+   symlink opencode (~/.local/bin).
+4. Dans un HOME sandboxé : binaire factice dans `~/.opencode/bin` et exécutable réel préexistant
+   dans `~/.local/bin` → `check_opencode` signale la présence mais ne pose AUCUN symlink
+   (ni ~/.local/bin ni ailleurs).
+5. Relancer `check_opencode` → toujours aucun symlink (idempotent). Aucune suggestion `npm i -g`.
 
 **Validation réelle (VM) :**
-5. `albert-code run` dans un projet configuré → plus de `/bin/bash: line 1: opencode: command not found` ;
-   le TUI OpenCode s'ouvre.
+6. `albert-code run` dans un projet configuré → plus de `/bin/bash: line 1: opencode: command not found` ;
+   le TUI OpenCode s'ouvre, avec les clés Albert chargées.
 
-**Attendu :** (1) exit 0. (2)(3)(4) assertions du script. (5) TUI, pas d'erreur PATH.
+**Attendu :** (1) exit 0. (2)(3)(4)(5) assertions du script. (6) TUI, pas d'erreur PATH.
 
 **Validé le :** 2026-09-01 — S65 automatisé OK (`tests/s65_opencode_bash_path.sh`). Cause racine
 confirmée sur VM projet réelle : binaire présent dans `~/.opencode/bin`, `command -v` OK sous

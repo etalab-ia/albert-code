@@ -215,14 +215,24 @@ Config MCP de référence :
 **DoD :** `grep -n 'opencode-ai\|absent du PATH' install.sh` ne renvoie rien ; l'install ne mentionne plus d'OpenCode hôte.
 
 ### T-FIX-16 🔴 `opencode: command not found` au `run` (PATH bash Lima) `<- AC-R047` ✅ implémenté
-**But :** `albert-code run` échoue avec `/bin/bash: line 1: opencode: command not found` alors qu'OpenCode EST installé dans la VM (`~/.opencode/bin/opencode`). Cause : `limactl shell` enveloppe la commande dans `/bin/bash -c` (non-login, ne lit pas `~/.zshenv`) ; le PATH OpenCode n'est écrit que dans `~/.zshrc` / `~/.zshenv`. Distinct de T7.8 (binaire vraiment absent après clone périmé).
+**But :** `albert-code run` échoue avec `/bin/bash: line 1: opencode: command not found` alors qu'OpenCode EST installé dans la VM (`~/.opencode/bin/opencode`).
+**Cause racine :** Lima v2.2.0 (publiée le 21/07/2026, PR lima-vm/lima#5194) a introduit un champ `user.shell` et n'utilise plus le shell de connexion du guest pour `limactl shell` ; le défaut est `/bin/bash`. Le `chsh` posé par `vendor/vm/agent-vm.setup.sh:81` est donc devenu inopérant, et bash non-login ne lit pas `~/.zshenv` (PATH OpenCode + secrets). Distinct de T7.8 (binaire vraiment absent après clone périmé).
 **Tâches :**
-- `phase_run` : lancer via `_vm run --tty zsh -l -c "opencode --auto"` (login zsh = PATH chargé, TUI avec `--tty`). Ne plus appeler le verbe vendored `opencode`.
-- `check_opencode` : symlink idempotent `~/.local/bin/opencode` → `~/.opencode/bin/opencode` (`~/.local/bin` est déjà dans le PATH bash Lima). Plus de suggestion `npm i -g`.
-- Bloc marqué `ensure_vm_runtime` : même symlink, pour les projets dont `./.agent-vm.runtime.sh` est figé (T8.1).
-**Règles :** ne pas toucher `vendor/vm/` ; bash 3.2 ; accents FR ; dry-run OK ; non-destructif (ne pas écraser un binaire réel dans `~/.local/bin`).
-**DoD :** `command -v opencode` répond dans un bash Lima après le runtime ; `albert-code run` ouvre le TUI, plus de `command not found`. → `TESTS.md` S65.
-**Implémenté** — lancement `zsh -l` (`lib/phases.sh:phase_run`) ; symlink dans `runtime/agent-vm.runtime.sh:check_opencode` et le bloc marqué `ensure_vm_runtime`.
+- `phase_run` : lancer via `_vm run --tty zsh -l -c "opencode --auto"` (login zsh = PATH + secrets chargés, TUI avec `--tty`). Ne plus appeler le verbe vendored `opencode`. **Ne pas « réparer » le chsh** : ignoré par Lima >= 2.2.0. (CORRIGÉ)
+- `check_opencode` : simple vérification de présence (message + chemin/version). **Aucun symlink** (ni `~/.local/bin` ni ailleurs) : rendre opencode atteignable depuis bash le ferait démarrer sans clé Albert — panne plus opaque qu'un `command not found`. (CORRIGÉ)
+- Bloc marqué `ensure_vm_runtime` : le filet symlink ajouté en v1 est retiré. (CORRIGÉ)
+**Règles :** ne pas toucher `vendor/vm/` ; bash 3.2 ; accents FR ; dry-run OK ; non-destructif.
+**DoD :** `albert-code run` ouvre le TUI OpenCode avec les clés chargées, plus de `command not found` ; aucun symlink opencode posé par le runtime. → `TESTS.md` S65.
+**Implémenté** — lancement `zsh -l` (`lib/phases.sh:phase_run`) ; `check_opencode` allégé (présence seule) et filet symlink retiré de `ensure_vm_runtime`.
+
+### T-FIX-17 🟡 Compatibilité Lima >= 2.2.0 du moteur de VM (autres verbes) — suivi amont
+**But :** la régression Lima v2.2.0 (PR lima-vm/lima#5194 : `user.shell`, défaut `/bin/bash`) qui a cassé `run` (T-FIX-16) touche aussi les **autres verbes** du moteur de VM : `claude`, `codex` et `vibe` appellent encore le binaire nu via `limactl shell … -- <cmd>` (`vendor/vm/agent-vm.sh:1132, 1199, 1233`), donc sous `/bin/bash` sans utiliser le shell de connexion du guest.
+**Périmètre :** hors périmètre du bundle — albert-code n'utilise **que** OpenCode. Le correctif relève du dépôt amont `sylvinus/agent-vm`.
+**Tâches (suivi) :**
+- Vérifier le traitement amont chez `sylvinus/agent-vm` (attention aux verbes `claude`/`codex`/`vibe` face à `limactl shell` >= 2.2.0).
+- Ne rien coder dans le bundle tant que le correctif n'est pas d'actualité ici.
+**Règles :** ne pas toucher `vendor/vm/` ; bash 3.2 ; accents FR.
+**DoD :** décision documentée dans `docs/PLAN.md` (suivi amont validé ou risque dûment écarté pour les 3 verbes non utilisés).
 
 ---
 
