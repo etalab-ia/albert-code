@@ -239,10 +239,15 @@ phase_run() {
   # Capture d'abord (aucun pipe → immunisé SIGPIPE/pipefail, cf. T7.6 post-mortem).
   # `|| true` : sortie vide ne casse pas set -e.
   _vm_list="$(limactl list -q 2>/dev/null || true)"
-  # Lima (limactl shell) exécute via /bin/bash non-login : ~/.zshenv n'est
-  # pas lu, donc ~/.opencode/bin n'est pas dans le PATH → « opencode: command
-  # not found ». zsh -l charge ~/.zshenv (comme agent-vm shell -c). --tty pour
-  # le TUI. Ne pas appeler le verbe vendored `opencode` (même piège PATH).
+  # Régression Lima >= 2.2.0 (PR lima-vm/lima#5194, publiée le 21/07/2026) :
+  # Lima a introduit un champ `user.shell` et n'utilise plus le shell de
+  # connexion du guest pour `limactl shell` — le défaut est /bin/bash. Le
+  # `chsh` posé par vendor/vm/agent-vm.setup.sh est devenu inopérant, et bash
+  # non-login ne lit pas ~/.zshenv : ~/.opencode/bin n'est pas dans le PATH
+  # → « opencode: command not found ». On lance donc EXPLICITEMENT en
+  # `zsh -l` (shell de connexion) qui charge ~/.zshenv (PATH + secrets).
+  # NE PAS « réparer » en restaurant le chsh : il est ignoré par Lima >= 2.2.0.
+  # --tty pour le TUI. Ne pas appeler le verbe vendored `opencode` (même piège PATH).
   case $'\n'"$_vm_list"$'\n' in
     *$'\n'"$_vm_name"$'\n'*)
       info "VM déjà créée — rattachement sans re-réglage des ressources."
@@ -516,20 +521,6 @@ AC_HELPER
       "  esac"
     apply_append "garde-fou OpenCode --auto (T8.3)" "$_new_runtime" \
       "  unset _oc_help"
-    # Lima lance opencode via /bin/bash non-login : exposer le binaire sur
-    # ~/.local/bin (déjà dans le PATH bash). Idempotent, non-destructif.
-    apply_append "exposer opencode au PATH bash Lima" "$_new_runtime" \
-      "  mkdir -p \"\$HOME/.local/bin\""
-    apply_append "exposer opencode au PATH bash Lima" "$_new_runtime" \
-      "  if [ -x \"\$HOME/.opencode/bin/opencode\" ]; then"
-    apply_append "exposer opencode au PATH bash Lima" "$_new_runtime" \
-      "    if [ -e \"\$HOME/.local/bin/opencode\" ] && [ ! -L \"\$HOME/.local/bin/opencode\" ]; then :; else"
-    apply_append "exposer opencode au PATH bash Lima" "$_new_runtime" \
-      "      ln -sf \"\$HOME/.opencode/bin/opencode\" \"\$HOME/.local/bin/opencode\""
-    apply_append "exposer opencode au PATH bash Lima" "$_new_runtime" \
-      "    fi"
-    apply_append "exposer opencode au PATH bash Lima" "$_new_runtime" \
-      "  fi"
     apply_append "albert-code block end" "$_new_runtime" "$AC_MARKER_END"
   fi
 
