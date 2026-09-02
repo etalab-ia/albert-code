@@ -346,7 +346,7 @@ et le bloc marqueur a disparu.
 2. Lancer `bash bin/albert-code run --dry-run`.
 3. Observer la sortie.
 
-**Attendu :** la sortie contient `✓ lancer la VM isolée : _vm opencode` **sans** `--cpus`,
+**Attendu :** la sortie contient `lancer la VM isolée` via `_vm run --tty zsh -l -c "opencode --auto"` **sans** `--cpus`,
 `--memory`, ni `--disk`. Le message `VM déjà créée — rattachement sans re-réglage des ressources.`
 est affiché. Aucun prompt « must be stopped to apply new resource settings » ne provient
 d'agent-vm — car la condition testée est **présence** (pas `Running`), et le chemin de décision
@@ -367,9 +367,9 @@ que la branche `*)` (flags) n'est pas prise.
 3. Observer la sortie.
 
 **Attendu :** la sortie contient
-`✓ lancer la VM isolée : _vm --cpus "${EFF_CPUS}" --memory "${EFF_MEM}" --disk "${AC_VM_DISK}" opencode`
+`_vm --cpus "${EFF_CPUS}" --memory "${EFF_MEM}" --disk "${AC_VM_DISK}" run --tty zsh -l -c "opencode --auto"`
 avec les valeurs calculées de `EFF_CPUS`, `EFF_MEM`, `AC_VM_DISK`. Pas de message
-« VM déjà créée ». Comportement identique à celui d'avant T7.6.
+« VM déjà créée ». Le verbe vendored `opencode` n'est plus appelé (PATH bash Lima, AC-R047).
 
 ## S43 — `base_vm_exists` détecte la VM de base sans faux négatif (T7.6, AC-R037, même racine SIGPIPE)
 
@@ -853,4 +853,26 @@ runtime n'est jamais laissé vide ou incomplet.
 **Note dry-run :** avec `DRY_RUN=1`, l'exécution est sans effet (runtime inchangé) et **aucun fichier
 temporaire ne subsiste** à l'issue de la fonction (les gabarits `mktemp` créés au vol sont nettoyés
 quoi qu'il arrive).
+
+## S65 — OpenCode visible du bash Lima (T-FIX-16, AC-R047)
+
+**Préconditions :** `runtime/agent-vm.runtime.sh` et `lib/phases.sh` du dépôt. Pas de VM requise
+pour la partie automatisée (`tests/s65_opencode_bash_path.sh`).
+
+**Étapes (automatisé) :**
+1. `bash tests/s65_opencode_bash_path.sh`
+2. Vérifier que `phase_run` lance via `zsh -l -c "opencode --auto"`, plus via `_vm opencode`.
+3. Dans un HOME sandboxé : binaire factice dans `~/.opencode/bin`, PATH bash sans ce dossier
+   → `check_opencode` pose `~/.local/bin/opencode` → `command -v opencode` réussit.
+4. Relancer `check_opencode` → no-op, symlink intact. Aucune suggestion `npm i -g`.
+
+**Validation réelle (VM) :**
+5. `albert-code run` dans un projet configuré → plus de `/bin/bash: line 1: opencode: command not found` ;
+   le TUI OpenCode s'ouvre.
+
+**Attendu :** (1) exit 0. (2)(3)(4) assertions du script. (5) TUI, pas d'erreur PATH.
+
+**Validé le :** 2026-09-01 — S65 automatisé OK (`tests/s65_opencode_bash_path.sh`). Cause racine
+confirmée sur VM projet réelle : binaire présent dans `~/.opencode/bin`, `command -v` OK sous
+`zsh -l`, `MISSING` sous `/bin/bash` (login et non-login).
 

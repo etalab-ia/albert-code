@@ -241,12 +241,34 @@ sync_skills() {
 
 # -----------------------------------------------------------------------------
 # check_opencode — OpenCode est préinstallé dans la VM de base agent-vm.
+# Lima lance le binaire via /bin/bash non-login : ~/.zshenv (PATH
+# ~/.opencode/bin) n'est pas lu. ~/.local/bin EST dans le PATH bash Lima
+# → symlink idempotent, sans installer quoi que ce soit sur l'hôte.
 # -----------------------------------------------------------------------------
 check_opencode() {
+  local oc_bin=""
+  if [ -x "$HOME/.opencode/bin/opencode" ]; then
+    oc_bin="$HOME/.opencode/bin/opencode"
+  elif command -v opencode >/dev/null 2>&1; then
+    oc_bin="$(command -v opencode)"
+  fi
+
+  if [ -z "$oc_bin" ]; then
+    _warn "OpenCode absent de la VM — relance albert-code install (recréer la bulle)."
+    return 0
+  fi
+
+  _apply_mkdir "créer ~/.local/bin" "$HOME/.local/bin"
+  if [ -e "$HOME/.local/bin/opencode" ] && [ ! -L "$HOME/.local/bin/opencode" ]; then
+    _ok "opencode déjà présent dans ~/.local/bin (conservé)"
+  else
+    _apply_symlink "exposer opencode au PATH bash (Lima)" "$oc_bin" "$HOME/.local/bin/opencode"
+  fi
+
   if command -v opencode >/dev/null 2>&1; then
     _ok "OpenCode présent ($(opencode --version 2>/dev/null || echo 'installé'))"
   else
-    _warn "OpenCode absent — installe-le (npm i -g opencode-ai) puis relance"
+    _ok "OpenCode présent ($oc_bin)"
   fi
 }
 
