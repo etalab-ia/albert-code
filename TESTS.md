@@ -658,20 +658,35 @@ ancienne d'OpenCode (ex. 1.2.9) ne supportant pas `--auto`.
 
 **Attendu :** dans les deux cas, `provider.albert.models` contient exactement `deepseek-v4-flash` ; `model` et `small_model` valent tous deux `albert/deepseek-v4-flash` ; le contexte de `deepseek-v4-flash` est 131072 ; aucun alias (forme `vendor/Nom-Casse`) n'apparaît ; le JSON est valide (`jq .`). Sur le chemin du merge, les autres providers, les MCP et le bloc `permission` préexistants sont préservés.
 
-## S49 — Recréation propre de la VM projet après pane OpenCode (T7.8, AC-R044)
+## S49 — Détecter une VM projet clonée d'une base périmée et proposer sa recréation (T7.8, AC-R044)
 
-**Préconditions :** une VM projet dont `zsh` ou `opencode` n'est plus disponible (après une mise à
-jour du moteur de VM, symptôme `zsh: command not found : opencode` ou `opencode: command not found`).
+**Préconditions :** aucune VM réelle requise. On teste la règle de décision du helper
+`_project_vm_from_stale_base` (défini dans `lib/phases.sh`) en pointant `AGENT_VM_STATE_DIR` vers un
+bac à sable temporaire et en y posant à la main les fichiers de version :
+`.agent-vm-base-version` (version de la base) et `.agent-vm-version-<vm_name>` (version de la VM
+projet), où `<vm_name>` est le nom renvoyé par `_agent_vm_name` pour le dossier courant. La VM n'est
+jamais créée ni détruite.
 
 **Étapes :**
-1. Lancer `albert-code run` dans le dossier projet concerné.
-2. Observer la sortie : un avertissement compare la version d'OpenCode de la VM de base avec celle
-   de la VM projet.
-3. Répondre à la proposition de recréer la VM projet sur la base nominée.
+1. **Cas 1 — base absente :** bac à sable sans `.agent-vm-base-version` (et sans fichier VM).
+   Exécuter le helper (`bash bin/albert-code run` en dry-run, ou sourcer `lib/phases.sh` et appeler
+   `_project_vm_from_stale_base "$vm_name"`).
+2. **Cas 2 — version VM projet absente :** poser `.agent-vm-base-version` avec une valeur quelconque,
+   laisser `.agent-vm-version-<vm_name>` absent.
+3. **Cas 3 — versions différentes :** poser `.agent-vm-base-version` et
+   `.agent-vm-version-<vm_name>` avec des valeurs distinctes.
+4. **Cas 4 — versions identiques :** poser les deux fichiers de version avec la même valeur.
 
-**Attendu :** l'avertissement affiche clairement le décalage de version, propose la recréation, et
-une recréation rétablit `zsh` et `opencode` fonctionnels dans la VM projet. Aucun message opaque
-`command not found` sans explication.
+**Attendu :**
+- (1) pas d'avertissement, lancement normal (le helper retourne 1) ;
+- (2) détection, proposition de recréation (le helper retourne 0) ;
+- (3) détection, proposition de recréation (le helper retourne 0) ;
+- (4) pas d'avertissement (le helper retourne 1).
+Dans les cas (2) et (3), en dry-run le `confirm` retourne « non » (défaut non-destructif) et la VM
+n'est ni détruite ni recréée ; le message indique ce qui est perdu à la recréation (sessions OpenCode,
+paquets installés dans la bulle, fichiers hors du dossier monté).
+
+**Validé le :** — (à exécuter, bac à sable `AGENT_VM_STATE_DIR`).
 
 ## S50 — Rafraîchir un secret existant hôte + VM (T10.1, AC-R043)
 

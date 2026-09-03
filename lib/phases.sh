@@ -251,7 +251,30 @@ phase_run() {
   case $'\n'"$_vm_list"$'\n' in
     *$'\n'"$_vm_name"$'\n'*)
       info "VM déjà créée — rattachement sans re-réglage des ressources."
-      apply "lancer la VM isolée" _vm run --tty zsh -l -c "opencode --auto" ;;
+      # T7.8 : la VM projet a-t-elle été clonée d'une base périmée ? Si oui,
+      # la base reconstruite a sans doute remplacé zsh/opencode et le
+      # lancement échouerait sur un « command not found » silencieux. On
+      # propose la recréation (destructive dans la VM : sessions, paquets
+      # installés dans la bulle, fichiers hors montage sont perdus) avant de
+      # lancer.
+      if _project_vm_from_stale_base "$_vm_name"; then
+        warn "La VM de ce projet a été créée depuis une version antérieure"
+        warn "de la VM de base."
+        warn "Sans recréation, zsh ou opencode peuvent manquer et le lancement"
+        warn "échouera sur un « command not found »."
+        info "Recréer détruit la VM projet : sessions OpenCode, paquets"
+        info "installés dans la bulle, fichiers hors du dossier monté."
+        info "Ton code (monté depuis l'hôte) est intact."
+        if confirm "Recréer la VM projet depuis la base actuelle ?"; then
+          apply "recréer la VM projet (--reset)" _vm --reset run --tty zsh -l -c "opencode --auto"
+        else
+          warn "VM projet conservée — albert-code run pourra échouer"
+          warn "(zsh/opencode absents). La recréation reste possible plus tard."
+          apply "lancer la VM isolée" _vm run --tty zsh -l -c "opencode --auto"
+        fi
+      else
+        apply "lancer la VM isolée" _vm run --tty zsh -l -c "opencode --auto"
+      fi ;;
     *)
       apply "lancer la VM isolée" _vm --cpus "${EFF_CPUS}" --memory "${EFF_MEM}" --disk "${AC_VM_DISK}" run --tty zsh -l -c "opencode --auto" ;;
   esac
@@ -335,6 +358,26 @@ base_vm_exists() {
     *$'\n'agent-vm-base$'\n'*) return 0 ;;
     *) return 1 ;;
   esac
+}
+
+# _project_vm_from_stale_base <vm_name> — la VM projet a-t-elle été clonée
+# d'une base plus ancienne que la base actuelle ? (T7.8, AC-R044)
+# Reprend la comparaison du moteur de VM (vendor/vm/agent-vm.sh ~408) :
+# fichiers de version du répertoire d'état, base contre VM projet.
+# Retour : 0 = périmée (il faut recréer), 1 = à jour ou indéterminable.
+# Ne décide jamais sur une information absente : sans fichier de version de
+# base, on n'affirme rien.
+_project_vm_from_stale_base() {
+  local vm_name="$1"
+  local state="${AGENT_VM_STATE_DIR:-$HOME/.agent-vm}"
+  local base_ver="$state/.agent-vm-base-version"
+  local vm_ver="$state/.agent-vm-version-${vm_name}"
+  [ -f "$base_ver" ] || return 1
+  [ -f "$vm_ver" ] || return 0
+  local base_val vm_val
+  base_val="$(cat "$base_ver" 2>/dev/null)"
+  vm_val="$(cat "$vm_ver" 2>/dev/null)"
+  [ "$base_val" != "$vm_val" ]
 }
 
 # install_agent_vm — vérifie que le bundle vendored est présent (plus de clone).
