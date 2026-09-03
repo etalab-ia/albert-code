@@ -494,7 +494,7 @@ Dossier projet vierge `/tmp/ac-test-project-ctx`.
 **Étapes :**
 1. Lancer `bash bin/albert-code setup --dry-run` depuis le dossier projet.
 2. Répondre `o` à context7 (via dry-run ce n'est pas possible → on vérifie le code).
-3. Vérifier dans `scaffold_opencode_json` (lignes ~718-725) : si Y à context7 et clé absente,
+3. Vérifier dans `scaffold_opencode_json` (lignes ~1090-1098) : si Y à context7 et clé absente,
    `prompt_secret` est appelé, puis `persist_zshenv`.
 4. Vérifier dans `phase_b` : `ensure_vm_runtime` appelé après B.4 → la clé fraîchement persistée
    dans `~/.zshenv` est lue par le fallback de `ensure_vm_runtime` (lignes 334-335) et écrite
@@ -502,7 +502,7 @@ Dossier projet vierge `/tmp/ac-test-project-ctx`.
 
 **Attendu :** la clé est demandée au setup (pas à l'install), persistée dans `~/.zshenv` ET dans
 `~/.agent-vm/runtime.sh`. Au `run` suivant, la VM voit `CONTEXT7_API_KEY` non vide.
-**Validé le :** 2026-07-21 — code inspecté : `scaffold_opencode_json` lignes 718-725 appelle
+**Validé le :** 2026-07-21 — code inspecté : `scaffold_opencode_json` lignes 1090-1098 appelle
 `prompt_secret` + `persist_zshenv` ; `phase_b` ligne 188 appelle `ensure_vm_runtime` après
 persistance → le fallback (lignes 334-335) lit la clé depuis `~/.zshenv` et l'écrit dans runtime.sh.
 
@@ -513,7 +513,7 @@ persistance → le fallback (lignes 334-335) lit la clé depuis `~/.zshenv` et l
 **Étapes :**
 1. Lancer `bash bin/albert-code setup --dry-run` depuis un dossier projet.
 2. Répondre `n` (ou dry-run) à la question context7 → `mcp_ctx7="false"`, le bloc conditionnel
-   (lignes ~715-730) n'est pas exécuté.
+   (lignes ~1090-1098) n'est pas exécuté.
 3. Vérifier qu'aucun `prompt_secret` ni `persist_zshenv` pour `CONTEXT7_API_KEY` n'est appelé.
 
 **Attendu :** clé jamais demandée. Le MCP context7 n'est pas activé dans `opencode.json`.
@@ -558,6 +558,32 @@ L'opération est idempotente.
 ceux du ticket T6.16. Aucune ligne ne dépasse 80 colonnes. Les accents sont corrects.
 **Validé le :** 2026-07-21 — dry-run confirme les 4 paires explication+confirm. Textes correspondant
 au ticket. Aucun tiret cadratin. `bash -n lib/phases.sh` OK.
+
+## S-ctx-6 — La clé Context7 est demandée au moment de l'acceptation du connecteur (T6.17, AC-R048)
+
+**Préconditions :** dépôt à jour, `lib/phases.sh` contenant la branche Context7 de
+`scaffold_opencode_json`.
+
+**Étapes :**
+1. Relever les numéros de ligne des trois repères dans `lib/phases.sh` :
+   - `grep -n 'Installer le connecteur Context7' lib/phases.sh` (confirm d'acceptation)
+   - `grep -n 'Colle ta clé API Context7' lib/phases.sh` (demande de la clé)
+   - `grep -n 'Installer le connecteur Playwright' lib/phases.sh` (question suivante)
+2. Vérifier que les trois numéros sont strictement croissants dans cet ordre.
+
+**Attendu :** la demande de clé est posée entre l'acceptation du connecteur et la question
+Playwright : `num_context7 < num_cle < num_playwright`. Contrairement à l'état d'avant (où la clé
+était demandée à la construction du JSON, après Playwright et Chrome DevTools), la promesse «
+demandée juste après si tu acceptes » est désormais vraie.
+
+**Note d'observabilité :** ce scénario est vérifié par **test d'ordre sur les numéros de ligne**,
+pas par une sortie de `--dry-run`. En `--dry-run`, le `confirm` retourne toujours « non » (cf.
+S-ctx-3) : la branche « oui » — et donc la demande de clé — n'est jamais exécutée ni observable en
+dry-run. Le nouvel ordre ne peut donc pas être prouvé par une sortie de dry-run.
+
+**Validé le :** 2026-09-03 — numéros relevés : `Installer le connecteur Context7` = 1088,
+`Colle ta clé API Context7` = 1092, `Installer le connecteur Playwright` = 1103. Ordre
+strictement croissant vérifié.
 
 ---
 
