@@ -272,9 +272,19 @@ Config MCP de référence :
 **But :** guide d'install pas-à-pas. Réutiliser l'UX de `Produits/Albert Code/MVP/Open code + Ollama/spec.md`.
 **DoD :** un non-tech installe et lance un premier projet sans aide. → `TESTS.md` S11.
 
-### T5.2 🟠 Test sur machine vierge + early adopters
+### T5.2 🟠 Test sur machine vierge + early adopters ✅ implémenté
 **But :** valider hors du poste de développement habituel (machine vierge).
 **DoD :** install réussie par ≥1 early adopter externe.
+**Implémenté** — la bêta ouverte depuis le 01/07/2026 satisfait la DoD
+au-delà du cas unique demandé : plusieurs early adopters extérieurs au
+poste de développement d'origine ont installé et utilisé le bundle sur
+leurs propres machines, et leurs retours alimentent le registre
+`FEEDBACK.md` (AC-R036, AC-R038 à AC-R041, AC-R044). Le parcours
+d'installation qui en est issu est documenté dans le `README.md`. Deux
+réserves, suivies dans leurs propres tickets et qui ne rouvrent pas
+celui-ci : les installations validées par ce canal sont des installations
+macOS, le parcours Linux n'ayant été éprouvé qu'en interne (T5.4) ; et les
+régressions découvertes depuis vivent dans T7.8 et T-FIX-16.
 
 ### T5.3 🟡 Publication `etalab-ia/albert-code` ✅ implémenté
 **DoD :** repo public, LICENSE MIT, CI verte.
@@ -554,6 +564,22 @@ Option : ajouter un paramètre `install_shim` pour mode "exec" vs "source", ou d
 
 ### T6.16 🟡 Une ligne d'explication avant chaque question d'option du setup `<- AC-R039` ✅ implémenté
 
+**But :** chaque option d'installation doit être compréhensible sans contexte préalable. Format cible : « Installer Context7 ? Context7 est un MCP qui permet de [...]. Y/n ».
+
+**Tâches :**
+1. Dans `scaffold_opencode_json` (`lib/phases.sh:672-688`) : avant chaque `confirm`, une ligne `info` qui explique le connecteur (ce que l'agent saura faire en plus), puis un `confirm` court « Installer <nom> ? » :
+   - data.gouv : « MCP qui permet à l'agent d'interroger les données publiques de data.gouv.fr (catalogue, datasets, API tabulaire), en lecture. »
+   - context7 : « MCP qui donne à l'agent la documentation à jour des librairies et frameworks pendant qu'il code. Clé gratuite (https://context7.com/plans), demandée juste après si tu acceptes. »
+   - playwright : « MCP qui permet à l'agent de piloter un navigateur headless dans la VM (ouvrir une page, cliquer, tester une UI). »
+   - chrome-devtools : « MCP de debug navigateur : DOM, console, requêtes réseau, performance. »
+2. Vérifier que les skills du setup suivent le même pattern (une ligne d'objectif avant le Y/n) et harmoniser si besoin.
+
+**Règles :** accents corrects, pas de tiret cadratin, bash 3.2, <=80 colonnes par ligne affichée.
+
+**DoD :** en dry-run, chaque question MCP est précédée d'une ligne d'explication ; les questions sont de la forme « Installer <nom> ? ». → `TESTS.md` S-ctx-5.
+
+**Validé le :** 2026-07-21 — dry-run setup affiche les 4 paires explication+confirm avec les libellés exacts du ticket. Skills déjà avec description inline dans le confirm. `bash -n lib/phases.sh` OK.
+
 ### T6.17 🟠 Demander la clé Context7 au moment de l'acceptation du connecteur `<- AC-R048`
 **But :** `scaffold_opencode_json` pose les quatre questions MCP à la
 suite (data.gouv, Context7, Playwright, Chrome DevTools,
@@ -662,22 +688,6 @@ zone par le verbe `albert-code update` — dont c'est exactement le contrat
 évolution, les règles gérées par le bundle sont à jour et tout ce que
 l'utilisateur a écrit hors de la zone est intact. → scénarios `TESTS.md`
 à créer (S64 et suivants — S63 est déjà réservé à T10.6).
-
-**But :** chaque option d'installation doit être compréhensible sans contexte préalable. Format cible : « Installer Context7 ? Context7 est un MCP qui permet de [...]. Y/n ».
-
-**Tâches :**
-1. Dans `scaffold_opencode_json` (`lib/phases.sh:672-688`) : avant chaque `confirm`, une ligne `info` qui explique le connecteur (ce que l'agent saura faire en plus), puis un `confirm` court « Installer <nom> ? » :
-   - data.gouv : « MCP qui permet à l'agent d'interroger les données publiques de data.gouv.fr (catalogue, datasets, API tabulaire), en lecture. »
-   - context7 : « MCP qui donne à l'agent la documentation à jour des librairies et frameworks pendant qu'il code. Clé gratuite (https://context7.com/plans), demandée juste après si tu acceptes. »
-   - playwright : « MCP qui permet à l'agent de piloter un navigateur headless dans la VM (ouvrir une page, cliquer, tester une UI). »
-   - chrome-devtools : « MCP de debug navigateur : DOM, console, requêtes réseau, performance. »
-2. Vérifier que les skills du setup suivent le même pattern (une ligne d'objectif avant le Y/n) et harmoniser si besoin.
-
-**Règles :** accents corrects, pas de tiret cadratin, bash 3.2, <=80 colonnes par ligne affichée.
-
-**DoD :** en dry-run, chaque question MCP est précédée d'une ligne d'explication ; les questions sont de la forme « Installer <nom> ? ». → `TESTS.md` S-ctx-5.
-
-**Validé le :** 2026-07-21 — dry-run setup affiche les 4 paires explication+confirm avec les libellés exacts du ticket. Skills déjà avec description inline dans le confirm. `bash -n lib/phases.sh` OK.
 
 ---
 
