@@ -502,9 +502,11 @@ Dossier projet vierge `/tmp/ac-test-project-ctx`.
 
 **Attendu :** la clé est demandée au setup (pas à l'install), persistée dans `~/.zshenv` ET dans
 `~/.agent-vm/runtime.sh`. Au `run` suivant, la VM voit `CONTEXT7_API_KEY` non vide.
-**Validé le :** 2026-07-21 — code inspecté : `scaffold_opencode_json` lignes 1090-1098 appelle
+**Validé le :** 2026-07-21 — code inspecté : `scaffold_opencode_json` lignes 718-725 appelle
 `prompt_secret` + `persist_zshenv` ; `phase_b` ligne 188 appelle `ensure_vm_runtime` après
 persistance → le fallback (lignes 334-335) lit la clé depuis `~/.zshenv` et l'écrit dans runtime.sh.
+*(Numéros de ligne relevés au 21/07/2026. Le bloc a depuis été déplacé par T6.17 : voir l'étape 3
+ci-dessus et S-ctx-6.)*
 
 ## S-ctx-3 — Setup N à context7 → aucune question de clé (T6.15, AC-R038)
 
