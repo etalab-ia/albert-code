@@ -580,7 +580,7 @@ Option : ajouter un paramètre `install_shim` pour mode "exec" vs "source", ou d
 
 **Validé le :** 2026-07-21 — dry-run setup affiche les 4 paires explication+confirm avec les libellés exacts du ticket. Skills déjà avec description inline dans le confirm. `bash -n lib/phases.sh` OK.
 
-### T6.17 🟠 Demander la clé Context7 au moment de l'acceptation du connecteur `<- AC-R048`
+### T6.17 🟠 Demander la clé Context7 au moment de l'acceptation du connecteur `<- AC-R048` ✅ implémenté
 **But :** `scaffold_opencode_json` pose les quatre questions MCP à la
 suite (data.gouv, Context7, Playwright, Chrome DevTools,
 `lib/phases.sh:1079-1101`), puis construit le contenu JSON. La saisie de
@@ -607,6 +607,17 @@ dry-run respecté ; non-destructif.
 l'acceptation du connecteur et précède la question Playwright ; un setup
 qui refuse Context7 ne la demande jamais ; l'`opencode.json` produit est
 inchangé. → `TESTS.md` (étendre les scénarios `S-ctx-*` de T6.15).
+**Implémenté** — dans `scaffold_opencode_json` (`lib/phases.sh`), le bloc
+de demande de clé (prompt_secret + persist_zshenv, garde
+`if [ -z "${CONTEXT7_API_KEY:-}" ] && ! file_contains …`) a été déplacé
+inchangé de la phase de construction du JSON vers la branche du
+`confirm "Installer le connecteur Context7 ?"`, juste après
+`mcp_ctx7="true"` (lignes ~1090-1098). La branche de construction du JSON
+en phase 2 se réduit à ses trois lignes de construction (`"context7":…`
+avec `{env:CONTEXT7_API_KEY}`), non touchées. Garde inchangée (aucune
+redemande si la clé est connue), JSON produit identique octet pour octet,
+propagation vers `~/.agent-vm/runtime.sh` préservée (persistance avancée
+avant `ensure_vm_runtime`). → `TESTS.md` S-ctx-6.
 
 ---
 

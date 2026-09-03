@@ -1087,6 +1087,15 @@ scaffold_opencode_json() {
   info "demandée juste après si tu acceptes."
   if confirm "Installer le connecteur Context7 ?"; then
     mcp_ctx7="true"
+    if [ -z "${CONTEXT7_API_KEY:-}" ] && ! file_contains "$ZSHENV" "CONTEXT7_API_KEY"; then
+      local _ctx7_key
+      _ctx7_key="$(prompt_secret "Colle ta clé API Context7 (https://context7.com/plans) — Entrée pour passer")"
+      if [ -n "$_ctx7_key" ]; then
+        persist_zshenv "CONTEXT7_API_KEY" "$_ctx7_key"
+      else
+        warn "Pas de clé Context7 — le MCP context7 s'affichera en erreur sans clé."
+      fi
+    fi
   fi
   echo
   info "MCP qui permet à l'agent de piloter un navigateur headless dans"
@@ -1117,15 +1126,6 @@ scaffold_opencode_json() {
     [ "$first" = false ] && content=$content','
     first=false
     content=$content'"context7":{"type":"remote","url":"https://mcp.context7.com/mcp","enabled":true,"headers":{"Authorization":"Bearer {env:CONTEXT7_API_KEY}"}}'
-    if [ -z "${CONTEXT7_API_KEY:-}" ] && ! file_contains "$ZSHENV" "CONTEXT7_API_KEY"; then
-      local _ctx7_key
-      _ctx7_key="$(prompt_secret "Colle ta clé API Context7 (https://context7.com/plans) — Entrée pour passer")"
-      if [ -n "$_ctx7_key" ]; then
-        persist_zshenv "CONTEXT7_API_KEY" "$_ctx7_key"
-      else
-        warn "Pas de clé Context7 — le MCP context7 s'affichera en erreur sans clé."
-      fi
-    fi
   fi
   if [ "$mcp_playwright" = "true" ]; then
     [ "$first" = false ] && content=$content','
