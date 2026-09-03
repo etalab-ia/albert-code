@@ -284,6 +284,35 @@ Config MCP de référence :
 **But :** `install_shim` écrit l'ajout de `~/.local/bin` au `PATH` dans `~/.zshenv`, invisible pour un utilisateur bash (cas nominal sur Linux). Détecter le shell (`$SHELL`) et écrire dans `~/.bashrc`, `~/.zshenv` ou `~/.profile` selon le cas, sans jamais dupliquer une ligne déjà présente dans l'un d'eux. Le contournement est documenté dans le README depuis 2026-09-01 ; ce ticket le rend inutile.
 **DoD :** sur une machine Linux avec bash et aucun dossier writable dans le `PATH`, `command -v albert-code` répond après un nouveau shell, sans intervention manuelle. → scénario `TESTS.md` à créer.
 
+### T5.5 🟠 Commande d'installation du README : emplacement libre et point d'entrée unique `<- AC-R050`
+**But :** corriger deux défauts de la section d'installation du `README.md`.
+(a) La commande de clone **impose l'emplacement du dépôt** chez
+l'utilisateur, alors que rien dans le bundle n'en dépend : `SELF_DIR` est
+résolu dynamiquement depuis T-FIX-12 et T-FIX-13, précisément pour que le
+dépôt puisse vivre où son propriétaire le décide.
+(b) Le fichier expose **deux points d'entrée contradictoires** : `./install.sh`
+dans la section d'installation, `albert-code install` dans le tableau des
+verbes plus bas. La seconde ne peut pas fonctionner depuis un clone frais,
+puisque le shim `albert-code` est posé **par** l'installation
+(`bin/albert-code`, verbe `install`).
+**Tâches :**
+- Retirer le chemin imposé de la commande de clone : cloner puis entrer
+  dans le dossier, sans destination codée en dur.
+- Documenter `./bin/albert-code install` comme commande de première
+  installation : c'est la seule forme qui fonctionne avant la pose du
+  shim, et elle aligne la section sur l'interface à 4 verbes. Une fois le
+  shim posé, `albert-code install` reste valide pour un ré-amorçage.
+- Conserver `install.sh` comme amorçage de rétrocompatibilité, sans en
+  faire le chemin documenté.
+- Passer en revue les autres occurrences de `install.sh` dans le `README.md`
+  (dont l'exemple de surcharge `AC_VM_*` et la section de dépannage) et
+  dans `docs/PLAN.md`, et les aligner.
+**DoD :** le `README.md` n'impose plus d'emplacement de clone ; la première
+installation y est documentée par une commande qui fonctionne réellement
+depuis un clone frais ; le fichier n'expose plus deux points d'entrée
+contradictoires. → `TESTS.md` S11 (à relire, le parcours copier-coller
+change).
+
 ---
 
 ## EPIC 7 — Absorption d'agent-vm dans le bundle (vendoring)
@@ -524,6 +553,34 @@ Option : ajouter un paramètre `install_shim` pour mode "exec" vs "source", ou d
 **Validé le :** 2026-07-21 — dry-run Phase A sans mention Context7 (S-ctx-1). Code inspecté pour persistence zshenv + runtime.sh au setup (S-ctx-2). Réponse N → pas de prompt (S-ctx-3). Idempotence ensure_vm_runtime (S-ctx-4). `bash -n lib/phases.sh` OK.
 
 ### T6.16 🟡 Une ligne d'explication avant chaque question d'option du setup `<- AC-R039` ✅ implémenté
+
+### T6.17 🟠 Demander la clé Context7 au moment de l'acceptation du connecteur `<- AC-R048`
+**But :** `scaffold_opencode_json` pose les quatre questions MCP à la
+suite (data.gouv, Context7, Playwright, Chrome DevTools,
+`lib/phases.sh:1079-1101`), puis construit le contenu JSON. La saisie de
+la clé Context7 (`prompt_secret`, `lib/phases.sh:1122`) n'intervient que
+dans cette seconde phase, soit **deux questions plus loin** que
+l'acceptation qui la conditionne. La ligne d'explication affichée juste
+avant annonce pourtant « Clé gratuite (…), demandée juste après si tu
+acceptes » (`lib/phases.sh:1086-1087`) : la promesse est fausse en l'état.
+L'utilisateur a changé de contexte entre-temps et ne rattache plus la
+demande de clé au connecteur qu'il a accepté. Ce ticket complète T6.15
+(clé déplacée de l'install vers le setup) : la clé est au bon **verbe**,
+pas encore au bon **moment**.
+**Tâches :** sortir la saisie de la clé de la boucle de construction du
+contenu JSON et la placer immédiatement après le `confirm` « Installer le
+connecteur Context7 ? » ; conserver la garde existante (ne rien demander
+si la clé est déjà présente en environnement ou dans le `~/.zshenv`, cf.
+T6.15) ; conserver la sortie « Entrée pour passer » et l'avertissement
+émis quand aucune clé n'est fournie ; vérifier que le JSON produit est
+identique à celui d'avant le déplacement (la clé n'entre pas dans le
+fichier, seule la référence `{env:CONTEXT7_API_KEY}` y figure).
+**Règles :** bash 3.2 / `set -euo pipefail` ; accents FR corrects ;
+dry-run respecté ; non-destructif.
+**DoD :** en dry-run, la demande de clé Context7 suit immédiatement
+l'acceptation du connecteur et précède la question Playwright ; un setup
+qui refuse Context7 ne la demande jamais ; l'`opencode.json` produit est
+inchangé. → `TESTS.md` (étendre les scénarios `S-ctx-*` de T6.15).
 
 ---
 
@@ -776,6 +833,38 @@ chemin que les cinq variables existantes, sans autre modification de
 **DoD :** remplacer un jeton valide par un autre se fait par le wizard, de bout en bout jusqu'à la VM ; toute divergence entre environnement et fichier est signalée ; la CLI `gh` de l'utilisateur n'est plus contrainte par le jeton de l'agent ; le transport git de l'agent et celui de l'utilisateur sont indépendants, et modifier l'un ne casse pas l'autre.
 
 **← migration réelle T10.3 du 2026-08-27.**
+
+### T10.10 🟠 Expliquer le jeton GitHub au moment de la saisie `<- AC-R049`
+**But :** la saisie du jeton se fait aujourd'hui sur un libellé unique,
+« Colle ton PAT GitHub (scope repo ; Entrée pour abandonner) »
+(`lib/phases.sh:696-698`). Rien n'explique ce qu'est ce jeton, à quoi il
+sert, où le créer, ni quelles permissions lui donner. C'est l'étape la
+plus opaque du wizard pour un utilisateur qui n'a jamais créé de jeton.
+**Aggravant :** « scope repo » est le vocabulaire des jetons **classiques**,
+alors que la cible du bundle est un jeton **fine-grained** (T10.3). Le
+libellé oriente donc vers le mauvais type de jeton.
+**Tâches :**
+- Ajouter avant la saisie un encart court, au format posé par T6.16 (une
+  ligne d'explication avant la question) : à quoi sert le jeton (permettre
+  à l'agent de pousser une branche et d'ouvrir une PR depuis la VM
+  isolée), où le créer, et la différence entre jeton classique et
+  fine-grained en une phrase.
+- Corriger le libellé de saisie : ne plus nommer un `scope` de jeton
+  classique si le bundle recommande un fine-grained.
+- Nommer les permissions minimales à cocher.
+**Dépendance :** le détail exact des permissions recommandées se cale sur
+T10.3 (jeton dédié à permissions minimales), qui n'est pas tranché. Le
+reste du ticket (nature du jeton, où le créer, classique contre
+fine-grained, correction du libellé trompeur) en est **indépendant** et
+peut être livré seul ; dans ce cas, formuler les permissions comme une
+recommandation provisoire plutôt que comme une liste arrêtée.
+**Règles :** sobriété du wizard (T6.14), quelques lignes et pas un mur de
+texte, 80 colonnes maximum par ligne affichée ; bash 3.2 ; accents FR
+corrects.
+**DoD :** en dry-run, la saisie du jeton est précédée d'un encart court
+disant à quoi il sert, où le créer et quel type choisir ; plus aucune
+mention de « scope repo » dès lors que le bundle recommande un
+fine-grained. → scénario `TESTS.md` à créer.
 
 ---
 
