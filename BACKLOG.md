@@ -264,6 +264,31 @@ Config MCP de référence :
 - Créer le scénario `TESTS.md` S18.
 **DoD :** un commit contenant `/Users/<qqn>/…` dans un fichier tracké fait échouer la CI ; les placeholders légitimes passent. → `TESTS.md` S18.
 
+### T4.6 🟡 Ancrer les scénarios de `TESTS.md` sur des repères stables ✅ implémenté
+**But :** les scénarios de recette citent des numéros de ligne de
+`lib/phases.sh`. Le code bouge à chaque PR, les numéros ne suivent pas :
+les cinq références de `S-ctx-2` et `S-ctx-4` vers `phase_b` et
+`ensure_vm_runtime` pointaient toutes le mauvais endroit, sans que rien ne
+le signale. Un scénario qui pointe la mauvaise ligne ne prouve rien.
+**Règle retenue :** dans une **étape de procédure**, ancrer sur un repère
+qui ne bouge pas — nom de fonction, nom de branche conditionnelle, chaîne
+exacte affichée. Jamais un numéro de ligne. Dans une note
+`**Validé le :**`, qui est un constat figé à sa date, ne rien corriger :
+annoter que les numéros valaient à cette date.
+**Tâches :** convertir les références de procédure de `S-ctx-2` et
+`S-ctx-3` ; annoter la note datée de `S-ctx-4` ; inscrire la règle dans
+`AGENTS.md` à côté de celle sur les chemins personnels.
+**Hors périmètre :** le garde-fou automatisé (un test qui vérifierait
+l'existence de chaque repère cité) est écarté pour l'instant : sur cinq
+scénarios concernés, il coûterait plus en faux positifs qu'il ne
+rapporterait. À rouvrir si la dérive réapparaît malgré la règle.
+**Note :** `S61` cite « ligne 448 » dans sa section **Pourquoi**, mais
+c'est la citation d'un message d'erreur observé à l'époque, pas un
+pointeur de navigation : laissé tel quel volontairement.
+**DoD :** plus aucun numéro de ligne de `lib/phases.sh` dans une étape de
+procédure de `TESTS.md` ; les notes datées sont intactes et annotées ; la
+règle est écrite dans `AGENTS.md`.
+
 ---
 
 ## EPIC 5 — Distribution

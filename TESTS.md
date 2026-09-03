@@ -494,10 +494,12 @@ Dossier projet vierge `/tmp/ac-test-project-ctx`.
 **Étapes :**
 1. Lancer `bash bin/albert-code setup --dry-run` depuis le dossier projet.
 2. Répondre `o` à context7 (via dry-run ce n'est pas possible → on vérifie le code).
-3. Vérifier dans `scaffold_opencode_json` (lignes ~1090-1098) : si Y à context7 et clé absente,
+3. Vérifier dans `scaffold_opencode_json`, à l'intérieur de la branche
+   `if confirm "Installer le connecteur Context7 ?"` : si Y à context7 et clé absente,
    `prompt_secret` est appelé, puis `persist_zshenv`.
-4. Vérifier dans `phase_b` : `ensure_vm_runtime` appelé après B.4 → la clé fraîchement persistée
-   dans `~/.zshenv` est lue par le fallback de `ensure_vm_runtime` (lignes 334-335) et écrite
+4. Vérifier dans `phase_b` : `ensure_vm_runtime` est appelé après B.4 → la clé fraîchement
+   persistée dans `~/.zshenv` est lue par le repli de `ensure_vm_runtime` (la branche qui relit
+   la variable depuis `$ZSHENV` quand l'environnement ne la porte pas) et écrite
    dans `~/.agent-vm/runtime.sh` avec la vraie valeur (pas `''`).
 
 **Attendu :** la clé est demandée au setup (pas à l'install), persistée dans `~/.zshenv` ET dans
@@ -514,8 +516,8 @@ ci-dessus et S-ctx-6.)*
 
 **Étapes :**
 1. Lancer `bash bin/albert-code setup --dry-run` depuis un dossier projet.
-2. Répondre `n` (ou dry-run) à la question context7 → `mcp_ctx7="false"`, le bloc conditionnel
-   (lignes ~1090-1098) n'est pas exécuté.
+2. Répondre `n` (ou dry-run) à la question context7 → `mcp_ctx7="false"`, le bloc de saisie
+   de la clé, situé dans la branche du `confirm` Context7, n'est pas exécuté.
 3. Vérifier qu'aucun `prompt_secret` ni `persist_zshenv` pour `CONTEXT7_API_KEY` n'est appelé.
 
 **Attendu :** clé jamais demandée. Le MCP context7 n'est pas activé dans `opencode.json`.
@@ -540,6 +542,8 @@ L'opération est idempotente.
    1. sed supprime du marqueur-début à marqueur-fin (ligne 373),
    2. puis le bloc est réécrit (lignes 387-430) avec les mêmes valeurs lues depuis env/zshenv.
    Pas de duplication possible.
+*(Numéros de ligne relevés au 21/07/2026, depuis périmés. Repères stables : la fonction
+`ensure_vm_runtime`, son test du marqueur `$AC_MARKER`, la suppression du bloc puis sa réécriture.)*
 
 ## S-ctx-5 — Dry-run : explications avant chaque question MCP (T6.16, AC-R039)
 
