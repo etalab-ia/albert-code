@@ -929,8 +929,8 @@ confirmée sur VM projet réelle : binaire présent dans `~/.opencode/bin`, `com
 ## S66 — Le runtime de référence réécrit systématiquement les secrets dans la VM (T10.11)
 
 **Préconditions :** un runtime de référence `runtime/agent-vm.runtime.sh` dans un bac à sable
-`$SB` ; son `HOME` pointant vers `$SB/home` (qui joue le `~` de la VM) ; un fichier
-`$SB/home/.zshenv` contenant une valeur **périmée** pour un secret, ex.
+`$SB` ; son `HOME` pointant vers `$SB/vmhome` (qui joue le `~` de la VM) ; un fichier
+`$SB/vmhome/.zshenv` contenant une valeur **périmée** pour un secret, ex.
 `export ALBERT_API_KEY='ancienne-valeur'` ; l'hôte fournit une **valeur fraîche** pour ce
 secret en variable d'environnement. Les variables non testées sont **purgées** de
 l'environnement (`env -u …`) pour que l'abstention ne soit pas faussée par des valeurs
@@ -941,8 +941,8 @@ héritées du shell réel.
    (inchangée) » : aucun `grep -qE "^export …=" … && return` dans `persist_env_var`, et la
    présence de la réécriture de la ligne ancrée `^export VAR=`.
 2. Lancer le runtime une première fois : `env -u CONTEXT7_API_KEY -u GH_TOKEN … \
-   HOME="$SB/home" ALBERT_API_KEY="<fraîche>" bash runtime/agent-vm.runtime.sh`.
-3. Compter les définitions de `ALBERT_API_KEY` dans `$SB/home/.zshenv` ; relancer le runtime
+   HOME="$SB/vmhome" ALBERT_API_KEY="<fraîche>" bash runtime/agent-vm.runtime.sh`.
+3. Compter les définitions de `ALBERT_API_KEY` dans `$SB/vmhome/.zshenv` ; relancer le runtime
    une seconde fois et recompter.
 4. Avec un `~/.zshenv` de VM contenant une valeur posée à la main pour un secret **absent**
    de l'hôte (ex. `CONTEXT7_API_KEY`), relancer le runtime **sans** fournir cette variable :
@@ -953,7 +953,7 @@ héritées du shell réel.
    `export VAR='…'` sans toucher à la ligne `_ac_zsh_set VAR '…'`) puis exécuter le bloc :
    vérifier qu'un `warn` nommant la variable est émis, sans afficher la moindre valeur.
 6. Sous un **umask permissif** (`umask 0002`, celui mesuré en VM), lancer le runtime puis
-   vérifier les permissions de `$SB/home/.zshenv` : le préciseur (temp) et le fichier final
+   vérifier les permissions de `$SB/vmhome/.zshenv` : le préciseur (temp) et le fichier final
    doivent être en `600` malgré le umask.
 
 **Attendu :** (1) pas de garde « ne rien faire », réécriture systématique présente. (2) après
