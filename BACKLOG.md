@@ -685,7 +685,7 @@ avant `ensure_vm_runtime`). → `TESTS.md` S-ctx-6.
 |---|---|---|---|
 | `~/.agent-vm/runtime.sh` bloc marqué | ✅ Oui, à chaque phase A ET B | `ensure_vm_runtime()` supprime le bloc `$AC_MARKER … $AC_MARKER_END` et le réécrit | Clés API + GH_TOKEN doivent être à jour au boot VM |
 | `./opencode.json` | 🟡 Merge conditionnel (T8.2) | Si `jq` présent → merge provider.albert dans existant, sinon avertissement | Provider Albert doit pouvoir être ajouté sans écraser les MCP/permissions |
-| `./AGENTS.md` | ❌ Non (jamais écrasé) | `copy_template()` → non-destructif pur | Le projet peut avoir un AGENTS.md personnalisé — angle mort (les évolutions du template n'atteignent pas les projets déjà installés), traité par T8.5 (à venir) |
+| `./AGENTS.md` | 🟡 Zone gérée (T8.5) | `setup` (B.1) et `update` → `sync_agents_md()` réécrit la zone `$AC_MARKER_AGENTS … $AC_MARKER_AGENTS_END` (insertion silencieuse en tête si absente, jamais de question) | La zone porte les garanties du bundle (Sécurité, Git, Accessibilité, Hygiène) ; `## Expected Behavior` et le contenu perso hors marqueurs sont préservés |
 | `./.agent-vm.runtime.sh` (projet) | ❌ Non (jamais écrasé) | `copy_template()` → non-destructif pur | Idem, fichier figé chez l'existant |
 | `vendor/vm/` (moteur VM) | ❌ Non (vendored figé) | Versionné dans le repo albert-code | Mis à jour par `git pull` du dépôt albert-code |
 | `templates/` | ❌ Non (versionnés) | Versionné dans le repo | Utilisés uniquement au premier `setup` |
@@ -715,7 +715,7 @@ avant `ensure_vm_runtime`). → `TESTS.md` S-ctx-6.
 
 **DoD :** ticket documenté mais pas implémenté — **T9.3 implémenté** (voir EPIC 9) : `phase_update` (`lib/phases.sh:257-292`) répare `opencode.json` (T9.2) + régénère le bloc runtime (T8.3) sans questions MCP/skills. Voir note de promotion ci-dessus et T9.3.
 
-### T8.5 🔴 Propager les évolutions du bundle aux AGENTS.md existants
+### T8.5 🔴 Propager les évolutions du bundle aux AGENTS.md existants ✅ implémenté
 
 **Problème :** le tableau « Architecture de rafraîchissement » de T8.1
 qualifie `./AGENTS.md` de « jamais écrasé » : `copy_template()` est non
@@ -751,10 +751,43 @@ zone par le verbe `albert-code update` — dont c'est exactement le contrat
 > ce qui est exactement le problème que T8.5 existe pour résoudre.
 > L'arbitrage de la frontière doit trancher ce cas explicitement.
 
-**DoD :** après un `albert-code update` sur un projet scaffoldé avant une
+**DoD :** après un `albert-code update` (ou un `setup` rejoué) sur un projet scaffoldé avant une
 évolution, les règles gérées par le bundle sont à jour et tout ce que
-l'utilisateur a écrit hors de la zone est intact. → scénarios `TESTS.md`
-à créer (S64 et suivants — S63 est déjà réservé à T10.6).
+l'utilisateur a écrit hors de la zone est intact. → scénario `TESTS.md` S69.
+
+**Implémenté** — motif de zone délimitée transposé de `~/.agent-vm/runtime.sh`
+à `./AGENTS.md` (`lib/ui.sh` : marqueurs HTML `AC_MARKER_AGENTS` /
+`AC_MARKER_AGENTS_END`, invisibles au rendu Markdown — une ligne `#` aurait rendu
+un faux titre H1 ; `templates/AGENTS.default.md` : zone bornée par ces marqueurs).
+`sync_agents_md` (`lib/phases.sh`) est branché sur **les deux canaux** — `phase_b`
+(étape B.1) et `phase_update` (étape 2) — sans question MCP/skills ni confirmation
+(contrat non interactif, T9.3) :
+- **fichier absent** → pose le template ;
+- **marqueurs appariés** → `_regenerate_agents_zone` réécrit la zone entre
+  marqueurs à partir du bloc géré du template courant, head/tail et les sections
+  hors zone préservés, idempotent (diff avant écriture, `AC_AGENTS_CHANGED`) ;
+- **sans marqueur** (migration, projets antérieurs à T8.5) → **insertion
+  silencieuse** de la zone gérée en tête via `_migrate_agents_zone` (contenu
+  existant conservé en dessous), jamais de question — `git diff` fait la revue ;
+- **marqueur orphelin** (ouvrant sans fermant ou l'inverse) → aucune écriture,
+  avertissement explicite.
+**Frontière** : la zone gérée = les **quatre sections contiguës** `## Sécurité
+(non négociable)`, `## Git & commits`, `## Accessibilité & conformité`,
+`## Hygiène de dépôt` (les deux dernières **promues de `###` à `##`**, changement
+du fichier de référence de tous les projets). Est **hors zone** : l'en-tête,
+l'introduction et tout `## Expected Behavior` (Plan Mode, Task Management,
+Self-Improvement Loop, Bug Fixing, Code Quality) — sections que les projets
+adaptent le plus et qui ne sont jamais écrasées. Position d'insertion (migration) :
+**en tête**, pour rendre les garanties du bundle immédiatement visibles.
+**Règle 8 déplacée** : le point 5 « Nommer ce qu'on détruit » est retiré de `Plan
+Mode` et posé dans la zone gérée, sous `## Sécurité (non négociable)` — c'est une
+garantie du bundle, pas une consigne de planification (sans ce déplacement, elle
+serait retombée hors zone et n'aurait plus atteint les projets existants).
+Garde-fou newline conservé : `$(...)` avale les `\n` finaux de head/tail, un `\n`
+conditionnel est rendu pour ne pas coller head au marqueur ni marker à tail
+(idempotence). Réservation de plage abandonnée : les scénarios reçoivent leur
+numéro à l'écriture (→ S69).
+→ `TESTS.md` S69.
 
 ---
 
@@ -907,7 +940,7 @@ chemin que les cinq variables existantes, sans autre modification de
 - **Facette C — le jeton de l'agent est imposé dans l'environnement de l'humain.** `GH_TOKEN` est exporté dans le `~/.zshenv` de l'hôte parce que le bundle l'y lit pour alimenter la VM. Mais une variable exportée est ambiante : elle capture tout ce qui lit `GH_TOKEN` sur la machine, à commencer par la CLI `gh` de l'utilisateur. Depuis que ce jeton est un fine-grained restreint à une organisation (T10.3), la CLI de l'humain hérite des restrictions d'un jeton qui ne lui était pas destiné — un `gh api` sur un dépôt hors périmètre renvoie un 404 trompeur (invisible, pas interdit). C'est contraire à l'objectif d'identité propre de l'agent porté par T10.3. Piste : `vendor/vm/agent-vm.sh:477-482` pousse déjà `~/.agent-vm/env` dans la VM à chaque démarrage — un canal conçu pour les secrets, qui n'exige aucun export dans le shell de l'humain.
 - **Facette D — le transport git est un état partagé entre l'humain et l'agent.** Le répertoire du projet est monté dans la VM, donc `.git/config` est le même fichier pour l'utilisateur sur son Mac et pour l'agent dans la bulle. Or les deux n'ont pas le même moyen d'authentification : l'humain dispose d'une clé SSH, l'agent d'un jeton en HTTPS. Un `git remote set-url` en SSH côté hôte casse donc immédiatement le push de l'agent (`Permission denied (publickey)`, constaté le 27/08), et l'inverse est vrai. Contournement retenu : garder le remote partagé en HTTPS et déporter la préférence SSH dans le `~/.gitconfig` de l'hôte (`url."git@github.com:".insteadOf "https://github.com/"`), fichier que la VM ne voit pas. Ça fonctionne mais reste une configuration manuelle non documentée, que rien ne rétablit après un reset de VM ou sur un nouveau poste. Le bundle devrait poser lui-même cette séparation de transport, au même titre qu'il pose l'identité git.
 
-**Tâches :** traiter les trois facettes (A…C) et la facette D ; ajouter des scénarios `TESTS.md` (S64 et suivants, en coordination avec T8.5 qui réserve déjà cette plage) couvrant explicitement le remplacement d'un secret valide par un autre secret valide, cas absent de la suite actuelle.
+**Tâches :** traiter les trois facettes (A…C) et la facette D ; ajouter des scénarios `TESTS.md` (numéros attribués à l'écriture) couvrant explicitement le remplacement d'un secret valide par un autre secret valide, cas absent de la suite actuelle.
 
 **DoD :** remplacer un jeton valide par un autre se fait par le wizard, de bout en bout jusqu'à la VM ; toute divergence entre environnement et fichier est signalée ; la CLI `gh` de l'utilisateur n'est plus contrainte par le jeton de l'agent ; le transport git de l'agent et celui de l'utilisateur sont indépendants, et modifier l'un ne casse pas l'autre.
 

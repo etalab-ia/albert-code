@@ -32,6 +32,14 @@ OPENCODE_CONFIG_DIR="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
 AC_MARKER="# --- albert-code : clés VM ---"
 AC_MARKER_END="# --- /albert-code ---"
 
+# Zone gérée portée par AGENTS.md (T8.5) : délimite le bloc que `albert-code
+# update`/`setup` réécrit (règles sécurité + Git + accessibilité + hygiène du
+# bundle) et préserve tout ce que l'utilisateur écrit hors de ces marqueurs.
+# Commentaires HTML : invisibles au rendu Markdown (une ligne `#` rendrait un
+# faux titre H1).
+AC_MARKER_AGENTS="<!-- albert-code:agents:start -->"
+AC_MARKER_AGENTS_END="<!-- albert-code:agents:end -->"
+
 # _dry_gate <description> : LE point d'entrée unique pour toute mutation.
 # Retourne 0 si l'action doit s'exécuter, 1 si dry-run l'a skip (déjà loggé).
 # Règle : AUCUNE écriture (fichier, clone, install, append) ne peut contourner _dry_gate.
