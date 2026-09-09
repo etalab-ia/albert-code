@@ -111,6 +111,27 @@ Config MCP de référence :
 **DoD :** sur un poste vierge, `install.sh` propose l'auth GitHub ; après acceptation, une VM fraîche pushe + ouvre une PR sans aucune édition manuelle de `runtime.sh` ; un email non-noreply est refusé avec un message clair. → `TESTS.md` S24.
 **Implémenté (06/07/2026, branche `feat/github-auth-installer`)** — sous-points 1 (prompt token dans Phase A), 2 (identité + garde-fou email noreply, 3 tentatives) et 4 (next-steps) faits, dans `_github_auth` (`lib/phases.sh:476-587`) ; token jamais loggé (vérifié par canari en dry-run). **Gotcha de rotation (sous-point 3, resté ouvert)** : désormais tracé par l'EPIC 10 (`BACKLOG.md` T10.1) — cf. cause racine scrutée le 2026-08-26. Validation S24 absorbée par T2-CH2.
 
+### T1.9 🟠 Rendre le baseURL Albert surchargeable `<- AC-R051`
+> **Provenance :** l'implémentation est attendue d'un **contributeur externe**, annoncée dans l'**issue publique #36**. Le dépôt documente le ticket pour donner une cible à la PR entrante : ne pas reprendre ce travail en parallèle. Être en contact avec le contributeur pour ne pas faire doublon.
+>
+> **Cadrage (communiqué au contributeur dans l'issue, partie de la DoD) :**
+> 1. **Un seul point de définition du défaut**, en tête de fichier avec les autres variables surchargeables, pas un `${AC_ALBERT_BASE_URL:-…}` répété à chaque usage.
+> 2. **La valeur est résolue au `setup` et écrite littéralement dans l'`opencode.json` généré**, jamais laissée sous forme `{env:AC_ALBERT_BASE_URL}`. Raison : OpenCode tourne dans la VM, et la liste des variables propagées vers cette VM est codée en dur dans `lib/phases.sh` (objet de **T10.8**, non traité) ; une nouvelle variable n'atteindrait pas la VM et le provider y verrait un baseURL vide. **Le jour où T10.8 est fait, cette contrainte pourra être réexaminée.**
+> 3. **Non-régression de `albert-code update`.** `repair_stale_provider_albert` et `jq_albert_reconcile_program` ne touchent en principe que `provider.albert.models`, `.model` et `.small_model` : un baseURL personnalisé doit survivre à un `setup` et à un `update`. À prouver par un test, pas à supposer.
+>
+> **Note de souveraineté :** le défaut reste Albert, et le README devra dire ce que la surcharge implique, à savoir **sortir de la chaîne souveraine** (l'intermédiaire compatible OpenAI remplace alors la chaîne d'inférence souveraine prévue par le bundle). C'est défendable en test ou derrière un proxy d'entreprise, à condition que ce soit explicite.
+
+**But :** une variable `AC_ALBERT_BASE_URL`, défaut `https://albert.api.etalab.gouv.fr/v1`, utilisée aux quatre emplacements (`config/opencode.template.json`, programme jq de merge du provider, repli par concaténation quand jq est absent, appel `GET /v1/models` du catalogue — cf. AC-R051), pour qu'un poste derrière un proxy d'entreprise ou une évaluation face à un intermédiaire compatible OpenAI n'aient plus à repatcher le dépôt après chaque `setup`.
+
+**Tâches :**
+1. Exposer `AC_ALBERT_BASE_URL` (défaut `https://albert.api.etalab.gouv.fr/v1`), définie en un seul point en tête de fichier avec les autres variables surchargeables.
+2. Substituer l'URL codée en dur aux quatre emplacements de câblage par cette variable.
+3. Résoudre la valeur au `setup` et l'écrire littéralement dans l'`opencode.json` généré (jamais sous forme `{env:AC_ALBERT_BASE_URL}` — contrainte T10.8, cf. cadrage).
+4. Vérifier qu'un `albert-code update` (via `repair_stale_provider_albert` / `jq_albert_reconcile_program`) ne rétablit pas l'URL par défaut sur un projet à baseURL personnalisé (test, pas supposition).
+5. Documenter la variable dans le README, y compris ce qu'elle implique en termes de sortie de la chaîne souveraine.
+
+**DoD :** `AC_ALBERT_BASE_URL` est honorée aux quatre emplacements, avec un défaut inchangé ; un `setup` avec la variable positionnée produit un `opencode.json` portant l'URL surchargée en clair et un appel de catalogue dirigé vers cette même URL ; un `albert-code update` sur ce projet ne rétablit pas l'URL par défaut ; le README documente la variable et ce qu'elle implique. → `TESTS.md` **S68** (à créer par la PR entrante).
+
 ---
 
 ### T2-CH2 🟠 Simplifier et fiabiliser l'auth GitHub du wizard `<- AC-R036` ✅ implémenté
