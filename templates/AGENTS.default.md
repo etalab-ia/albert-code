@@ -22,6 +22,7 @@ Pour toute tâche non triviale (3+ étapes ou décision d'architecture) :
 2. Valider le plan avant d'implémenter
 3. Cocher les items au fur et à mesure
 4. Ajouter une section « résultat » à la fin
+5. Toute décision qui remplace, purge ou supprime quelque chose nomme explicitement ce qu'elle fait perdre à l'utilisateur et le justifie ; une perte non nommée est une régression.
 
 ### Task Management (`tasks/`)
 
