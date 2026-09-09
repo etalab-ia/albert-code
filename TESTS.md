@@ -1059,3 +1059,26 @@ Plus les assertions de non-pollution : le vrai `~/.zshenv` de la machine et les 
 
 **Validé le :** — (à remplir après validation réelle)
 
+---
+
+## S68 : `AC_ALBERT_BASE_URL` surchargeable, écrite en clair et préservée par `update` (T1.9, AC-R051)
+
+**Préconditions :** `jq` installé ; sans lui le test s'arrête en `exit 0`.
+`tests/s68_albert_base_url.sh` est rejouable en CI : `HOME` détourné vers un bac
+à sable, `confirm` et `curl` stubés, snapshot du vrai `~/.zshenv`.
+
+**Étapes (automatisé) :**
+1. `bash tests/s68_albert_base_url.sh`
+
+**Attendu :** exit 0, les sept cas passent :
+1. Sans la variable, le défaut reste `https://albert.api.etalab.gouv.fr/v1`.
+2. Un slash final est retiré, pas de `//models`.
+3. Scaffold d'un projet neuf : URL surchargée en clair, jamais `{env:...}`.
+4. Merge `jq` dans un fichier existant : URL surchargée, provider tiers et MCP conservés.
+5. `repair_stale_provider_albert` avec la variable remise au défaut : l'identifiant
+   périmé est retiré et le `baseURL` personnalisé conservé. Les deux assertions
+   comptent, la seconde ne prouvant rien sans la première.
+6. `fetch_albert_catalog` interroge la racine déclarée dans l'`opencode.json`.
+7. Hors projet, faute de fichier, le catalogue suit la variable.
+
+**Validé le :** 2026-09-09, en local et en CI.

@@ -111,7 +111,7 @@ Config MCP de référence :
 **DoD :** sur un poste vierge, `install.sh` propose l'auth GitHub ; après acceptation, une VM fraîche pushe + ouvre une PR sans aucune édition manuelle de `runtime.sh` ; un email non-noreply est refusé avec un message clair. → `TESTS.md` S24.
 **Implémenté (06/07/2026, branche `feat/github-auth-installer`)** — sous-points 1 (prompt token dans Phase A), 2 (identité + garde-fou email noreply, 3 tentatives) et 4 (next-steps) faits, dans `_github_auth` (`lib/phases.sh:476-587`) ; token jamais loggé (vérifié par canari en dry-run). **Gotcha de rotation (sous-point 3, resté ouvert)** : désormais tracé par l'EPIC 10 (`BACKLOG.md` T10.1) — cf. cause racine scrutée le 2026-08-26. Validation S24 absorbée par T2-CH2.
 
-### T1.9 🟠 Rendre le baseURL Albert surchargeable `<- AC-R051`
+### T1.9 🟠 Rendre le baseURL Albert surchargeable `<- AC-R051` ✅ implémenté
 > **Provenance :** l'implémentation est attendue d'un **contributeur externe**, annoncée dans l'**issue publique #36**. Le dépôt documente le ticket pour donner une cible à la PR entrante : ne pas reprendre ce travail en parallèle. Être en contact avec le contributeur pour ne pas faire doublon.
 >
 > **Cadrage (communiqué au contributeur dans l'issue, partie de la DoD) :**
@@ -130,7 +130,18 @@ Config MCP de référence :
 4. Vérifier qu'un `albert-code update` (via `repair_stale_provider_albert` / `jq_albert_reconcile_program`) ne rétablit pas l'URL par défaut sur un projet à baseURL personnalisé (test, pas supposition).
 5. Documenter la variable dans le README, y compris ce qu'elle implique en termes de sortie de la chaîne souveraine.
 
-**DoD :** `AC_ALBERT_BASE_URL` est honorée aux quatre emplacements, avec un défaut inchangé ; un `setup` avec la variable positionnée produit un `opencode.json` portant l'URL surchargée en clair et un appel de catalogue dirigé vers cette même URL ; un `albert-code update` sur ce projet ne rétablit pas l'URL par défaut ; le README documente la variable et ce qu'elle implique. → `TESTS.md` **S68** (à créer par la PR entrante).
+**DoD :** `AC_ALBERT_BASE_URL` est honorée aux quatre emplacements, avec un défaut inchangé ; un `setup` avec la variable positionnée produit un `opencode.json` portant l'URL surchargée en clair et un appel de catalogue dirigé vers cette même URL ; un `albert-code update` sur ce projet ne rétablit pas l'URL par défaut ; le README documente la variable et ce qu'elle implique. → `TESTS.md` **S68** (créé).
+
+**✅ Implémenté.** `AC_ALBERT_BASE_URL` est définie en tête de `lib/ui.sh`, avec
+les autres variables surchargeables, et lue aux trois emplacements exécutés :
+programme jq de merge (`--arg baseurl`), repli par concaténation du scaffold,
+appel catalogue. La valeur est écrite en clair dans l'`opencode.json`, jamais en
+`{env:...}` (contrainte T10.8). Pour le catalogue, le `baseURL` du projet prime
+sur la variable, sans quoi un `update` nu repartait vers Albert.
+`config/opencode.template.json` garde le défaut : aucun script ne le lit, le
+README documente un `sed`. Non-régression prouvée par `TESTS.md` S68, en CI.
+Ce que la surcharge fait perdre (règle §5.8) : l'inférence n'est plus souveraine,
+ce que le README dit ; le défaut reste Albert.
 
 ---
 

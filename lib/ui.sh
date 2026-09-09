@@ -26,6 +26,15 @@ fi
 DRY_RUN="${DRY_RUN:-0}"
 OPENCODE_CONFIG_DIR="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
 
+# --- Endpoint Albert (surchargeable) -------------------------------------------
+# AC_ALBERT_BASE_URL : racine OpenAI-compatible du provider et du catalogue
+# (GET <base>/models). Seul endroit où le défaut est défini (T1.9).
+# La valeur est écrite en clair dans l'opencode.json généré, jamais en
+# {env:...} : OpenCode tourne dans la VM, qui ne reçoit pas cette variable (T10.8).
+# La surcharger fait sortir de la chaîne souveraine (voir README).
+AC_ALBERT_BASE_URL="${AC_ALBERT_BASE_URL:-https://albert.api.etalab.gouv.fr/v1}"
+AC_ALBERT_BASE_URL="${AC_ALBERT_BASE_URL%/}"
+
 # Marqueur unique pour les blocs Albert Code dans les fichiers de l'utilisateur.
 # Utilisé à l'écriture (install.sh) ET aux tests (install.sh idempotence, uninstall.sh retrait).
 # Début et FIN pour ne supprimer QUE le bloc, jamais les lignes hors plage.
@@ -520,6 +529,11 @@ Variables d'environnement (sandbox) :
   AGENT_VM_DIR            Dossier du moteur de VM vendored (défaut: \$SELF_DIR/vendor/vm).
   SHIM_BIN_DIR            Dossier du shim (défaut: sonde /opt/homebrew/bin,
                           /usr/local/bin puis \$PATH, sinon ~/.local/bin).
+
+Endpoint Albert (surchargeable) :
+  AC_ALBERT_BASE_URL      Racine OpenAI-compatible du provider et du catalogue
+                          (défaut: https://albert.api.etalab.gouv.fr/v1). La
+                          surcharger fait sortir de la chaîne souveraine.
 
 Ressources VM (surchargeables) :
   AC_VM_CPUS              CPU alloués à la VM (défaut: 4).

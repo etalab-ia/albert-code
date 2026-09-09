@@ -92,6 +92,24 @@ AC_VM_CPUS=8 AC_VM_MEMORY=16 AC_VM_DISK=64 ./install.sh
 
 **Garde-fou hôte** (lecture seule, macOS + Linux) : `install.sh` détecte les ressources de ta machine (`sysctl`/`nproc`) et ne propose jamais plus de ~la moitié du CPU/RAM hôte, même si `AC_VM_*` demande plus — pour ne pas sur-allouer sur un petit poste. Le disque n'est jamais rogné (sparse : alloué à l'usage, pas d'un coup) ; un avertissement s'affiche si l'espace libre est insuffisant.
 
+### Endpoint Albert (`AC_ALBERT_BASE_URL`)
+
+Le provider est câblé sur `https://albert.api.etalab.gouv.fr/v1`. Tu peux surcharger cette racine, par exemple depuis un poste derrière un proxy d'entreprise ou pour évaluer un intermédiaire compatible OpenAI :
+
+```bash
+AC_ALBERT_BASE_URL=https://mon-proxy.interne/v1 albert-code setup
+```
+
+| Variable | Défaut | Rôle |
+|---|---|---|
+| `AC_ALBERT_BASE_URL` | `https://albert.api.etalab.gouv.fr/v1` | Racine OpenAI-compatible, écrite comme `baseURL` du provider dans `opencode.json`. Elle sert aussi de cible à l'appel catalogue `GET <base>/models` tant que le projet n'est pas configuré. |
+
+La valeur est résolue au `setup` et écrite en clair dans l'`opencode.json` généré, jamais en `{env:...}`, car OpenCode tourne dans la VM et n'y reçoit pas cette variable. Tu ne la positionnes donc qu'une fois : les `albert-code update` et `albert-code run` suivants lisent le `baseURL` du projet, y compris pour vérifier le catalogue de modèles, et ne le remettent pas au défaut. Pour revenir à Albert, modifie l'`opencode.json` ; relancer un `setup` sans la variable ne suffit pas, car un projet qui déclare déjà le provider Albert passe en simple vérification et garde son `baseURL`.
+
+> ⚠️ **Adresse vue depuis la VM** : OpenCode tourne dans la bulle, donc `127.0.0.1` et `localhost` y désignent la VM, pas ton poste. Un intermédiaire installé sur ta machine reste joignable, mais par l'adresse de l'hôte vue depuis la VM, `192.168.5.2` avec le réseau utilisateur de Lima, et cela même s'il n'écoute que sur la boucle locale. Avec `127.0.0.1`, le modèle apparaît quand même dans `/models`, puisqu'il est déclaré dans la configuration, et c'est la première question qui échoue en erreur de connexion.
+
+> ⚠️ **Souveraineté** : pointer le bundle vers un intermédiaire fait sortir de la chaîne souveraine, puisque l'inférence n'est plus celle du Socle Interministériel d'IA Générative et que ton code transite par le tiers que tu déclares. C'est défendable en test ou derrière un proxy maîtrisé, à condition que ce soit un choix explicite. Le défaut reste Albert.
+
 ### Push & PR depuis la VM
 
 Par défaut, l'agent peut **committer** dans la VM mais **ni pusher ni ouvrir de PR** : la VM isole la bulle de tes credentials hôte (aucun SSH, aucun token). Pour l'autoriser, fournis un **token GitHub dédié**.
@@ -190,7 +208,10 @@ Retire le bloc albert-code du runtime VM, le cache et les symlinks skills. Prés
 
 Issues et PR bienvenues. Le dépôt suit ses propres conventions dans [`AGENTS.md`](AGENTS.md) ; le contexte et les décisions sont dans [`docs/PLAN.md`](docs/PLAN.md).
 
-> **Développer Albert Code lui-même** : `cp config/opencode.template.json opencode.json` (déjà gitignoré) puis lance `albert-code run` — `install.sh` ne scaffolde pas son propre dépôt.
+> **Développer Albert Code lui-même** : `cp config/opencode.template.json opencode.json` (déjà gitignoré) puis lance `albert-code run`, car `install.sh` ne scaffolde pas son propre dépôt. Le template porte le `baseURL` par défaut en clair ; si tu surcharges `AC_ALBERT_BASE_URL`, substitue-le au passage :
+> ```bash
+> sed "s|https://albert.api.etalab.gouv.fr/v1|$AC_ALBERT_BASE_URL|" config/opencode.template.json > opencode.json
+> ```
 
 ---
 
