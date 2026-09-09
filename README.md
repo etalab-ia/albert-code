@@ -52,7 +52,7 @@ Après installation, tu disposes de la commande `albert-code` à 4 verbes :
 | `albert-code install` | **1ʳᵉ fois** : bootstrap le poste (Lima, VM isolée, clé Albert, skills). |
 | `albert-code setup` | **Par projet, obligatoire avant le 1ᵉʳ `run`** : configure le projet (AGENTS.md + opencode.json + choix skills/MCP). |
 | `albert-code run` | **Lancement** : crée la VM de base si absente, puis ouvre la VM isolée. |
-| `albert-code update` | **Maintenance** : rafraîchit un projet déjà configuré (répare les identifiants de modèles périmés dans opencode.json + régénère le runtime). |
+| `albert-code update` | **Maintenance** : rafraîchit un projet déjà configuré (répare les identifiants de modèles périmés dans opencode.json + propage les évolutions des règles dans AGENTS.md + régénère le runtime). |
 
 `install.sh` est **idempotent** et **non-destructif** : il amorce le poste (Phase A) et pose le shim `albert-code`. Ensuite, c'est `albert-code setup` puis `albert-code run`. Pour réparer un projet dont les modèles Albert sont devenus invalides, lance `albert-code update` dans le dossier du projet.
 
@@ -65,7 +65,7 @@ albert-code install                                      # 1ʳᵉ fois : bootstr
 mkdir -p ~/mon-projet && cd ~/mon-projet
 albert-code setup                                        # configure le projet (AGENTS.md + MCP + skills)
 albert-code run                                          # ouvre la bulle isolée + OpenCode
-albert-code update                                       # (maintenance) répare opencode.json + runtime
+albert-code update                                       # (maintenance) opencode.json + AGENTS.md + runtime
 ```
 
 > ⚠️ **L'ordre compte : `install` (une fois), puis `setup` (une fois par projet), puis `run`.** C'est `setup` qui pose l'`opencode.json` (provider Albert), les MCP et les skills du projet. Un `run` sans `setup` ouvre OpenCode **non connecté à Albert** (pas de `/models`, ni MCP, ni skills) : si c'est ton cas, quitte, fais `albert-code setup`, relance `albert-code run`.
@@ -162,7 +162,7 @@ MCP (**Model Context Protocol**) est un standard qui **branche l'agent sur un ou
 - **Config** : `opencode.json` de **portée projet** (jamais le global de l'utilisateur, qui peut avoir d'autres providers).
 - **Skills** : `etalab-ia/skills` cloné dans un cache (`~/.config/opencode/.albert-skills-cache`) et symliqué dans le dossier scanné par OpenCode. Au `setup`, chaque skill est proposée en Y/N avec son objectif. La sélection est écrite dans `.albert-code/skills.txt` à la racine du projet. Au boot de la VM, `sync_skills` ne symlinke que les skills sélectionnées puis réconcilie (retire les symlinks des skills non sélectionnées, sans jamais toucher les skills perso). Sans manifeste `.albert-code/skills.txt`, toutes les skills sont installées (rétrocompat). Mise à jour à chaque démarrage de VM.
 - **MCP** : les 4 connecteurs sont désormais **tous opt-in**. Au `setup`, chaque MCP est proposé en Y/N avec son objectif : `data-gouv` (accès aux données publiques), `context7` (doc à jour des librairies ; si tu le choisis, la clé gratuite est demandée à ce moment-là : https://context7.com/plans), `playwright` (navigateur headless), `chrome-devtools` (debug navigateur). Seuls les MCP acceptés sont écrits dans `opencode.json` du projet (`enabled:false` par défaut). Note : le MCP `chrome-devtools` peut aussi apparaître dans OpenCode même si non coché — il est préinstallé par le moteur d'isolation en amont et n'est pas sous le contrôle d'Albert Code.
-- **Conventions** : `AGENTS.md` depuis `templates/AGENTS.default.md` (sécurité, plan mode, task management, code quality, git, accessibilité). Si le projet a déjà son `AGENTS.md`, il est conservé.
+- **Conventions** : `AGENTS.md` depuis `templates/AGENTS.default.md` (sécurité, plan mode, task management, code quality, git, accessibilité). À chaque `setup` ou `update`, une **zone gérée** (délimitée par des commentaires HTML invisibles au rendu) est rafraîchie avec les garanties du bundle : `## Sécurité (non négociable)`, `## Git & commits`, `## Accessibilité & conformité` et `## Hygiène de dépôt`. Tout ce qui est **hors zone** — l'en-tête, `## Expected Behavior` et ses sous-sections (plan mode, task management, code quality), et tes ajouts personnels — est **préservé** et jamais écrasé.
 
 Docs : [OpenCode](https://opencode.ai/docs/fr) · [Albert API](https://doc.incubateur.net/alliance/albert-api) · [agent-vm](https://github.com/sylvinus/agent-vm) · [Skills État](https://github.com/etalab-ia/skills)
 

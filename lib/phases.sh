@@ -150,9 +150,9 @@ phase_b() {
   AC_SELECTED_MCP=""
   AC_SELECTED_SKILLS=""
 
-  # B.1 [1/4] AGENTS.md par défaut (non-destructif)
+  # B.1 [1/4] AGENTS.md par défaut (non-destructif, zone gérée T8.5)
   title "[1/4] AGENTS.md"
-  copy_template "templates/AGENTS.default.md" "./AGENTS.md" "AGENTS.md (règles sécurité + conventions)"
+  sync_agents_md
   echo
 
   # B.2 [2/4] opencode.json avec MCP interactifs (non-destructif)
@@ -308,16 +308,21 @@ phase_update() {
     warn "Aucun opencode.json — fais d'abord albert-code setup dans ce dossier."
   fi
 
-  # 2. Runtime VM : régénérer le bloc marqué (idempotent, garde-fou OpenCode T8.3).
+  # 2. AGENTS.md : propager les évolutions du bundle (zone gérée T8.5).
+  #    Réécrit la zone entre marqueurs si elle existe, sinon insertion silencieuse. Sans question.
+  sync_agents_md
+  [ "$AC_AGENTS_CHANGED" -eq 1 ] && changed=1
+
+  # 3. Runtime VM : régénérer le bloc marqué (idempotent, garde-fou OpenCode T8.3).
   #    Recalcule ALBERT_API_KEY depuis l'environnement si besoin, pas de question.
   echo
   ensure_vm_runtime
 
   echo
   if [ "$changed" -eq 1 ]; then
-    ok "Mise à jour effectuée : opencode.json réparé, bloc runtime VM régénéré."
+    ok "Mise à jour effectuée : opencode.json réparé, AGENTS.md rafraîchi, bloc runtime VM régénéré."
   else
-    info "Rien à faire : opencode.json à jour, bloc runtime VM régénéré."
+    info "Rien à faire : opencode.json à jour, AGENTS.md à jour, bloc runtime VM régénéré."
   fi
   print_next_steps
   echo
@@ -881,6 +886,117 @@ copy_template() {
     apply_cp "poser $dest ($label)" "$src" "$dest"
     ok "%s posé (%s)" "$dest" "$label"
   fi
+}
+
+# --- Zone gérée AGENTS.md (T8.5) ----------------------------------------------
+# sync_agents_md — propage les évolutions du bundle vers ./AGENTS.md, en
+# transposant au projet le motif de zone délimitée éprouvé sur le runtime VM
+# (~/.agent-vm/runtime.sh, marqueurs AC_MARKER / AC_MARKER_END) :
+#   - fichier absent          → pose le template (qui embarque la zone gérée) ;
+#   - marqueurs appariés      → réécrit la zone entre marqueurs, tout le reste
+#                               (contenu propre au projet) est préservé ;
+#   - sans marqueur (migration)→ insertion SILENCIEUSE de la zone gérée en
+#                               tête, contenu existant conservé en dessous
+#                               (idempotent ensuite) ;
+#   - marqueur orphelin       → ne rien réécrire, avertir explicitement.
+# La zone gérée = le bloc délimité par AC_MARKER_AGENTS/AC_MARKER_AGENTS_END de
+# templates/AGENTS.default.md : `## Sécurité (non négociable)`, `## Git &
+# commits`, `## Accessibilité & conformité`, `## Hygiène de dépôt` (contigus,
+# promotion des deux dernières en `##`). En dehors : l'en-tête/intro et tout
+# `## Expected Behavior` (Plan Mode, Task Management, Self-Improvement Loop,
+# Bug Fixing, Code Quality) que les projets adaptent et qui ne doivent JAMAIS
+# être écrasés. Toute évolution de la zone redescend ainsi aux projets déjà
+# scaffoldés. Ne pose aucune question MCP/skills ni de confirmation : `update`
+# comme `setup` sont non interactifs par contrat (T9.3) ; AGENTS.md est
+# versionné, le `git diff` fait la revue. Positionne AC_AGENTS_CHANGED=1 si
+# ./AGENTS.md a été modifié.
+sync_agents_md() {
+  local dest="./AGENTS.md"
+  AC_AGENTS_CHANGED=0
+
+  if [ ! -f "$dest" ]; then
+    copy_template "templates/AGENTS.default.md" "$dest" "AGENTS.md (règles sécurité + conventions)"
+    if [ "$DRY_RUN" -eq 0 ]; then
+      AC_AGENTS_CHANGED=1
+    fi
+    return 0
+  fi
+
+  # Marqueur orphelin : ouvrant sans fermant (ou l'inverse) → fichier
+  # incompréhensible, on n'écrit pas dessus.
+  if { file_contains "$dest" "$AC_MARKER_AGENTS" && ! file_contains "$dest" "$AC_MARKER_AGENTS_END"; } \
+     || { file_contains "$dest" "$AC_MARKER_AGENTS_END" && ! file_contains "$dest" "$AC_MARKER_AGENTS"; }; then
+    warn "ton AGENTS.md a un marqueur de zone gérée orphelin (ouvrant sans fermant, ou l'inverse)."
+    warn "Fichier laissé intact pour ne pas casser ta configuration — corrige-le à la main avant le prochain update."
+    return 0
+  fi
+
+  if file_contains "$dest" "$AC_MARKER_AGENTS"; then
+    _regenerate_agents_zone "$dest"
+    return $?
+  fi
+
+  # Migration : AGENTS.md existant jamais géré par le bundle (projet antérieur
+  # à T8.5). Insertion silencieuse de la zone gérée en tête, sans question.
+  _migrate_agents_zone "$dest"
+  return $?
+}
+
+# _agents_managed_block — extrait du template la zone gérée (marqueurs inclus).
+_agents_managed_block() {
+  sed -n "\|^${AC_MARKER_AGENTS}$|,\|^${AC_MARKER_AGENTS_END}$|p" "$SELF_DIR/templates/AGENTS.default.md"
+}
+
+# _regenerate_agents_zone <file> — remplace la zone entre marqueurs de <file>
+# par la zone gérée du template courant, sans toucher au contenu hors marqueurs
+# (dont tout `## Expected Behavior` personnalisé). Idempotent : sans
+# changement, rien n'est écrit (diff).
+_regenerate_agents_zone() {
+  local file="$1" tmp head tail
+  tmp="$(mktemp)"
+  head="$(sed -n "\|^${AC_MARKER_AGENTS}$|q;p" "$file")"
+  tail="$(sed -n "\|^${AC_MARKER_AGENTS_END}$|,\$p" "$file" | sed '1d')"
+  {
+    # $() avale les \n finaux : on rend un \n à head/tail pour ne pas coller
+    # head au marqueur ni marker à tail ; head/tail vides → rien (cas où la
+    # zone est en tête / en fin de fichier).
+    [ -n "$head" ] && { printf '%s' "$head"; printf '\n'; }
+    _agents_managed_block
+    [ -n "$tail" ] && { printf '%s' "$tail"; printf '\n'; }
+  } > "$tmp"
+  if ! diff -q "$tmp" "$file" >/dev/null 2>&1; then
+    apply_cp "réécrire la zone gérée AGENTS.md (T8.5)" "$tmp" "$file"
+    # En dry-run apply_cp annonce sans écrire : on ne signale pas un vrai changement.
+    if [ "$DRY_RUN" -eq 0 ]; then
+      AC_AGENTS_CHANGED=1
+      ok "Zone gérée AGENTS.md mise à jour (sécurité + Git + accessibilité + hygiène)."
+    fi
+  else
+    info "AGENTS.md déjà à jour — zone gérée inchangée."
+  fi
+  rm -f "$tmp"
+}
+
+# _migrate_agents_zone <file> — insère la zone gérée (marqueurs + sections
+# gérées) en tête de <file>. Position d'insertion : en tête, au-dessus du
+# contenu existant, pour rendre les garanties du bundle immédiatement visibles.
+# Le contenu existant (dont les sections personnalisées) est conservé
+# intégralement en dessous. Idempotent au second passage (les marqueurs présents
+# basculent vers _regenerate_agents_zone).
+_migrate_agents_zone() {
+  local file="$1" tmp
+  tmp="$(mktemp)"
+  {
+    _agents_managed_block
+    printf '\n'
+    cat "$file"
+  } > "$tmp"
+  apply_cp "poser AGENTS.md avec zone gérée albert-code (T8.5)" "$tmp" "$file"
+  if [ "$DRY_RUN" -eq 0 ]; then
+    AC_AGENTS_CHANGED=1
+    ok "Zone gérée albert-code insérée en tête de ton AGENTS.md — tes sections personnalisées sont conservées en dessous."
+  fi
+  rm -f "$tmp"
 }
 
 # compute_effective_vm_resources — EFF_CPUS/EFF_MEM

@@ -29,3 +29,6 @@ jobs:
 
       - name: Test S67 — PATH du shim dans le fichier rc du shell détecté (T5.4)
         run: bash tests/s67_shim_path_rc.sh
+
+      - name: Test S69 — zone gérée des AGENTS.md de projet (T8.5)
+        run: bash tests/s69_agents_zone.sh

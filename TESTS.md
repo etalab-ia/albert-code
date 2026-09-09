@@ -901,6 +901,70 @@ runtime n'est jamais laissé vide ou incomplet.
 temporaire ne subsiste** à l'issue de la fonction (les gabarits `mktemp` créés au vol sont nettoyés
 quoi qu'il arrive).
 
+## S69 — Propagation des évolutions du bundle au `./AGENTS.md` des projets existants (T8.5)
+
+**Préconditions :** `lib/ui.sh` et `lib/phases.sh` du dépôt ; un bac à sable jetable
+(`HOME` détourné, `SB="$(mktemp -d)"`, `trap … EXIT`, snapshots avant/après — **aucune écriture
+hors sandbox**, rien qui ne dépende de ce qui est writable sur la machine hôte) ; `SELF_DIR` et
+`AGENT_VM_DIR` pointés sur des chemins de test ; les fonctions de la zone gérée disponibles
+(`sync_agents_md`, `_agents_managed_block`, `_regenerate_agents_zone`, `_migrate_agents_zone`,
+marqueurs `AC_MARKER_AGENTS` / `AC_MARKER_AGENTS_END`).
+
+**Étapes :**
+1. **Cas A — fichier absent.** Dans `$SB`, sans `AGENTS.md`, appeler `sync_agents_md` : le fichier
+   posé correspond au contenu de `templates/AGENTS.default.md`, et la zone gérée est bornée par les
+   **deux marqueurs HTML** `<!-- albert-code:agents:start -->` et `<!-- albert-code:agents:end -->`
+   (ancre T8.5 : ce sont ces chaînes, pas un numéro de ligne, qui délimitent la zone). Vérifier que
+   la zone ne contient **que** `## Sécurité (non négociable)`, `## Git & commits`,
+   `## Accessibilité & conformité`, `## Hygiène de dépôt`, et que `## Expected Behavior` et ses
+   cinq sous-sections sont **hors zone**.
+2. **Cas B — DoD : frontière.** Poser dans `$SB/AGENTS.md` un contenu « head » personnalisé, la zone
+   gérée d'une **ancienne version** du template (moins de règles que la courante, ex. sans le trailer
+   `Co-Authored-By` ni la règle « Nommer ce qu'on détruit »), puis, **hors zone**, une section
+   `## Expected Behavior` **personnalisée par le projet** (ex. un point ajouté à `Code Quality`), puis
+   un contenu « tail » personnalisé. Relancer `sync_agents_md` : vérifier que la zone réécrite
+   contient bien les **règles ajoutées par le bundle** (trailer `Co-Authored-By`, règle
+   « Nommer ce qu'on détruit ») et que head, tail **et l'`## Expected Behavior` personnalisé sont
+   strictement identiques** (bit-à-bit hors zone).
+3. **Cas B′ — idempotence.** Relancer `sync_agents_md` sans rien changer : aucune écriture (le `diff`
+   ne détecte aucun changement → `info` « déjà à jour », `AC_AGENTS_CHANGED=0`).
+4. **Cas C — migration silencieuse.** Poser dans `$SB/AGENTS.md` un contenu **sans marqueur** (projet
+   antérieur à T8.5) avec des règles personnalisées. Relancer `sync_agents_md` : la zone gérée est
+   insérée **en tête sans poser aucune question**, et tout le contenu personnalisé existant est
+   **conservé intégralement en dessous, sans doublon**. Vérifier que le chemin ne fait **aucun appel à
+   `confirm`** et qu'il n'y a ni `[o/N]` ni `warn` d'abstention.
+5. **Cas C′ — rejoué.** Repartir du fichier migré en (4) et relancer `sync_agents_md` : **idempotent**
+   (`AC_AGENTS_CHANGED=0`), le fichier est exactement reconnu par ses marqueurs.
+6. **Cas D — marqueur orphelin.** Poser dans `$SB/AGENTS.md` un ouvrant **sans** fermant (ou
+   l'inverse). Relancer `sync_agents_md` : **aucune écriture**, un `warn` explicite nomme le marqueur
+   orphelin, le fichier est laissé tel quel.
+7. **Cas E — dry-run.** Avec `DRY_RUN=1`, lancer un cycle complet de `sync_agents_md` sur un fichier
+   qui devrait être modifié (migration, régénération) : **aucune écriture**, action seulement
+   annoncée.
+8. **Cas F — deux updates.** Deux `sync_agents_md` successifs sur le même projet : exactement **un
+   marqueur ouvrant et un fermant** au total dans `AGENTS.md` (ni doublon, ni empilement).
+9. Vérifier que `phase_b` **et** `phase_update` appellent `sync_agents_md` (référence
+   `lib/phases.sh`, point B.1 et étape 2 d'`update`), et que le chemin ne pose **aucune question**
+   MCP/skills ni de confirmation (contrat non interactif, T9.3).
+
+**Attendu :** (A) zone gérée bornée par les deux marqueurs HTML, contiguë, exactement les quatre
+sections gérées ; `## Expected Behavior` hors zone. (B) la zone entre marqueurs est **réécrite** avec
+le template courant, et **tout le hors-zone — dont l'`## Expected Behavior` personnalisé — est
+bit-à-bit intact**. (B′) parfait no-op (`AC_AGENTS_CHANGED=0`). (C) migration silencieuse **sans
+question**, en tête, contenu perso conservé, aucun doublon. (C′) ré-exécution idempotente. (D) marqueur
+orphelin → aucune écriture + `warn`. (E) dry-run → aucune écriture. (F) exactement un couple de
+marqueurs après deux passages. (9) `sync_agents_md` appelée depuis `phase_b` et `phase_update`, aucun
+`confirm` dans le chemin.
+
+**Note d'ancrage (T4.6) :** renvois ancrés sur des **chaînes marqueurs** et des **chemins de
+fonctions** (`sync_agents_md`), pas sur des numéros de ligne.
+
+**Hors-scope d'écriture :** l'exécution est confinée à `$SB` ; on vérifie en snapshot que les
+répertoires hôte (dont `/opt/homebrew/bin` et `/usr/local/bin`) sont **inchangés** avant/après.
+
+**Validé le :** 2026-09-09 — automatisé et conservé (`tests/s69_agents_zone.sh`, 14 assertions en
+sandbox, branché dans `.github/workflows/hygiene.yml`).
+
 ## S65 — OpenCode lancé via `zsh -l`, sans filet symlink bash (T-FIX-16, AC-R047)
 
 **Préconditions :** `runtime/agent-vm.runtime.sh` et `lib/phases.sh` du dépôt. Pas de VM requise
