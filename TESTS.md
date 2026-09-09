@@ -926,3 +926,43 @@ pour la partie automatisée (`tests/s65_opencode_bash_path.sh`).
 confirmée sur VM projet réelle : binaire présent dans `~/.opencode/bin`, `command -v` OK sous
 `zsh -l`, `MISSING` sous `/bin/bash` (login et non-login).
 
+## S66 — Le runtime de référence réécrit systématiquement les secrets dans la VM (T10.11)
+
+**Préconditions :** un runtime de référence `runtime/agent-vm.runtime.sh` dans un bac à sable
+`$SB` ; son `HOME` pointant vers `$SB/vmhome` (qui joue le `~` de la VM) ; un fichier
+`$SB/vmhome/.zshenv` contenant une valeur **périmée** pour un secret, ex.
+`export ALBERT_API_KEY='ancienne-valeur'` ; l'hôte fournit une **valeur fraîche** pour ce
+secret en variable d'environnement. Les variables non testées sont **purgées** de
+l'environnement (`env -u …`) pour que l'abstention ne soit pas faussée par des valeurs
+héritées du shell réel.
+
+**Étapes :**
+1. Vérifier que `runtime/agent-vm.runtime.sh` ne contient plus la garde « déjà présente
+   (inchangée) » : aucun `grep -qE "^export …=" … && return` dans `persist_env_var`, et la
+   présence de la réécriture de la ligne ancrée `^export VAR=`.
+2. Lancer le runtime une première fois : `env -u CONTEXT7_API_KEY -u GH_TOKEN … \
+   HOME="$SB/vmhome" ALBERT_API_KEY="<fraîche>" bash runtime/agent-vm.runtime.sh`.
+3. Compter les définitions de `ALBERT_API_KEY` dans `$SB/vmhome/.zshenv` ; relancer le runtime
+   une seconde fois et recompter.
+4. Avec un `~/.zshenv` de VM contenant une valeur posée à la main pour un secret **absent**
+   de l'hôte (ex. `CONTEXT7_API_KEY`), relancer le runtime **sans** fournir cette variable :
+   vérifier que la valeur manuelle est **conservée** (abstention, S59 étendu au runtime de
+   référence).
+5. Sur le runtime perso généré par `ensure_vm_runtime` (bloc `$AC_MARKER … $AC_MARKER_END`),
+   forcer une divergence entre les deux lignes d'un secret (modifier à la main la ligne
+   `export VAR='…'` sans toucher à la ligne `_ac_zsh_set VAR '…'`) puis exécuter le bloc :
+   vérifier qu'un `warn` nommant la variable est émis, sans afficher la moindre valeur.
+6. Sous un **umask permissif** (`umask 0002`, celui mesuré en VM), lancer le runtime puis
+   vérifier les permissions de `$SB/vmhome/.zshenv` : le préciseur (temp) et le fichier final
+   doivent être en `600` malgré le umask.
+
+**Attendu :** (1) pas de garde « ne rien faire », réécriture systématique présente. (2) après
+le premier run, la VM voit **la valeur fraîche de l'hôte** — la valeur périmée est remplacée,
+sans aucune édition manuelle. (3) après deux runs consécutifs, **exactement une** définition
+par variable (idempotence). (4) une valeur manuelle est préservée quand l'hôte n'a pas la
+variable. (5) un `warn` de divergence est émis, ne nommant que la variable et les lignes en
+cause, **jamais** les valeurs. (6) après le run, `~/.zshenv` est en **600** (le `chmod ~/.zshenv` est appliqué sur le fichier final, pas seulement avant le `mv`), même sous un umask permissif.
+
+**Validé le :** — (à remplir après validation réelle)
+
+

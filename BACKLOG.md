@@ -722,6 +722,13 @@ zone par le verbe `albert-code update` — dont c'est exactement le contrat
    au projet). Une zone trop large écraserait des personnalisations
    légitimes.
 
+> **Interaction :** la règle ajoutée aujourd'hui dans
+> `templates/AGENTS.default.md` vit sous `## Expected Behavior`. Si la
+> frontière exclut cette section de la zone gérée, aucune évolution des
+> règles de comportement n'atteindra jamais un projet déjà scaffoldé —
+> ce qui est exactement le problème que T8.5 existe pour résoudre.
+> L'arbitrage de la frontière doit trancher ce cas explicitement.
+
 **DoD :** après un `albert-code update` sur un projet scaffoldé avant une
 évolution, les règles gérées par le bundle sont à jour et tout ce que
 l'utilisateur a écrit hors de la zone est intact. → scénarios `TESTS.md`
@@ -788,11 +795,13 @@ Conséquence : sur les dernières PR, l'agent s'est arrêté avant le push et un
 **But :** `persist_zshenv` doit pouvoir remplacer une valeur existante : détecter un `GH_TOKEN` présent mais invalide (`curl api.github.com/user` renvoie 401) et proposer « garder / remplacer ». Même logique pour la ligne posée dans le `.zshenv` de la VM : réécrire au lieu de sauter si la valeur diffère de celle du bloc marqué. Généraliser aux autres secrets (`ALBERT_API_KEY`, `CONTEXT7_API_KEY`), qui ont le même défaut.
 **DoD :** un jeton révoqué est remplacé de bout en bout par le wizard, sans édition manuelle d'aucun `.zshenv`, ni sur l'hôte ni dans la VM. → `TESTS.md` S50.
 **✅ Implémenté** — `persist_zshenv` (`lib/phases.sh`) : si la ligne ancrée `^export VAR=` existe, trois cas pour `GH_TOKEN` via le nouveau `_gh_token_valid` (retour 0 = 2xx → silencieux « valide » ; 1 = 401 → `warn` « invalide (révoqué ou expiré) » + prompt garder/remplacer ; 2 = API injoignable → on n'affirme rien, comportement actuel) ; les autres secrets (ALBERT_API_KEY, CONTEXT7_API_KEY, identité) proposent toujours garder/remplacer via `prompt_choice`. Le remplacement passe par `_zshenv_drop` qui supprime la ligne ancrée (fichier temporaire, pas de `sed -i`) puis `apply_append` la nouvelle valeur. `--dry-run` : annonce le prompt et choisit « garder » (S59/S60 dry-run). Testé : replace ALBERT + replace GH_TOKEN 401 conservent les autres lignes ; code 200/500 silencieux. → `TESTS.md` S50 + S59.
+> **Régression de périmètre (2026-09-09) :** le remplacement de bout en bout promis par ce ticket n'était garanti que **côté hôte** et via le runtime perso ; le runtime de référence (`persist_env_var` dans `runtime/agent-vm.runtime.sh`) gardait la garde « déjà présente → ne rien faire », figeant les secrets dans les VM déjà provisionnées malgré une rotation. Corrigé par **T10.11**.
 
 ### T10.2 🟠 Ne plus faire dépendre le push du `.zshenv` de la VM
 **But :** soit le runtime réécrit systématiquement la ligne dans le `.zshenv` de la VM (source unique), soit le bundle cesse d'écrire dans ce fichier et passe le secret autrement. Trancher et documenter la décision dans T8.1.
 **DoD :** après rotation d'un jeton côté hôte, un run suffit à ce que la VM voie le nouveau jeton. → `TESTS.md` S51.
 **✅ Implémenté** — décision : **garder l'écriture dans le `.zshenv` de la VM comme source, mais la réécrire systématiquement à chaque boot** (dropper l'écriture re-casserait la propagation du correctif agent-vm PR#16). `ensure_vm_runtime` (`lib/phases.sh`) définit une fois le helper `_ac_zsh_set VAR valeur` dans le bloc marqué (`<<'AC_HELPER'`, émis littéralement, POSIX sh, pas de `sed -i`, pas de bas-de-casse 4) puis l'appelle par secret + identité git. Abstention : si l'hôte n'a pas de valeur, **aucune** ligne n'est émise (l'ancien `export VAR=''` est supprimé) → une valeur posée à la main dans la VM est conservée (S59). Idempotence : deux `setup` produisent exactement 1 marqueur, 1 définition de helper, 1 paire `_ac_zsh_set`+`export` par variable (S60). **Propriété d'auto-réparation** : bloc régénéré côté hôte à chaque install/setup/update ET `_ac_zsh_set` rejoué à chaque boot de VM → un jeton périmé est réécrit au run suivant. → `TESTS.md` S51, S59, S60. Décision documentée dans T8.1.
+> **Régression de périmètre (2026-09-09) :** ce correctif n'avait été appliqué qu'à la **moitié** du système d'écriture des secrets — le runtime perso `~/.agent-vm/runtime.sh` produit par `ensure_vm_runtime`. L'autre chemin, `persist_env_var` dans `runtime/agent-vm.runtime.sh` (le runtime de référence copié dans chaque projet en `.agent-vm.runtime.sh`), gardait l'ancienne logique `grep -qE "^export VAR=" && return` (« déjà présente, inchangée ») avec **0 occurrence de `_ac_zsh_set`**. Conséquence : les trois secrets (ALBERT_API_KEY, CONTEXT7_API_KEY, GH_TOKEN) restaient figés à vie dans une VM déjà provisionnée — exactement le symptôme que T10.1 devait éliminer. Corrigé par **T10.11** (alignement de `persist_env_var` sur `_ac_zsh_set` dans le runtime de référence).
 
 ### T10.3 🟠 Jeton dédié à l'agent, à permissions minimales
 **But :** le bundle persiste aujourd'hui dans la VM le jeton personnel de l'utilisateur, souvent large. Trois raisons de changer : le moindre privilège (un agent n'a besoin que de pousser une branche et d'ouvrir une PR sur les dépôts du projet), la révocabilité (couper l'agent sans casser le compte de la personne), et la traçabilité (distinguer ce que fait l'agent de ce que fait la personne). Un incident de fuite de jeton personnel depuis `runtime.sh` a déjà eu lieu en juillet 2026 et a imposé une rotation.
@@ -913,6 +922,83 @@ corrects.
 disant à quoi il sert, où le créer et quel type choisir ; plus aucune
 mention de « scope repo » dès lors que le bundle recommande un
 fine-grained. → scénario `TESTS.md` à créer.
+
+### T10.11 🔴 Propager le correctif T10.1/T10.2 au runtime de référence (régression de périmètre)
+
+**← incident du 2026-09-09.** Corrige la régression décrite dans l'annotation
+de T10.1 et T10.2 : le correctif n'avait atteint qu'un des **deux** chemins
+d'écriture des secrets.
+
+**Constat :** deux mécanismes écrivent les secrets dans le `~/.zshenv` de la VM.
+
+1. `_ac_zsh_set` dans `lib/phases.sh` (`ensure_vm_runtime`) : réécrit
+   systématiquement la ligne à chaque boot, propriété d'auto-réparation.
+   C'est le correctif T10.2.
+2. `persist_env_var` dans `runtime/agent-vm.runtime.sh` : gardait l'ancienne
+   logique `grep -qE "^export ${var}=" && return` (« déjà présente dans
+   ~/.zshenv (inchangée) »). Jamais corrigé, **0 occurrence de `_ac_zsh_set`**.
+
+Ce runtime de référence est copié dans chaque projet en `.agent-vm.runtime.sh`
+et s'exécute dans la VM à chaque boot. Il appelle `persist_env_var` pour
+`ALBERT_API_KEY` et `CONTEXT7_API_KEY`, et `setup_github_auth` l'appelle pour
+`GH_TOKEN`. Les trois secrets étaient donc **figés à vie** dans une VM déjà
+provisionnée, malgré une rotation — le symptôme exact que T10.1 devait éliminer.
+
+**Preuve empirique (2026-09-09, diagnostic par empreintes SHA256 tronquées,
+sans jamais exposer de valeur) :** le `~/.zshenv` hôte portait l'empreinte
+`507ef099` (`/v1/models` HTTP 200) ; le `~/.zshrc` hôte, périmé, portait
+`216ee98e` (`/v1/models` HTTP 401) ; la clé effective dans la VM portait
+`216ee98e` (HTTP 401). Trois causes additionnées : (a) une seconde définition
+d'`ALBERT_API_KEY`, périmée, dans `~/.zshrc` (zsh charge `.zshenv` puis
+`.zshrc`, la dernière gagne) ; (b) `persist_env_var` rendait la panne
+irréparable côté VM (redémarrer / `albert-code run` / `albert-code update`
+ne changeaient rien) ; (c) la rotation manuelle dans le runtime perso avait
+été faite sur la ligne `export` alors que c'est `_ac_zsh_set` qui alimente
+les VM — l'auto-réparation de T10.2 réécrivait donc la valeur périmée à
+chaque run par-dessus toute correction manuelle. Le diagnostic a coûté
+~2 heures.
+
+**Tâches :**
+1. Aligner `persist_env_var` (`runtime/agent-vm.runtime.sh`) sur le correctif
+   T10.2 : réécriture systématique de la ligne ancrée `^export VAR=`, à
+   l'identique de `_ac_zsh_set`. **Réutiliser le même comportement**, pas une
+   seconde implémentation (deux implémentations de la même chose = la
+   régression). Conserver l'abstention : si l'hôte n'a pas de valeur, aucune
+   ligne émise (une valeur posée à la main dans la VM est préservée).
+   Appliquer aux trois secrets, `GH_TOKEN` compris via `setup_github_auth`.
+   Idempotent, en bash (le runtime de référence a son shebang en bash), sans
+   `sed -i`.
+2. Ajouter un garde-fou contre le shadowing (cause racine côté poste) : au
+   setup, si `ALBERT_API_KEY`, `CONTEXT7_API_KEY` ou `GH_TOKEN` est défini
+   dans plus d'un fichier de config de l'hôte (`~/.zshenv`, `~/.zshrc`,
+   `~/.zprofile`, `~/.zlogin`, `~/.profile`, `~/.bashrc`), émettre un `warn`
+   nommant les fichiers concernés et rappelant que `~/.zshenv` est la source
+   unique attendue. Ne modifie rien, ne compare pas de valeur, n'affiche
+   jamais de valeur ni d'empreinte : uniquement les chemins.
+3. Le runtime perso `~/.agent-vm/runtime.sh` porte **deux** lignes par
+   secret (`_ac_zsh_set VAR '<val>'` et `export VAR='<val>'`). Seule la
+   première alimente les VM. Dériver les deux lignes d'une source unique dans
+   le bloc marqué (fait par construction, cf. `ensure_vm_runtime`) **et**
+   vérifier leur cohérence au run avec un `warn` nommant la divergence (jamais
+   les valeurs) — une rotation faite à la main sur la mauvaise ligne est sinon
+   une panne indétectable, l'auto-réparation réécrivant fidèlement la valeur
+   périmée.
+4. **Permissions du `~/.zshenv`** : dans `persist_env_var` (runtime de
+   référence) **et** dans `_ac_zsh_set` (runtime perso), le `chmod 600` était
+   appliqué au fichier cible **avant** le `mv` ; le fichier final hérite donc
+   des permissions du temporaire créé sous le umask courant (mesuré en VM :
+   umask 0002 → le `~/.zshenv`, qui contient les trois clés, retombe en 664 à
+   chaque run). Corriger aux deux endroits : `chmod 600` sur le fichier
+   temporaire juste après sa création, et vérifier que le fichier final est
+   bien en 600 après le `mv`. **Le défaut préexiste dans `_ac_zsh_set` mergé
+   sur main** (il n'a pas été introduit par cette branche) ; ce ticket le
+   répare dans la foulée.
+
+**DoD :** depuis une VM dont le `~/.zshenv` contient une valeur périmée pour
+un secret, un simple run fait voir à la VM la valeur fraîche de l'hôte, sans
+aucune édition manuelle ; le runtime de référence est idempotent (deux runs
+→ exactement une définition par variable) ; toute divergence entre les deux
+lignes du runtime perso est signalée. → `TESTS.md` S66.
 
 ---
 
