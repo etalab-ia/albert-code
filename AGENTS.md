@@ -47,7 +47,7 @@ Les documents du dépôt forment un système. **Respecte cette boucle :**
 1. Lire `docs/PLAN.md` pour avoir l'historique complet
 2. Lire `BACKLOG.md`, prendre le **prochain ticket non fait** dans l'ordre (commencer par l'EPIC 0).
 3. Lire les fichiers concernés avant d'éditer.
-4. Tout nouveau retour utilisateur identifié pendant le build est d'abord consigné dans `FEEDBACK.md` (`AC-R###`, 🆕) avant d'être éventuellement backlogué.
+4. Tout nouveau retour utilisateur ou incident interne identifié pendant le build ou l'instruction d'un ticket est d'abord consigné dans `FEEDBACK.md` (`AC-R###`, 🆕) avant d'être éventuellement backlogué.
 5. Implémenter le ticket en respectant sa **DoD**.
 6. Valider avec le ou les **scénarios `TESTS.md`** référencés par le ticket (passer le statut ☐ → ✅).
 7. Si le ticket porte un renvoi `<- AC-R###`, mettre à jour le finding correspondant dans `FEEDBACK.md` (Statut → ✅ traité, colonne Renvoi vers le ticket).
@@ -112,7 +112,8 @@ albert-code/
 4. **Idempotence obligatoire.** Tout script (`install.sh`, `runtime/agent-vm.runtime.sh`) doit être relançable sans casser : tester l'état (`command -v`, `dpkg -s`, présence de fichier) avant chaque action. Référence : `datagouv/apistration#70`.
 5. **Souveraineté.** Préférer libre + souverain. Signaler toute dépendance propriétaire/non-souveraine ajoutée.
 6. **Le test fait foi.** Un ticket n'est « fait » que si son scénario `TESTS.md` passe.
-7. **Retours utilisateurs → `FEEDBACK.md` d'abord.** Tout retour identifié pendant le build est consigné dans `FEEDBACK.md` (anonymisé, `AC-R###`, 🆕) avant d'être backlogué. Un ticket issu d'un retour cite son finding via `<- AC-R###`. Ne jamais mettre de nom complet, verbatim nominatif ou URL Tchap interne dans le dépôt.
+7. **Retours utilisateurs et incidents → `FEEDBACK.md` d'abord.** Tout retour ou incident interne identifié pendant le build ou l'instruction d'un ticket est consigné dans `FEEDBACK.md` (anonymisé, `AC-R###`, 🆕) avant d'être backlogué. Un ticket issu d'un retour cite son finding via `<- AC-R###`. Ne jamais mettre de nom complet, verbatim nominatif ou URL Tchap interne dans le dépôt.
+8. **Nommer ce qu'on détruit.** Toute décision qui remplace, purge ou supprime quelque chose nomme explicitement ce qu'elle fait perdre à l'utilisateur et le justifie ; une perte non nommée est une régression.
 
 ---
 
