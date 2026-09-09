@@ -26,3 +26,6 @@ jobs:
 
       - name: Test S15 — shim agent-vm (sandbox jetable, non-destructif)
         run: bash tests/s15_shim.sh
+
+      - name: Test S67 — PATH du shim dans le fichier rc du shell détecté (T5.4)
+        run: bash tests/s67_shim_path_rc.sh

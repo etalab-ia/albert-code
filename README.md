@@ -168,7 +168,7 @@ Docs : [OpenCode](https://opencode.ai/docs/fr) · [Albert API](https://doc.incub
 
 ## Dépannage
 
-- **`albert-code: command not found` juste après l'installation** → le shim est dans `~/.local/bin`, absent de ton `PATH` (l'ajout automatique va dans `~/.zshenv`, que bash ne lit pas). Ajoute `export PATH="$HOME/.local/bin:$PATH"` à ton `~/.bashrc`, puis `source ~/.bashrc`.
+- **`albert-code: command not found` juste après l'installation** → le shim est dans `~/.local/bin`, absent de ton `PATH`. Depuis le correctif, l'ajout au `PATH` est posé dans le fichier de ton shell détecté (`~/.bashrc` sous Linux avec bash, `~/.bash_profile` sous macOS avec bash, `~/.zshenv` sous zsh) : **ouvre un nouveau terminal** (ou `source <ce fichier>`). Sur une installation antérieure à ce correctif, la ligne peut encore vivre dans `~/.zshenv`, que bash ne lit pas : ajoute alors `export PATH="$HOME/.local/bin:$PATH"` à ton `~/.bashrc`, puis `source ~/.bashrc`.
 - **`Error: Lima needs 'qemu-system-x86_64' on PATH` ou `Error: /dev/kvm does not exist` (Linux)** → prérequis manquants, voir [Prérequis](#prérequis).
 - **`opencode: command not found` (préfixe `/bin/bash`)** → ton bundle est antérieur au correctif du lancement (Lima ≥ 2.2.0 n'utilise plus `zsh -l` automatiquement). Mets à jour ton bundle puis relance :
   1. `cd ~/albert-code && git pull`

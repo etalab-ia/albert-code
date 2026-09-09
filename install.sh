@@ -107,3 +107,4 @@ echo
 info "Utilise « albert-code setup » pour configurer un projet,"
 info "« albert-code run » pour lancer la VM isolée,"
 info "ou « albert-code update » pour rafraîchir un projet configuré."
+print_path_hint
