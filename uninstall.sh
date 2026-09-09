@@ -6,6 +6,7 @@
 #   - skills clonées dans ~/.config/opencode/skills/
 #   - bloc Albert Code dans ~/.agent-vm/runtime.sh
 #   - clés Albert/Context7 dans ~/.zshenv
+#   - ligne d'ajout de ~/.local/bin au PATH posée par install_shim (fichier rc)
 #   - ligne de sourcing agent-vm dans le shell rc
 #   - fichiers projet (opencode.json, .agent-vm.runtime.sh, AGENTS.md de profil)
 #
@@ -86,6 +87,22 @@ for var in ALBERT_API_KEY CONTEXT7_API_KEY; do
     fi
   fi
 done
+
+# 3bis. Ligne d'ajout de ~/.local/bin au PATH posée par install_shim (T5.4, symétrie).
+#      Ne retire QUE la ligne exacte du bundle ; un ajout d'une autre provenance
+#      est conservé et signalé.
+AC_PATH_RC="$(path_rc_file)"
+if file_contains "$AC_PATH_RC" 'export PATH="\$HOME/.local/bin:\$PATH"'; then
+  if confirm "Retirer l'ajout de ~/.local/bin au PATH de $AC_PATH_RC ?"; then
+    _tmp="$(mktemp)"
+    grep -vF 'export PATH="$HOME/.local/bin:$PATH"' "$AC_PATH_RC" > "$_tmp" || true
+    mv "$_tmp" "$AC_PATH_RC"
+    chmod 600 "$AC_PATH_RC" 2>/dev/null || true
+    ok "ajout au PATH retiré de $AC_PATH_RC"
+  fi
+elif file_contains "$AC_PATH_RC" "\.local/bin"; then
+  warn "Un ajout de ~/.local/bin est présent dans $AC_PATH_RC mais n'est pas la ligne du bundle : il est conservé."
+fi
 
 # 4. Ancien installeur : fonction `albert-code()` dans shell rc (surcharge le shim)
 _detect_old_albert_code_function() {

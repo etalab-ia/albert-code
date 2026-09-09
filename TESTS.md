@@ -966,3 +966,32 @@ cause, **jamais** les valeurs. (6) après le run, `~/.zshenv` est en **600** (le
 **Validé le :** — (à remplir après validation réelle)
 
 
+
+## S67 — Le PATH du shim est écrit dans le fichier rc du shell détecté (T5.4, AC-R045)
+
+**Préconditions :** `lib/ui.sh` et un PATH minimal sans dossier writable (l'utilisateur
+courant n'a l'écriture ni sur `/opt/homebrew/bin` ni `/usr/local/bin`, et `PATH=/usr/bin:/bin`
+n'est pas writable) → `install_shim` bascule sur `~/.local/bin`. `tests/s67_shim_path_rc.sh`
+est rejouable en CI ; il snapshot le vrai `~/.zshenv` avant/après pour prouver la non-pollution.
+
+**Étapes (automatisé) :**
+1. `bash tests/s67_shim_path_rc.sh`
+2. Vérifier que les quatre fichiers candidats (`~/.zshenv`, `~/.bashrc`, `~/.bash_profile`,
+   `~/.profile`) ne reçoivent la ligne d'ajout que dans celui attendu selon le shell détecté.
+
+**Attendu :** (1) exit 0, les 5 cas passent :
+1. `SHELL=/bin/bash` → la ligne atterrit dans le fichier attendu selon `uname -s`
+   (`~/.bashrc` sous Linux, `~/.bash_profile` sous macOS), et **pas** dans `~/.zshenv`.
+2. `SHELL=/bin/zsh` → la ligne atterrit toujours dans `~/.zshenv` (non-régression du
+   comportement historique).
+3. un `~/.bashrc` contenant déjà l'ajout → deuxième passage, **aucune ligne ajoutée nulle
+   part**, drapeau non positionné (anti-doublon sur les quatre fichiers).
+4. `--dry-run` → **rien** d'écrit dans aucun des quatre fichiers.
+5. un `~/.bashrc` qui ne fait que **mentionner** `.local/bin` (ex. un commentaire) n'est
+   pas considéré comme déjà configuré : la ligne est bien écrite.
+Plus les assertions de non-pollution : le vrai `~/.zshenv` de la machine et les shims
+`/opt/homebrew/bin/albert-code` et `/usr/local/bin/albert-code` sont inchangés
+(snapshot avant/après).
+
+**Validé le :** — (à remplir après validation réelle)
+

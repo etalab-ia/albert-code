@@ -60,11 +60,70 @@ apply_chmod()  { local desc="$1" mode="$2" file="$3"; _dry_gate "$desc" || retur
 # apply_symlink <desc> <target> <link> — crée un lien symbolique (ne remplace pas un fichier/répertoire existant).
 apply_symlink() { local desc="$1" target="$2" link="$3"; _dry_gate "$desc" || return 0; ln -sf "$target" "$link" 2>/dev/null || true; }
 
+# path_rc_file : LE fichier où écrire un ajout au PATH pour le shell de connexion.
+# Mapping dérivé de ce que chaque shell lit réellement (cf. T5.4) :
+#   zsh                       → ~/.zshenv  (lu par TOUTE invocation zsh, login ou non)
+#   bash + Linux              → ~/.bashrc  (les terminaux Linux lancent bash interactif non-login)
+#   bash + macOS (Darwin)     → ~/.bash_profile (Terminal.app lance bash en login)
+#   tout le reste             → ~/.profile (repli POSIX)
+path_rc_file() {
+  local _sh _os
+  _sh="${SHELL##*/}"
+  case "$_sh" in
+    zsh) printf '%s' "$HOME/.zshenv" ;;
+    bash)
+      _os="$(uname -s)"
+      case "$_os" in
+        Linux)  printf '%s' "$HOME/.bashrc" ;;
+        Darwin) printf '%s' "$HOME/.bash_profile" ;;
+        *)      printf '%s' "$HOME/.profile" ;;
+      esac
+      ;;
+    *) printf '%s' "$HOME/.profile" ;;
+  esac
+}
+
+# ensure_path_rc_line : assure l'ajout de ~/.local/bin au PATH dans le fichier rc
+# du shell de connexion (path_rc_file), sans jamais dupliquer une ligne déjà
+# présente dans l'un des quatre fichiers candidats (~/.zshenv, ~/.bashrc,
+# ~/.bash_profile, ~/.profile). Extraction dédiée à la testabilité (S67) : tester
+# « quel fichier reçoit la ligne » sans passer par la sonde de shim. La détection
+# est ancrée sur une vraie ligne d'ajout (export PATH= … .local/bin), pas sur la
+# sous-chaîne nue, pour ne pas traiter une simple mention comme déjà configuré.
+# Positionne SHIM_PATH_ADDED=1 quand une ligne est écrite ; avertit explicitement
+# le cas « tout le reste » (shell exotique type fish) qui ne lirait pas ~/.profile.
+# Ligne écrite (via apply_append/_dry_gate) :
+#   export PATH="$HOME/.local/bin:$PATH"
+ensure_path_rc_line() {
+  local rc_file _rc added
+  rc_file="$(path_rc_file)"
+  added=0
+  for _rc in "$HOME/.zshenv" "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.profile"; do
+    if file_contains "$_rc" '^[[:space:]]*export[[:space:]]\+PATH=.*\.local/bin'; then
+      added=1
+      break
+    fi
+  done
+  if [ "$added" -eq 0 ]; then
+    apply_append "ajouter ~/.local/bin au PATH dans $rc_file" "$rc_file" \
+      "export PATH=\"\$HOME/.local/bin:\$PATH\""
+    SHIM_PATH_ADDED=1
+    # Cas « tout le reste » : un shell exotique (fish…) ne lit pas ~/.profile
+    # et n'accepte pas cette syntaxe — donner la ligne plutôt que laisser croire.
+    if [ "${SHELL##*/}" != "zsh" ] && [ "${SHELL##*/}" != "bash" ]; then
+      warn "ton shell (${SHELL##*/}) ne lit pas ~/.profile ; ajoute toi-même :"
+      warn '  export PATH="$HOME/.local/bin:$PATH"'
+    fi
+  fi
+}
+
 # install_shim <name> <source_script> : crée un shim exécutable sur le PATH
 # pour une commande qui est en réalité une fonction shell définie par source.
 # Cherche un dossier writable dans $PATH dans cet ordre :
 #   /opt/homebrew/bin (Apple Silicon), /usr/local/bin, ~/.local/bin
-# Si seulement ~/.local/bin est trouvé, l'ajoute à ~/.zshenv si absent.
+# Si seulement ~/.local/bin est trouvé, l'ajoute au PATH dans le fichier rc du
+# shell de connexion (path_rc_file) si absent — jamais dupliqué (sonde les 4
+# fichiers candidats). Positionne SHIM_PATH_ADDED=1 quand une ligne est écrite.
 # Retourne 0 si le shim est posé, 1 si aucun dossier writable trouvé (avertit).
 # Variables lues : DRY_RUN (pour _dry_gate), SHIM_BIN_DIR (override test/CI :
 #   si défini et non vide, utilisé directement comme dossier du shim,
@@ -100,12 +159,8 @@ install_shim() {
       if [ ! -d "$shim_dir" ]; then
         apply_mkdir "créer $shim_dir" "$shim_dir"
       fi
-      # Ajouter au PATH via ~/.zshenv si pas déjà
-      if ! file_contains "$HOME/.zshenv" "\.local/bin"; then
-        apply_append "ajouter ~/.local/bin au PATH dans ~/.zshenv" "$HOME/.zshenv" \
-          "export PATH=\"\$HOME/.local/bin:\$PATH\""
-        SHIM_PATH_ADDED=1
-      fi
+      # Assurer la ligne de PATH dans le fichier rc du shell détecté.
+      ensure_path_rc_line
     fi
   fi
 
@@ -143,6 +198,17 @@ $name \"\$@\""
   apply_chmod "chmod +x 755 $shim_path" 755 "$shim_path"
   [ "$DRY_RUN" -eq 0 ] && ok "shim $name installé dans $shim_path"
   return 0
+}
+
+# print_path_hint : si SHIM_PATH_ADDED vaut 1, nomme le fichier rc réellement
+# modifié et l'action à faire (nouveau terminal ou source). À appeler à la fin
+# d'une installation qui a posé un ajout au PATH dans ~/.local/bin.
+print_path_hint() {
+  [ "$SHIM_PATH_ADDED" -eq 1 ] || return 0
+  local rc_file
+  rc_file="$(path_rc_file)"
+  info "L'ajout au PATH a été écrit dans %s." "$rc_file"
+  info "Ouvre un nouveau terminal (ou « source \"%s\" ») pour utiliser albert-code." "$rc_file"
 }
 
 # remove_shim <name> : supprime un shim du PATH.
