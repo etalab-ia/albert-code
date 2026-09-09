@@ -76,8 +76,14 @@ SKILLS_TARGET="$OPENCODE_CONFIG_DIR/skills"
 
 # -----------------------------------------------------------------------------
 # persist_env_var <VAR> <VALEUR>
-#   Écrit `export VAR=VALEUR` dans ~/.zshenv si la ligne n'existe pas déjà.
-#   Additif : n'écrase jamais une valeur déjà posée par l'utilisateur.
+#   Réécrit SYSTÉMATIQUEMENT `export VAR=VALEUR` dans ~/.zshenv, à l'identique de
+#   `_ac_zsh_set` (lib/phases.sh, T10.2) : la ligne ancrée `^export VAR=` est
+#   remplacée à chaque exécution, propriété d'auto-réparation. Abstention : si
+#   VALEUR est vide, aucune ligne n'est émise — une valeur posée à la main dans
+#   la VM est ainsi préservée. Bash (le fichier a son shebang en bash : `local`
+#   et l'expansion `${val//…}` sont des bashismes), sans `sed -i` (règle AGENTS.md).
+#   Le `~/.zshenv` est forcé en 600 (contient des clés) sur le fichier final,
+#   pas seulement avant le `mv`.
 # -----------------------------------------------------------------------------
 persist_env_var() {
   local var="$1" val="$2"
@@ -85,18 +91,25 @@ persist_env_var() {
 
   [ -z "$val" ] && return 0
 
-  _apply_touch "créer $zshenv si absent" "$zshenv"
-  _apply_chmod "chmod 600 $zshenv (contient une clé)" 600 "$zshenv"
-
-  if grep -qE "^export ${var}=" "$zshenv" 2>/dev/null; then
-    _ok "$var déjà présente dans ~/.zshenv (inchangée)"
-  else
+  if _dry_gate "réécrire export ${var}= dans ~/.zshenv"; then
+    _apply_touch "créer $zshenv si absent" "$zshenv"
+    local tmp safe_val line
+    tmp="$zshenv.tmp.$$"
+    : > "$tmp"
+    chmod 600 "$tmp"
+    while IFS= read -r line || [ -n "$line" ]; do
+      case "$line" in
+        "export ${var}="*) : ;;
+        *) printf '%s\n' "$line" >> "$tmp" ;;
+      esac
+    done < "$zshenv"
     # Valeur entre simples quotes ; on neutralise les quotes internes.
-    local safe_val
     safe_val="${val//\'/\'\"\'\"\'}"
-    _apply_append "ajouter $var à ~/.zshenv" "$zshenv" "export ${var}='${safe_val}'"
-    [ "$DRY_RUN" -eq 0 ] && export "$var=$val" || true
-    [ "$DRY_RUN" -eq 0 ] && _ok "$var ajoutée à ~/.zshenv" || true
+    printf "export %s='%s'\n" "$var" "$safe_val" >> "$tmp"
+    mv "$tmp" "$zshenv"
+    chmod 600 "$zshenv"
+    export "$var=$val"
+    _ok "$var réécrite dans ~/.zshenv"
   fi
 }
 

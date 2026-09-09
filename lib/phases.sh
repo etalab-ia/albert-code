@@ -427,6 +427,31 @@ install_agent_vm() {
   done
 }
 
+# warn_secret_shadowing — garde-fou anti-shadowing (T10.11).
+# Alerte si un secret est défini dans plus d'un fichier de configuration de
+# l'hôte : une variable ambiante peut alors écraser celle de ~/.zshenv (zsh
+# charge .zshenv puis .zshrc, la dernière définition gagne). N'affiche JAMAIS
+# de valeur : uniquement les chemins des fichiers concernés. Ne modifie rien.
+warn_secret_shadowing() {
+  local vars="ALBERT_API_KEY CONTEXT7_API_KEY GH_TOKEN"
+  local files=("$HOME/.zshenv" "$HOME/.zshrc" "$HOME/.zprofile" "$HOME/.zlogin" "$HOME/.profile" "$HOME/.bashrc")
+  local v f found n
+  for v in $vars; do
+    found=""
+    n=0
+    for f in "${files[@]}"; do
+      [ -f "$f" ] || continue
+      if grep -qE "^[[:space:]]*(export[[:space:]]+)?${v}=" "$f" 2>/dev/null; then
+        found="${found} ${f}"
+        n=$((n + 1))
+      fi
+    done
+    if [ "$n" -gt 1 ]; then
+      warn "${v} défini dans ${n} fichiers de configuration :${found}. ~/.zshenv est la source unique attendue — une définition ailleurs (ex. ~/.zshrc, chargé après) fait un shadowing silencieux : la valeur périmée écrase la fraîche. Aligne-les manuellement (aucune modification automatique)."
+    fi
+  done
+}
+
 # ensure_vm_runtime — ~/.agent-vm/runtime.sh
 ensure_vm_runtime() {
   apply_mkdir "créer $(dirname "$RUNTIME_VM_FILE")" "$(dirname "$RUNTIME_VM_FILE")"
@@ -455,6 +480,9 @@ ensure_vm_runtime() {
     git_email_val="$(grep -E "^export AC_GIT_USER_EMAIL=" "$ZSHENV" | head -1 | sed -E "s/^export AC_GIT_USER_EMAIL=['\"]?//; s/['\"]?$//")"
   fi
 
+  # T10.11 : garde-fou anti-shadowing (source racine côté poste).
+  warn_secret_shadowing
+
   local safe_albert="" safe_ctx="" safe_gh="" safe_name="" safe_email=""
   [ -n "$albert_val" ] && safe_albert="${albert_val//\'/\'\"\'\"\'}"
   [ -n "$ctx7_val" ] && safe_ctx="${ctx7_val//\'/\'\"\'\"\'}"
@@ -473,9 +501,10 @@ ensure_vm_runtime() {
   # (redirection simple), jamais dans une substitution $() : sous bash 3.2
   # (macOS) un here-doc imbriqué dans $( ) n'est pas parse correctement et son
   # corps est évalué comme du code (crash « unbound variable » sous set -u).
-  local _new_runtime _ac_helper_file
+  local _new_runtime _ac_helper_file _div_helper_file
   _new_runtime="$(mktemp)"
   _ac_helper_file="$(mktemp)"
+  _div_helper_file="$(mktemp)"
 
   if file_contains "$RUNTIME_VM_FILE" "$AC_MARKER"; then
     if file_contains "$RUNTIME_VM_FILE" "$AC_MARKER_END"; then
@@ -502,6 +531,7 @@ _ac_zsh_set() {
   if [ ! -f "$_f" ]; then : > "$_f"; chmod 600 "$_f"; fi
   _t="${_f}.tmp.$$"
   : > "$_t"
+  chmod 600 "$_t"
   while IFS= read -r _l || [ -n "$_l" ]; do
     case "$_l" in
       "export $1="*) : ;;
@@ -512,6 +542,7 @@ _ac_zsh_set() {
   _e=$(printf '%s' "$_v" | sed "s/'/'\"'\"'/g")
   printf "export %s='%s'\n" "$1" "$_e" >> "$_t"
   mv "$_t" "$_f"
+  chmod 600 "$_f"
   unset _f _t _l _v _e
 }
 AC_HELPER
@@ -550,6 +581,27 @@ AC_HELPER
       apply_append "export AC_GIT_USER_EMAIL dans runtime.sh" "$_new_runtime" \
         "export AC_GIT_USER_EMAIL='${safe_email}'"
     fi
+    # T10.11: détecter une divergence entre les deux lignes (helper _ac_zsh_set
+    # / export) d'un même secret dans le runtime perso — une rotation faite à la
+    # main sur la mauvaise ligne produit une panne indétectable autrement. Les
+    # deux lignes sont émises ensemble ci-dessus depuis une source unique, mais
+    # rien ne protège une édition manuelle ultérieure. Ne jamais afficher de valeur.
+    cat > "$_div_helper_file" <<'AC_DIVERGENCE'
+_ac_zsh_check() {
+  _v="$1"
+  _h="$(awk -F"'" "/_ac_zsh_set ${_v} /{print \$2; exit}" "$0" 2>/dev/null)"
+  _x="$(awk -F"'" "/^export ${_v}='{print \$2; exit}" "$0" 2>/dev/null)"
+  if [ "${_h:-}" != "${_x:-}" ]; then
+    echo "! divergence dans ~/.agent-vm/runtime.sh entre la ligne '_ac_zsh_set ${_v} ' et 'export ${_v}=' : seule la ligne _ac_zsh_set alimente les VM, remets-les en cohérence (valeurs jamais affichées)"
+  fi
+}
+_ac_zsh_check ALBERT_API_KEY
+_ac_zsh_check CONTEXT7_API_KEY
+_ac_zsh_check GH_TOKEN
+_ac_zsh_check AC_GIT_USER_NAME
+_ac_zsh_check AC_GIT_USER_EMAIL
+AC_DIVERGENCE
+    apply_append "garde-fou cohérence runtime perso (T10.11)" "$_new_runtime" "$(cat "$_div_helper_file")"
     # T8.3: Garde-fou OpenCode --auto execute dans la VM au boot
     # Si opencode est trop ancien pour --auto, upgrade auto.
     apply_append "garde-fou OpenCode --auto (T8.3)" "$_new_runtime" \
@@ -574,7 +626,7 @@ AC_HELPER
     mv "$_new_runtime" "$RUNTIME_VM_FILE"
   fi
   # Nettoyage des fichiers temporaires quoi qu'il arrive (dry-run compris).
-  rm -f "$_ac_helper_file" "$_new_runtime"
+  rm -f "$_ac_helper_file" "$_div_helper_file" "$_new_runtime"
 
   ok "Runtime VM configuré"
   [ "$DRY_RUN" -eq 0 ] || true
