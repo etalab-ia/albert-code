@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# tests/s68_albert_base_url.sh : S68 (T1.9, AC-R051).
+# tests/s68_albert_base_url.sh : S68 (T1.9, AC-R051, AC-R061).
 # AC_ALBERT_BASE_URL est-elle honorée là où le provider est câblé, écrite en
-# clair, et conservée par un update ? Bac à sable jetable, confirm et curl
-# stubés, donc ni question ni réseau. bash 3.2.
+# clair, et conservée par un update ? La clé ne part-elle vers un endpoint
+# déclaré par le projet qu'après confirmation ? Une valeur invalide est-elle
+# refusée ? Bac à sable jetable, confirm et curl stubés, donc ni question ni
+# réseau. bash 3.2.
 set -euo pipefail
 
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -121,14 +123,54 @@ got="$(baseurl_of opencode.json)"
   && pass "update/réparation : identifiant périmé retiré, la réparation a bien eu lieu" \
   || fail "update/réparation : identifiant périmé non retiré, le cas n'a pas été exercé"
 
-# --- 6. Le catalogue suit le baseURL du projet ------------------------------------
-# Toujours sans la variable : c'est le fichier du projet qui décide.
+# --- 6. Le catalogue suit le baseURL du projet, sous confirmation (AC-R061) --------
+# Toujours sans la variable : le fichier du projet déclare CUSTOM_URL, qui diffère
+# du défaut. La clé ne doit partir qu'après confirmation.
+# 6a/6b : confirmation refusée.
+ANSWER=1
+: > "$CURL_URL_LOG"
+rc=0
+out="$(fetch_albert_catalog 2>&1)" || rc=$?
+got="$(cat "$CURL_URL_LOG" 2>/dev/null || true)"
+[ "$rc" -eq 1 ] && [ -z "$got" ] \
+  && pass "catalogue (6a) : confirmation refusée, retour 1 et aucun appel" \
+  || fail "catalogue (6a) : attendu retour 1 sans appel, obtenu retour $rc, appel ${got:-aucun}"
+case "$out" in
+  *"$CUSTOM_URL"*) pass "catalogue (6b) : l'avertissement affiche l'endpoint déclaré" ;;
+  *) fail "catalogue (6b) : $CUSTOM_URL absent de la sortie : $out" ;;
+esac
+case "$out" in
+  *ignorée\ :*) fail "catalogue (6b) : variable au défaut signalée à tort comme ignorée" ;;
+  *) pass "catalogue (6b) : variable au défaut, pas d'avertissement de variable ignorée" ;;
+esac
+
+# 6c : confirmation acceptée, le baseURL du projet prime sur la variable.
+ANSWER=0
 : > "$CURL_URL_LOG"
 fetch_albert_catalog >/dev/null 2>&1
 got="$(cat "$CURL_URL_LOG" 2>/dev/null || true)"
 [ "$got" = "$CUSTOM_URL/models" ] \
-  && pass "catalogue : le baseURL du projet prime sur la variable" \
-  || fail "catalogue : attendu $CUSTOM_URL/models, obtenu ${got:-aucun appel}"
+  && pass "catalogue (6c) : confirmation acceptée, le baseURL du projet prime sur la variable" \
+  || fail "catalogue (6c) : attendu $CUSTOM_URL/models, obtenu ${got:-aucun appel}"
+
+# 6d : variable et projet concordent, aucune question (un refus ne bloque rien).
+AC_ALBERT_BASE_URL="$CUSTOM_URL"
+ANSWER=1
+: > "$CURL_URL_LOG"
+fetch_albert_catalog >/dev/null 2>&1
+got="$(cat "$CURL_URL_LOG" 2>/dev/null || true)"
+[ "$got" = "$CUSTOM_URL/models" ] \
+  && pass "catalogue (6d) : variable identique au projet, appel sans confirmation" \
+  || fail "catalogue (6d) : attendu $CUSTOM_URL/models, obtenu ${got:-aucun appel}"
+
+# 6e : variable personnalisée différente du projet, signalée comme ignorée.
+AC_ALBERT_BASE_URL="https://autre.test/v1"
+ANSWER=0
+out="$(fetch_albert_catalog 2>&1)" || true
+case "$out" in
+  *ignorée\ :*) pass "catalogue (6e) : variable différente du projet signalée comme ignorée" ;;
+  *) fail "catalogue (6e) : aucun avertissement de variable ignorée : $out" ;;
+esac
 
 # --- 7. Sans opencode.json, le catalogue suit la variable -------------------------
 mkdir -p "$SB/hors-projet"
@@ -140,6 +182,31 @@ got="$(cat "$CURL_URL_LOG" 2>/dev/null || true)"
 [ "$got" = "https://autre.test/v1/models" ] \
   && pass "catalogue hors projet : la variable est utilisée" \
   || fail "catalogue hors projet : attendu https://autre.test/v1/models, obtenu ${got:-aucun appel}"
+
+# --- 8. Validation de la variable au chargement de lib/ui.sh (AC-R061) ------------
+for bad in 'ftp://x/v1' 'x/v1' 'https://x","apiKey":"y' 'https://x\y' 'https://x y'; do
+  if AC_ALBERT_BASE_URL="$bad" bash -c 'source "$1/ui.sh"' _ "$LIB_DIR" >/dev/null 2>&1; then
+    fail "validation : valeur acceptée à tort : $bad"
+  else
+    pass "validation : valeur refusée : $bad"
+  fi
+done
+# http accepté (proxy local joint depuis la VM), mais avec avertissement.
+rc=0
+out="$(AC_ALBERT_BASE_URL='http://x/v1' bash -c 'source "$1/ui.sh"' _ "$LIB_DIR" 2>&1)" || rc=$?
+if [ "$rc" -eq 0 ]; then
+  case "$out" in
+    *"en clair"*) pass "validation : http accepté avec avertissement de clé en clair" ;;
+    *) fail "validation : http accepté sans avertissement : $out" ;;
+  esac
+else
+  fail "validation : http refusé à tort (exit $rc) : $out"
+fi
+if env -u AC_ALBERT_BASE_URL bash -c 'source "$1/ui.sh"' _ "$LIB_DIR" >/dev/null 2>&1; then
+  pass "validation : sans variable, lib/ui.sh se charge (exit 0)"
+else
+  fail "validation : sans variable, lib/ui.sh échoue au chargement"
+fi
 
 # --- Snapshot APRÈS (non-pollution) ----------------------------------------------
 cd "$SELF_DIR"

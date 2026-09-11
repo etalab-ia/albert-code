@@ -1105,15 +1105,29 @@ fetch_albert_catalog() {
     return 1
   fi
   # Le catalogue interrogé est celui du projet : le baseURL déclaré dans
-  # ./opencode.json prime sur la variable, pour qu'un `update` ou un `run` lancé
-  # sans AC_ALBERT_BASE_URL ne reparte pas sur Albert alors que le projet pointe
-  # ailleurs (T1.9). jq est garanti présent ici (test plus haut).
+  # ./opencode.json prime sur la variable, pour qu'un `update` lancé sans
+  # AC_ALBERT_BASE_URL ne reparte pas sur Albert alors que le projet pointe
+  # ailleurs (T1.9). `run` n'appelle pas cette fonction. Garde AC-R061 : ce
+  # fichier est versionné, donc un endpoint déclaré qui diffère de la variable
+  # n'obtient la clé qu'après confirmation. jq est garanti présent ici (test
+  # plus haut).
   local base="$AC_ALBERT_BASE_URL" declared=""
   if [ -f ./opencode.json ]; then
     declared="$(jq -r '.provider.albert.options.baseURL // empty' ./opencode.json 2>/dev/null || true)"
   fi
+  declared="${declared%/}"
+  if [ -n "$declared" ] && [ "$declared" != "$AC_ALBERT_BASE_URL" ]; then
+    if [ "$AC_ALBERT_BASE_URL" != "$AC_ALBERT_DEFAULT_BASE_URL" ]; then
+      warn "AC_ALBERT_BASE_URL ($AC_ALBERT_BASE_URL) ignorée : le projet déclare déjà $declared. Modifie opencode.json pour en changer."
+    fi
+    warn "Le projet déclare un endpoint différent : $declared. Ta clé ALBERT_API_KEY lui sera envoyée."
+    if ! confirm "Interroger le catalogue de $declared ?"; then
+      warn "Vérification du catalogue ignorée, configuration conservée."
+      return 1
+    fi
+  fi
   if [ -n "$declared" ]; then
-    base="${declared%/}"
+    base="$declared"
   fi
 
   local body

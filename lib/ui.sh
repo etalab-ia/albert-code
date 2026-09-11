@@ -32,8 +32,29 @@ OPENCODE_CONFIG_DIR="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
 # La valeur est écrite en clair dans l'opencode.json généré, jamais en
 # {env:...} : OpenCode tourne dans la VM, qui ne reçoit pas cette variable (T10.8).
 # La surcharger fait sortir de la chaîne souveraine (voir README).
-AC_ALBERT_BASE_URL="${AC_ALBERT_BASE_URL:-https://albert.api.etalab.gouv.fr/v1}"
+AC_ALBERT_DEFAULT_BASE_URL="https://albert.api.etalab.gouv.fr/v1"
+AC_ALBERT_BASE_URL="${AC_ALBERT_BASE_URL:-$AC_ALBERT_DEFAULT_BASE_URL}"
 AC_ALBERT_BASE_URL="${AC_ALBERT_BASE_URL%/}"
+# Frontière de confiance (AC-R061) : la clé part vers cette URL et la valeur est
+# concaténée telle quelle dans le JSON du scaffold : http(s):// obligatoire,
+# http accepté avec avertissement (proxy local), sans guillemet, antislash ni
+# espace. warn() et err() ne sont définis que plus bas, d'où les printf au même
+# format.
+_ac_base_url_ok=1
+case "$AC_ALBERT_BASE_URL" in http://?*|https://?*) ;; *) _ac_base_url_ok=0 ;; esac
+case "$AC_ALBERT_BASE_URL" in *[\"\\\ ]*) _ac_base_url_ok=0 ;; esac
+if [ "$_ac_base_url_ok" -eq 0 ]; then
+  printf '%s✗ AC_ALBERT_BASE_URL invalide (http:// ou https:// obligatoire, sans guillemet, antislash ni espace) : %s%s\n' \
+    "${C_RED}" "$AC_ALBERT_BASE_URL" "${C_RESET}" >&2
+  exit 1
+fi
+case "$AC_ALBERT_BASE_URL" in
+  http://*)
+    printf '%s! AC_ALBERT_BASE_URL en http : ta clé ALBERT_API_KEY circulera en clair vers %s.%s\n' \
+      "${C_YELLOW}" "$AC_ALBERT_BASE_URL" "${C_RESET}"
+    ;;
+esac
+unset _ac_base_url_ok
 
 # Marqueur unique pour les blocs Albert Code dans les fichiers de l'utilisateur.
 # Utilisé à l'écriture (install.sh) ET aux tests (install.sh idempotence, uninstall.sh retrait).

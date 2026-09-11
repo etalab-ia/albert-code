@@ -1061,7 +1061,7 @@ Plus les assertions de non-pollution : le vrai `~/.zshenv` de la machine et les 
 
 ---
 
-## S68 : `AC_ALBERT_BASE_URL` surchargeable, écrite en clair et préservée par `update` (T1.9, AC-R051)
+## S68 : `AC_ALBERT_BASE_URL` surchargeable, écrite en clair et préservée par `update` (T1.9, AC-R051, AC-R061)
 
 **Préconditions :** `jq` installé ; sans lui le test s'arrête en `exit 0`.
 `tests/s68_albert_base_url.sh` est rejouable en CI : `HOME` détourné vers un bac
@@ -1070,7 +1070,7 @@ Plus les assertions de non-pollution : le vrai `~/.zshenv` de la machine et les 
 **Étapes (automatisé) :**
 1. `bash tests/s68_albert_base_url.sh`
 
-**Attendu :** exit 0, les sept cas passent :
+**Attendu :** exit 0, les huit cas passent :
 1. Sans la variable, le défaut reste `https://albert.api.etalab.gouv.fr/v1`.
 2. Un slash final est retiré, pas de `//models`.
 3. Scaffold d'un projet neuf : URL surchargée en clair, jamais `{env:...}`.
@@ -1078,7 +1078,27 @@ Plus les assertions de non-pollution : le vrai `~/.zshenv` de la machine et les 
 5. `repair_stale_provider_albert` avec la variable remise au défaut : l'identifiant
    périmé est retiré et le `baseURL` personnalisé conservé. Les deux assertions
    comptent, la seconde ne prouvant rien sans la première.
-6. `fetch_albert_catalog` interroge la racine déclarée dans l'`opencode.json`.
+6. `fetch_albert_catalog` face à un `opencode.json` qui déclare une autre racine
+   que la variable (AC-R061) :
+   - 6a : `confirm` refusé, la fonction rend 1 et `curl` n'est jamais appelé ;
+   - 6b : la sortie affiche la racine déclarée (avertissement "Le projet déclare
+     un endpoint différent") sans l'avertissement "ignorée :" puisque la variable
+     est au défaut ;
+   - 6c : `confirm` accepté, l'appel vise la racine déclarée ;
+   - 6d : variable égale à la racine déclarée, l'appel part même si `confirm`
+     répondrait non (aucune question posée) ;
+   - 6e : variable personnalisée différente de la racine déclarée, la sortie
+     contient "ignorée :".
 7. Hors projet, faute de fichier, le catalogue suit la variable.
+8. Charger `lib/ui.sh` échoue (exit non nul) avec `ftp://x/v1`, avec `x/v1`, avec
+   une valeur contenant un guillemet, avec une valeur contenant un antislash et
+   avec une valeur contenant une espace ; avec `http://x/v1`, le chargement
+   réussit et la sortie contient "en clair" ; sans la variable, le chargement
+   réussit.
 
 **Validé le :** 2026-09-09, en local et en CI.
+
+**Annotation (2026-09-11) :** la validation ci-dessus porte sur les sept cas
+d'origine. Le cas 6 a depuis été réécrit en 6a à 6e et le cas 8 ajouté (AC-R061).
+Rejoué en local le 2026-09-11 : exit 0, 23 assertions ; les cas 6a, 6b, 6e et 8
+échouent sur le code antérieur à la garde.

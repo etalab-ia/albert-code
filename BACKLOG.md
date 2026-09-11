@@ -130,14 +130,20 @@ Config MCP de référence :
 4. Vérifier qu'un `albert-code update` (via `repair_stale_provider_albert` / `jq_albert_reconcile_program`) ne rétablit pas l'URL par défaut sur un projet à baseURL personnalisé (test, pas supposition).
 5. Documenter la variable dans le README, y compris ce qu'elle implique en termes de sortie de la chaîne souveraine.
 
-**DoD :** `AC_ALBERT_BASE_URL` est honorée aux quatre emplacements, avec un défaut inchangé ; un `setup` avec la variable positionnée produit un `opencode.json` portant l'URL surchargée en clair et un appel de catalogue dirigé vers cette même URL ; un `albert-code update` sur ce projet ne rétablit pas l'URL par défaut ; le README documente la variable et ce qu'elle implique. → `TESTS.md` **S68** (créé).
+**DoD :** `AC_ALBERT_BASE_URL` est honorée aux quatre emplacements, avec un défaut inchangé ; un `setup` avec la variable positionnée produit un `opencode.json` portant l'URL surchargée en clair et un appel de catalogue dirigé vers cette même URL ; un `albert-code update` sur ce projet ne rétablit pas l'URL par défaut ; la clé n'est envoyée à un `baseURL` déclaré par le projet et différent de la variable qu'après confirmation ; une variable qui ne commence pas par `http://` ou `https://` ou qui contient un guillemet, un antislash ou une espace est refusée, et `http://` est accepté avec un avertissement de clé en clair (`<- AC-R061`) ; le README documente la variable et ce qu'elle implique. → `TESTS.md` **S68** (créé).
 
 **✅ Implémenté.** `AC_ALBERT_BASE_URL` est définie en tête de `lib/ui.sh`, avec
 les autres variables surchargeables, et lue aux trois emplacements exécutés :
 programme jq de merge (`--arg baseurl`), repli par concaténation du scaffold,
 appel catalogue. La valeur est écrite en clair dans l'`opencode.json`, jamais en
 `{env:...}` (contrainte T10.8). Pour le catalogue, le `baseURL` du projet prime
-sur la variable, sans quoi un `update` nu repartait vers Albert.
+sur la variable, sans quoi un `update` nu repartait vers Albert ; `run` n'appelle
+pas le catalogue. Garde AC-R061 : ce fichier étant versionné, un `baseURL`
+déclaré qui diffère de la variable n'obtient la clé qu'après confirmation.
+`lib/ui.sh` refuse une variable hors `http(s)://` ou porteuse de guillemet,
+d'antislash ou d'espace ; `http://` reste accepté pour un proxy local, avec un
+avertissement de clé en clair. Coût assumé : un projet à `baseURL` personnalisé
+redemande confirmation à chaque `update` lancé sans la variable.
 `config/opencode.template.json` garde le défaut : aucun script ne le lit, le
 README documente un `sed`. Non-régression prouvée par `TESTS.md` S68, en CI.
 Ce que la surcharge fait perdre (règle §5.8) : l'inférence n'est plus souveraine,
