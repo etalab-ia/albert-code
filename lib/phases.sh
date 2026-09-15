@@ -218,7 +218,7 @@ phase_run() {
    if ! base_vm_exists; then
     info "Création de la VM de base nécessaire…"
     if confirm "Créer la VM de base maintenant ?"; then
-      _clear_base_vmarker
+      _clear_base_version_marker
       apply "créer la VM de base (setup VM isolée)" _vm setup --preinstall=node,gh,chromium,opencode --disk "${AC_VM_DISK}" || {
         warn "Création de la VM de base échouée."
         return 1
@@ -344,7 +344,7 @@ check_base_vm() {
   fi
   echo
   if confirm "Créer la VM de base maintenant (~plusieurs minutes) ?"; then
-    _clear_base_vmarker
+    _clear_base_version_marker
     apply "créer la VM de base (setup VM isolée)" _vm setup --preinstall=node,gh,chromium,opencode --disk "${AC_VM_DISK}" || {
       warn "Création de la VM de base échouée — tu pourras la créer plus tard."
     }
@@ -358,7 +358,7 @@ _agent_vm_state_dir() {
   printf '%s' "${AGENT_VM_STATE_DIR:-$HOME/.agent-vm}"
 }
 
-# _clear_base_vmarker — invalide le marqueur .agent-vm-base-version juste avant
+# _clear_base_version_marker — invalide le marqueur .agent-vm-base-version juste avant
 # de (re)créer la VM de base. Le moteur vendorisé supprime la VM (limactl
 # delete) au début de son setup mais ne touche JAMAIS au marqueur, écrit
 # seulement en fin de setup réussi (vendor/vm/agent-vm.sh). Sans ce retrait,
@@ -366,7 +366,7 @@ _agent_vm_state_dir() {
 # échoue) laisserait l'ancien marqueur et ferait passer pour prête une base
 # à moitié provisionnée. Via apply : annoncé seulement en dry-run, non
 # destructif.
-_clear_base_vmarker() {
+_clear_base_version_marker() {
   apply "supprimer l'ancien marqueur de version de la VM de base (re-posé en fin de setup)" \
     rm -f "$(_agent_vm_state_dir)/.agent-vm-base-version"
 }
@@ -392,7 +392,7 @@ base_vm_exists() {
       fi
       warn "La VM de base est incomplète : son installation a été interrompue"
       warn "(souvent un problème réseau ou proxy pendant l'installation des"
-      warn "paquets). Elle va être recréée — elle manque de zsh et d'opencode."
+      warn "paquets). Il faut la recréer : elle manque de zsh et d'opencode."
       return 1 ;;
     *) return 1 ;;
   esac

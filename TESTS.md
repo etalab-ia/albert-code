@@ -1081,7 +1081,7 @@ le fichier `.agent-vm-base-version` est présent dans `$(_agent_vm_state_dir)`) 
    "$vm_ver" ] || return 0`), ce qui déclenche la proposition de recréation de T7.8 au `run`.
 5. **Cas (e)** : recréation de la base — base absente de Lima (déjà supprimée par une recréation
    interrompue) + **ancien marqueur `.agent-vm-base-version` encore présent** → `check_base_vm`
-   (confirm=oui, `_vm` stubé) appelle `_clear_base_vmarker` **avant** `_vm setup` : le moteur
+   (confirm=oui, `_vm` stubé) appelle `_clear_base_version_marker` **avant** `_vm setup` : le moteur
    vendorisé supprime la VM mais jamais le marqueur, donc sans ce correctif un ancien marqueur
    subsisterait et ferait passer pour prête une base à moitié provisionnée. On vérifie que le
    marqueur a disparu au moment de l'appel setup.
@@ -1097,7 +1097,7 @@ marqueur masquer une base incomplète. **Rien n'est supprimé ni recréé par le
 
 **Validé le :** `bash tests/s71_base_vm_complete.sh` → « S71 : OK — 9 assertions » (exécuté en
 sandbox jetable, `FAKE_LIMA_LIST` piloté, `_vm` stubé, aucune VM réelle ni écriture hors sandbox).
-Le cas (e) a été vérifié : il échoue (ÉCHEC) si l'on retire les appels `_clear_base_vmarker`, puis
+Le cas (e) a été vérifié : il échoue (ÉCHEC) si l'on retire les appels `_clear_base_version_marker`, puis
 repasse OK une fois le correctif en place.
 
 ---
