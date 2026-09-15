@@ -7,7 +7,9 @@
 # Compatible bash 3.2. Sandbox HOME, aucune écriture hors bac.
 set -euo pipefail
 
-SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# CDPATH= : joué en « bash tests/x.sh », dirname rend « tests », un relatif nu
+# que cd chercherait dans CDPATH avant le dossier courant.
+SELF_DIR="$(CDPATH= cd -- "$(dirname "${BASH_SOURCE[0]}")/.." >/dev/null && pwd)"
 FAIL=0
 
 pass() { printf '  \033[32m✓\033[0m %s\n' "$1"; }
@@ -16,19 +18,47 @@ fail() { printf '  \033[31m✗\033[0m %s\n' "$1"; FAIL=1; }
 echo "S65 — OpenCode visible via zsh -l (sans symlink bash, Lima >= 2.2.0)"
 echo
 
-# --- 1. phase_run lance via login zsh, pas un opencode nu ----------------------
-# `_vm opencode` → limactl shell … opencode → /bin/bash -c opencode → PATH mort.
+# --- 1. OpenCode est lancé par un shell de CONNEXION --------------------------
+# L'invariant n'a pas changé (sans `zsh -l`, ~/.zshenv n'est pas lu : ni le PATH
+# d'OpenCode ni les secrets) — c'est QUI le garantit qui a changé.
+# Avant : albert-code contournait lui-même en `run --tty zsh -l -c "opencode --auto"`,
+# parce que le moteur vendored appelait le binaire nu.
+# Depuis agent-vm 0.1.0, le verbe `opencode` du moteur passe par
+# `_agent_vm_lima_run`, qui force `zsh -l -c`. albert-code délègue donc, et la
+# garantie repose sur le plancher de version — pas sur une chaîne recopiée ici.
 phases="$SELF_DIR/lib/phases.sh"
-if grep -q 'zsh -l -c "opencode --auto"' "$phases"; then
-  pass "phase_run lance OpenCode via zsh -l (PATH ~/.zshenv, secrets chargés)"
+vmlib="$SELF_DIR/lib/vm.sh"
+
+# L'appel est écrit sur deux lignes (continuation) : on aplatit avant de chercher.
+launch="$(tr '\n' ' ' < "$phases" | tr -s ' ')"
+case "$launch" in
+  *'apply "lancer la VM isolée" _vm '*' opencode'*)
+    pass "phase_run délègue au verbe opencode du moteur" ;;
+  *)
+    fail "phase_run doit déléguer au verbe opencode du moteur" ;;
+esac
+
+# Plus aucun appel limactl : tout passe par l'interface publique du moteur.
+# Les commentaires qui le mentionnent sont ignorés — c'est du code qu'on traque.
+if grep -vE '^\s*#' "$phases" | grep -q 'limactl'; then
+  fail "lib/phases.sh appelle encore limactl directement (le moteur s'en charge)"
 else
-  fail "phase_run doit lancer via zsh -l -c \"opencode --auto\", pas _vm opencode nu"
+  pass "plus d'appel limactl direct dans lib/phases.sh"
 fi
 
-if grep -E 'apply "lancer la VM isolée" _vm( --cpus.*)? opencode' "$phases" >/dev/null; then
-  fail "phase_run appelle encore _vm opencode (PATH bash Lima vide)"
+# Le plancher de version est ce qui rend la délégation sûre : sans lui, un
+# moteur antérieur relancerait le bug du PATH bash vide en silence.
+if grep -qE '^AC_AGENT_VM_MIN="\$\{AC_AGENT_VM_MIN:-[0-9]' "$vmlib"; then
+  pass "un plancher de version du moteur est déclaré (AC_AGENT_VM_MIN)"
 else
-  pass "plus d'appel _vm opencode nu dans phase_run"
+  fail "lib/vm.sh doit déclarer AC_AGENT_VM_MIN (garantie du lancement zsh -l)"
+fi
+
+# Et il doit être réellement opposé au moteur, pas seulement déclaré.
+if grep -q 'ac_vm_check_version' "$vmlib" && grep -q 'AC_AGENT_VM_MIN' "$phases"; then
+  pass "le plancher est vérifié à l'install et opposé au run"
+else
+  fail "AC_AGENT_VM_MIN déclaré mais jamais opposé au moteur"
 fi
 
 # --- 2. lib/phases.sh (ensure_vm_runtime) ne pose plus de symlink opencode -----

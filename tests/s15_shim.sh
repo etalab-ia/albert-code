@@ -4,7 +4,9 @@
 # Compatible bash 3.2.
 set -euo pipefail
 
-SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# CDPATH= : joué en « bash tests/x.sh », dirname rend « tests », un relatif nu
+# que cd chercherait dans CDPATH avant le dossier courant.
+SELF_DIR="$(CDPATH= cd -- "$(dirname "${BASH_SOURCE[0]}")/.." >/dev/null && pwd)"
 REAL_HOME="$HOME"
 FAIL=0
 

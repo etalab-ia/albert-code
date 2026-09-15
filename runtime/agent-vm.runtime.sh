@@ -6,10 +6,14 @@
 # Il s'exécute DANS la VM à chaque démarrage, juste après `~/.agent-vm/runtime.sh`.
 #
 # Rôles :
-#   1. Persister ALBERT_API_KEY (et CONTEXT7_API_KEY) dans le ~/.zshenv de la VM
-#      ( piège : shells non-interactifs ne lisent pas ~/.zshrc).
+#   1. Câbler l'auth GitHub (identité git + credential helper) si un jeton est là.
 #   2. Synchroniser les skills État (clone ou git pull de etalab-ia/skills).
-#   3. Vérifier la présence d'OpenCode.
+#   3. Vérifier OpenCode (présence + compatibilité avec --auto).
+#
+# Les secrets (ALBERT_API_KEY, CONTEXT7_API_KEY, GH_TOKEN, identité git) ne sont
+# PLUS réécrits ici : ils arrivent par ~/.agent-vm/env, que le moteur de VM
+# pousse dans la VM à chaque démarrage et que le ~/.zshenv de la VM auto-source
+# avec `set -a`. Ce script n'a donc qu'à les lire dans son environnement.
 #
 # Principes : idempotent (relançable sans casser) · non-destructif (additif).
 # Compatible bash 3.2. Ne jamais contenir de secret en clair.
@@ -30,8 +34,11 @@ Options:
   --dry-run   Affiche chaque action sans l'exécuter (test sur VM déjà configurée).
   --help      Affiche cette aide.
 
+Les secrets ne sont pas écrits par ce script : ils arrivent par ~/.agent-vm/env,
+poussé dans la VM à chaque démarrage par le moteur.
+
 Variables d'environnement (sandbox) :
-  HOME                   Redirige ~/.zshenv, ~/.config/opencode dans la VM.
+  HOME                   Redirige ~/.config/opencode dans la VM.
   OPENCODE_CONFIG_DIR     Dossier de config OpenCode (défaut: ~/.config/opencode).
 USAGE
       exit 0 ;;
@@ -64,10 +71,7 @@ _dry_gate() {
   return 0
 }
 _apply()        { local d="$1"; shift; _dry_gate "$d" || return 0; "$@"; }
-_apply_append() { local d="$1" f="$2" l="$3"; _dry_gate "$d" || return 0; printf '%s\n' "$l" >> "$f"; }
 _apply_mkdir()  { local d="$1" dir="$2"; _dry_gate "$d" || return 0; mkdir -p "$dir"; }
-_apply_touch()  { local d="$1" f="$2"; _dry_gate "$d" || return 0; touch "$f" 2>/dev/null || true; }
-_apply_chmod()  { local d="$1" mode="$2" f="$3"; _dry_gate "$d" || return 0; chmod "$mode" "$f" 2>/dev/null || true; }
 _apply_symlink() { local d="$1" t="$2" l="$3"; _dry_gate "$d" || return 0; ln -sf "$t" "$l" 2>/dev/null || true; }
 
 SKILLS_REPO="https://github.com/etalab-ia/skills.git"
@@ -75,50 +79,11 @@ SKILLS_CACHE="$OPENCODE_CONFIG_DIR/.albert-skills-cache"
 SKILLS_TARGET="$OPENCODE_CONFIG_DIR/skills"
 
 # -----------------------------------------------------------------------------
-# persist_env_var <VAR> <VALEUR>
-#   Réécrit SYSTÉMATIQUEMENT `export VAR=VALEUR` dans ~/.zshenv, à l'identique de
-#   `_ac_zsh_set` (lib/phases.sh, T10.2) : la ligne ancrée `^export VAR=` est
-#   remplacée à chaque exécution, propriété d'auto-réparation. Abstention : si
-#   VALEUR est vide, aucune ligne n'est émise — une valeur posée à la main dans
-#   la VM est ainsi préservée. Bash (le fichier a son shebang en bash : `local`
-#   et l'expansion `${val//…}` sont des bashismes), sans `sed -i` (règle AGENTS.md).
-#   Le `~/.zshenv` est forcé en 600 (contient des clés) sur le fichier final,
-#   pas seulement avant le `mv`.
-# -----------------------------------------------------------------------------
-persist_env_var() {
-  local var="$1" val="$2"
-  local zshenv="$HOME/.zshenv"
-
-  [ -z "$val" ] && return 0
-
-  if _dry_gate "réécrire export ${var}= dans ~/.zshenv"; then
-    _apply_touch "créer $zshenv si absent" "$zshenv"
-    local tmp safe_val line
-    tmp="$zshenv.tmp.$$"
-    : > "$tmp"
-    chmod 600 "$tmp"
-    while IFS= read -r line || [ -n "$line" ]; do
-      case "$line" in
-        "export ${var}="*) : ;;
-        *) printf '%s\n' "$line" >> "$tmp" ;;
-      esac
-    done < "$zshenv"
-    # Valeur entre simples quotes ; on neutralise les quotes internes.
-    safe_val="${val//\'/\'\"\'\"\'}"
-    printf "export %s='%s'\n" "$var" "$safe_val" >> "$tmp"
-    mv "$tmp" "$zshenv"
-    chmod 600 "$zshenv"
-    export "$var=$val"
-    _ok "$var réécrite dans ~/.zshenv"
-  fi
-}
-
-# -----------------------------------------------------------------------------
 # setup_github_auth — câble l'auth GitHub de la VM (push + ouverture de PR)
 #   SANS jamais contenir de secret : actif uniquement si GH_TOKEN est déjà dans
-#   l'environnement (posé par ~/.agent-vm/runtime.sh → ~/.zshenv de la VM).
-#   Rôles : (1) persister GH_TOKEN, (2) poser l'identité git globale
-#   (AC_GIT_USER_NAME / AC_GIT_USER_EMAIL), (3) brancher git sur le token via
+#   l'environnement (poussé par le moteur via ~/.agent-vm/env, auto-sourcé par
+#   le ~/.zshenv de la VM). Rôles : (1) poser l'identité git globale
+#   (AC_GIT_USER_NAME / AC_GIT_USER_EMAIL), (2) brancher git sur le token via
 #   `gh auth setup-git` (credential helper HTTPS). Idempotent. Token jamais loggé.
 #   SSH ne suffirait pas : `gh pr create` exige un token, pas une clé SSH.
 # -----------------------------------------------------------------------------
@@ -128,10 +93,7 @@ setup_github_auth() {
     return 0
   fi
 
-  # 1. Persister le token (shells non-interactifs + TUI).
-  persist_env_var "GH_TOKEN" "$GH_TOKEN"
-
-  # 2. Identité git globale (sinon commits sous une identité par défaut douteuse).
+  # 1. Identité git globale (sinon commits sous une identité par défaut douteuse).
   if [ -n "${AC_GIT_USER_NAME:-}" ] && [ -n "${AC_GIT_USER_EMAIL:-}" ]; then
     _apply "identité git : user.name"  git config --global user.name  "$AC_GIT_USER_NAME"
     _apply "identité git : user.email" git config --global user.email "$AC_GIT_USER_EMAIL"
@@ -140,7 +102,7 @@ setup_github_auth() {
     _warn "AC_GIT_USER_NAME / AC_GIT_USER_EMAIL absents — identité git non posée"
   fi
 
-  # 3. Brancher git sur le token pour le push HTTPS (idempotent).
+  # 2. Brancher git sur le token pour le push HTTPS (idempotent).
   if command -v gh >/dev/null 2>&1; then
     if _apply "gh auth setup-git (credential helper HTTPS)" gh auth setup-git; then
       [ "$DRY_RUN" -eq 0 ] && _ok "git branché sur le token — push + PR actifs" || true
@@ -257,11 +219,12 @@ sync_skills() {
 # Simple vérification de présence : on ne pose AUCUN symlink (ni dans
 # ~/.local/bin ni ailleurs).
 #
-# Justification : les secrets (~/.agent-vm.env : clés API, token GitHub) sont
-# chargés depuis ~/.zshenv uniquement (vendor/vm/agent-vm.setup.sh:93). Rendre
-# opencode atteignable depuis bash le ferait démarrer sans clé Albert : panne
-# plus opaque qu'un classique « command not found ». Le lancement par shell de
-# connexion (`zsh -l`, voir phase_run) doit rester la seule voie d'accès.
+# Justification : les secrets (~/.agent-vm.env : clés API, token GitHub) ne sont
+# chargés que par le ~/.zshenv de la VM, où le moteur pose la ligne qui
+# auto-source ce fichier. Rendre opencode atteignable depuis bash le ferait
+# démarrer sans clé Albert : panne plus opaque qu'un classique « command not
+# found ». Le lancement par shell de connexion (`zsh -l`, assuré par le verbe
+# `opencode` du moteur) doit rester la seule voie d'accès.
 # -----------------------------------------------------------------------------
 check_opencode() {
   local oc_bin=""
@@ -277,6 +240,35 @@ check_opencode() {
   fi
 
   _ok "OpenCode présent ($oc_bin)"
+
+  # Une version d'OpenCode qui ignore --auto ouvre son écran d'aide au lieu du
+  # TUI, sans erreur (AC-R041). On teste le drapeau plutôt qu'un numéro de
+  # version, et on met à jour si besoin.
+  local oc_help
+  oc_help="$("$oc_bin" --help 2>&1 || true)"
+  case "$oc_help" in
+    *--auto*) : ;;
+    *)
+      _warn "OpenCode trop ancien pour --auto — mise à jour…"
+      _apply "opencode upgrade" "$oc_bin" upgrade || \
+        _warn "Mise à jour d'OpenCode échouée — le lancement peut ouvrir l'aide au lieu du TUI."
+      ;;
+  esac
+}
+
+# -----------------------------------------------------------------------------
+# check_albert_key — filet de sécurité : sans clé, OpenCode démarre et échoue
+# à la première requête, ce qui est plus opaque qu'un avertissement ici.
+# La clé arrive par ~/.agent-vm/env (poussé par le moteur à chaque démarrage).
+# N'affiche JAMAIS la valeur.
+# -----------------------------------------------------------------------------
+check_albert_key() {
+  if [ -n "${ALBERT_API_KEY:-}" ]; then
+    _ok "Clé Albert présente dans la VM"
+    return 0
+  fi
+  _warn "ALBERT_API_KEY absente de la VM — OpenCode démarrera sans pouvoir appeler Albert."
+  _warn "Vérifie ~/.agent-vm/env sur ton poste, puis relance « albert-code update »."
 }
 
 # =============================================================================
@@ -284,18 +276,18 @@ check_opencode() {
 # =============================================================================
 _info "Runtime Albert Code — démarrage…"
 
-# 1. Persistance des clés dans le ~/.zshenv de la VM (shells non-interactifs).
-#    Les valeurs proviennent de l'environnement (posées par ~/.agent-vm/runtime.sh).
-persist_env_var "ALBERT_API_KEY"  "${ALBERT_API_KEY:-}"
-persist_env_var "CONTEXT7_API_KEY" "${CONTEXT7_API_KEY:-}"
+# Les clés (ALBERT_API_KEY, CONTEXT7_API_KEY, GH_TOKEN, identité git) sont déjà
+# dans l'environnement : le moteur pousse ~/.agent-vm/env à chaque démarrage et
+# le ~/.zshenv de la VM l'auto-source. Rien à réécrire ici.
+check_albert_key
 
-# 2. Auth GitHub (push + ouverture de PR depuis la VM) — actif si GH_TOKEN présent.
+# 1. Auth GitHub (push + ouverture de PR depuis la VM) — actif si GH_TOKEN présent.
 setup_github_auth
 
-# 3. Synchronisation des skills (fraîches à chaque boot).
+# 2. Synchronisation des skills (fraîches à chaque boot).
 sync_skills
 
-# 4. Vérification d'OpenCode.
+# 3. Vérification d'OpenCode (présence + compatibilité --auto).
 check_opencode
 
 _ok "Runtime Albert Code prêt. Lance « opencode » pour démarrer."

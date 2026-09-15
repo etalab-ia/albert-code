@@ -2,38 +2,28 @@
 # =============================================================================
 # Albert Code — phases d'installation, sourçables par install.sh ET bin/albert-code.
 # -----------------------------------------------------------------------------
-# Ce fichier définit les 3 phases :
-#   phase_a()  — bootstrap hôte : moteur VM, clés, skills, runtime VM.
-#   phase_b()  — scaffold projet : AGENTS.md + opencode.json + runtime + choix skills/MCP.
-#   phase_run() — lancement de la VM isolée.
+# Ce fichier définit les 4 phases :
+#   phase_a()    — bootstrap hôte : moteur VM, clés (~/.agent-vm/env), skills.
+#   phase_b()    — scaffold projet : AGENTS.md + opencode.json + runtime projet
+#                  + choix skills/MCP.
+#   phase_run()  — lancement de la VM isolée.
+#   phase_update() — rafraîchit un projet déjà configuré.
 #
-# Nécessite que lib/ui.sh ait été sourcé avant (pour apply_*, confirm, etc.).
-# Variables requises : SELF_DIR, LIB_DIR, AGENT_VM_DIR, AC_VM_*.
+# Nécessite que lib/ui.sh ET lib/vm.sh aient été sourcés avant (apply_*,
+# confirm, _vm, ac_vm_*).
+# Variables requises de l'appelant : SELF_DIR, LIB_DIR, AC_VM_CPUS,
+# AC_VM_MEMORY, AC_VM_DISK.
 # =============================================================================
 
-# =============================================================================
-# Source agent-vm.sh (vendored) — rend la fonction agent-vm() disponible
-# en interne pour _vm() sans shim ni PATH user.
-# =============================================================================
-_agent_vm_sourced=0
-if [ -f "$AGENT_VM_DIR/agent-vm.sh" ]; then
-  source "$AGENT_VM_DIR/agent-vm.sh" 2>/dev/null && _agent_vm_sourced=1
-fi
+# Les secrets de la VM vivent dans ~/.agent-vm/env, mais ce fichier n'est jamais
+# touché ici : `agent-vm env` en porte le format et le quoting. Aucun chemin à
+# déclarer de ce côté.
 
-# _vm : wrapper interne pour appeler agent-vm (setup, opencode, etc.)
-# sans dépendre d'un shim sur le PATH. Usage : _vm setup --disk 32
-_vm() {
-  if [ "$_agent_vm_sourced" -eq 1 ]; then
-    # Le vendored (agent-vm.sh) est écrit pour bash récent : sous set -u de
-    # bash 3.2 (macOS), l'expansion d'un tableau vide "${arr[@]}" plante en
-    # "unbound variable". On l'exécute dans un sous-shell permissif (comme le
-    # faisait l'ancien shim), sans toucher au vendored.
-    ( set +u +e +o pipefail; agent-vm "$@" )
-  else
-    err "agent-vm.sh introuvable dans $AGENT_VM_DIR — réinstalle Albert Code."
-    return 1
-  fi
-}
+# Défauts locaux : ces deux chemins sont aussi posés par les points d'entrée,
+# mais les avoir ici évite qu'un sourçage partiel (un test qui ne charge que les
+# fonctions) casse sur une variable non liée sous `set -u`.
+RUNTIME_VM_FILE="${RUNTIME_VM_FILE:-$HOME/.agent-vm/runtime.sh}"
+ZSHENV="${ZSHENV:-$HOME/.zshenv}"
 
 # =============================================================================
 # Phase A — Bootstrap hôte (idempotent)
@@ -105,11 +95,15 @@ phase_a() {
 
   echo
 
-  # A.5 Source le moteur de VM vendored (agent-vm)
+  # A.5 Moteur de VM (agent-vm) : détecté sur le poste, installé si absent
   install_agent_vm
 
-  # A.6 Runtime VM (~/.agent-vm/runtime.sh) — exporte les clés dans la VM
-  ensure_vm_runtime
+  # A.6 Secrets de la VM (~/.agent-vm/env) — poussés à chaque démarrage
+  ensure_vm_secrets
+
+  # A.6bis Migrations depuis l'ancien canal (bloc marqué + exports hôte)
+  migrate_vm_runtime_block
+  migrate_host_gh_token
 
   # A.7 Skills État (côté hôte, pour OpenCode hors VM)
   sync_skills_host
@@ -167,16 +161,16 @@ phase_b() {
 
   # B.4 [4/4] Runtime de la VM
   title "[4/4] Runtime VM"
-  copy_template "runtime/agent-vm.runtime.sh" "./.agent-vm.runtime.sh" "runtime VM (sync skills + clés)"
+  copy_template "runtime/agent-vm.runtime.sh" "./.agent-vm.runtime.sh" "runtime VM (sync skills)"
   apply "chmod +x .agent-vm.runtime.sh" chmod +x "./.agent-vm.runtime.sh" 2>/dev/null || true
-  # Synchroniser les clés potentiellement persistées par le setup (ex. Context7)
-  # vers le runtime VM (~/.agent-vm/runtime.sh). ensure_vm_runtime est idempotent :
-  # il remplace le bloc marqué sans dupliquer et sans écraser GH_TOKEN / identité git.
-  ensure_vm_runtime
+  # Propager les clés éventuellement saisies pendant ce setup (ex. Context7)
+  # vers le canal de secrets de la VM. Idempotent : chaque ligne gérée est
+  # réécrite, les lignes non gérées du fichier sont conservées.
+  ensure_vm_secrets
 
   compute_effective_vm_resources
   echo
-  if [ -n "${GH_TOKEN:-}" ] || file_contains "$ZSHENV" "GH_TOKEN"; then
+  if _ac_agent_secret_set GH_TOKEN; then
     ok "Push et PR GitHub configurés depuis la VM."
   else
     info "Push/PR GitHub non configuré — voir le § Push & PR depuis la VM du README."
@@ -214,11 +208,20 @@ phase_run() {
   compute_effective_vm_resources
   check_disk_space_warning
 
+  # Un seul appel au moteur pour tout savoir : base présente, VM du projet,
+  # obsolescence. Remplace la lecture directe de `limactl list` et des fichiers
+  # d'état internes du moteur.
+  if ! ac_vm_info "$PWD"; then
+    err "Moteur de VM injoignable ou trop ancien (il faut au moins %s)." "$AC_AGENT_VM_MIN"
+    info "Lance « albert-code install » pour le vérifier ou le mettre à jour."
+    return 1
+  fi
+
   # Créer la VM de base si nécessaire
-   if ! base_vm_exists; then
+  if [ "$AC_VM_INFO_base_exists" != "1" ]; then
     info "Création de la VM de base nécessaire…"
     if confirm "Créer la VM de base maintenant ?"; then
-      apply "créer la VM de base (setup VM isolée)" _vm setup --preinstall=node,gh,chromium,opencode --disk "${AC_VM_DISK}" || {
+      create_base_vm || {
         warn "Création de la VM de base échouée."
         return 1
       }
@@ -228,64 +231,59 @@ phase_run() {
     fi
   fi
 
-  # Lancer la VM (ou rattachement si déjà créée — pas de pipe, cf. post-mortem v1)
+  # T7.8 : la VM projet a-t-elle été clonée d'une base périmée ? Si oui, la base
+  # reconstruite a sans doute remplacé zsh/opencode et le lancement échouerait
+  # sur un « command not found » silencieux. Le verdict vient maintenant du
+  # moteur (vm_stale), qui vaut « unknown » quand rien ne permet de trancher —
+  # on n'avertit que sur un « 1 » franc.
+  local reset_flag=""
+  if [ "$AC_VM_INFO_vm_stale" = "1" ]; then
+    warn "La VM de ce projet a été créée depuis une version antérieure"
+    warn "de la VM de base."
+    warn "Sans recréation, zsh ou opencode peuvent manquer et le lancement"
+    warn "échouera sur un « command not found »."
+    info "Recréer détruit la VM projet : sessions OpenCode, paquets"
+    info "installés dans la bulle, fichiers hors du dossier monté."
+    info "Ton code (monté depuis l'hôte) est intact."
+    if confirm "Recréer la VM projet depuis la base actuelle ?"; then
+      reset_flag="--reset"
+    else
+      warn "VM projet conservée — albert-code run pourra échouer"
+      warn "(zsh/opencode absents). La recréation reste possible plus tard."
+    fi
+  fi
+
   echo
   info "Ouverture de la bulle isolée…"
   info "  Albert Code lance OpenCode dans la VM"
   echo
 
-  local _vm_name _vm_list
-  _vm_name="$(_agent_vm_name)"
-  # Capture d'abord (aucun pipe → immunisé SIGPIPE/pipefail, cf. T7.6 post-mortem).
-  # `|| true` : sortie vide ne casse pas set -e.
-  _vm_list="$(limactl list -q 2>/dev/null || true)"
-  # Régression Lima >= 2.2.0 (PR lima-vm/lima#5194, publiée le 21/07/2026) :
-  # Lima a introduit un champ `user.shell` et n'utilise plus le shell de
-  # connexion du guest pour `limactl shell` — le défaut est /bin/bash. Le
-  # `chsh` posé par vendor/vm/agent-vm.setup.sh est devenu inopérant, et bash
-  # non-login ne lit pas ~/.zshenv : ~/.opencode/bin n'est pas dans le PATH
-  # → « opencode: command not found ». On lance donc EXPLICITEMENT en
-  # `zsh -l` (shell de connexion) qui charge ~/.zshenv (PATH + secrets).
-  # NE PAS « réparer » en restaurant le chsh : il est ignoré par Lima >= 2.2.0.
-  # --tty pour le TUI. Ne pas appeler le verbe vendored `opencode` (même piège PATH).
-  case $'\n'"$_vm_list"$'\n' in
-    *$'\n'"$_vm_name"$'\n'*)
-      info "VM déjà créée — rattachement sans re-réglage des ressources."
-      # T7.8 : la VM projet a-t-elle été clonée d'une base périmée ? Si oui,
-      # la base reconstruite a sans doute remplacé zsh/opencode et le
-      # lancement échouerait sur un « command not found » silencieux. On
-      # propose la recréation (destructive dans la VM : sessions, paquets
-      # installés dans la bulle, fichiers hors montage sont perdus) avant de
-      # lancer.
-      if _project_vm_from_stale_base "$_vm_name"; then
-        warn "La VM de ce projet a été créée depuis une version antérieure"
-        warn "de la VM de base."
-        warn "Sans recréation, zsh ou opencode peuvent manquer et le lancement"
-        warn "échouera sur un « command not found »."
-        info "Recréer détruit la VM projet : sessions OpenCode, paquets"
-        info "installés dans la bulle, fichiers hors du dossier monté."
-        info "Ton code (monté depuis l'hôte) est intact."
-        if confirm "Recréer la VM projet depuis la base actuelle ?"; then
-          apply "recréer la VM projet (--reset)" _vm --reset run --tty zsh -l -c "opencode --auto"
-        else
-          warn "VM projet conservée — albert-code run pourra échouer"
-          warn "(zsh/opencode absents). La recréation reste possible plus tard."
-          apply "lancer la VM isolée" _vm run --tty zsh -l -c "opencode --auto"
-        fi
-      else
-        apply "lancer la VM isolée" _vm run --tty zsh -l -c "opencode --auto"
-      fi ;;
-    *)
-      apply "lancer la VM isolée" _vm --cpus "${EFF_CPUS}" --memory "${EFF_MEM}" --disk "${AC_VM_DISK}" run --tty zsh -l -c "opencode --auto" ;;
-  esac
+  # Les ressources sont AUSSI passées ici, alors que la VM de base les porte
+  # déjà (create_base_vm) et que le clone en hérite. Ce n'est pas une
+  # redondance oubliée : c'est ce qui fait que changer AC_VM_CPUS / AC_VM_MEMORY
+  # prend effet au `run` suivant, sans reconstruire la VM de base. Sur une VM
+  # déjà au bon format, l'appel ne coûte qu'une comparaison côté moteur.
+  #
+  # Le retirer serait tentant mais supprimerait cette capacité en silence : les
+  # deux variables sont documentées dans le README comme surchargeables.
+  #
+  # Que ce soit sans douleur tient à agent-vm >= 0.1.0, qui compare les
+  # ressources au lieu de déclencher sur la simple présence d'un flag — c'était
+  # AC-R037, le prompt « Stop the VM ? » à chaque lancement.
+  #
+  # Le verbe `opencode` du moteur lance déjà `opencode --auto` via un zsh de
+  # connexion : plus besoin de refaire ici le `run --tty zsh -l -c` qui
+  # contournait la régression Lima 2.2.0 (le moteur la gère depuis 0.1.0).
+  apply "lancer la VM isolée" _vm ${reset_flag:+$reset_flag} \
+    --cpus "${EFF_CPUS}" --memory "${EFF_MEM}" --disk "${AC_VM_DISK}" opencode
 }
 
 # phase_update — rafraîchit un projet déjà configuré (EPIC 9, T9.3).
 # Non interactif côté configuration : ne repose NI les questions MCP NI les
 # questions skills. Applique la réparation du catalogue (T9.2) sur ./opencode.json
-# (confirmation avant d'écrire, comme T9.2), puis régénère le bloc runtime marqué
-# via ensure_vm_runtime (embarque le garde-fou OpenCode T8.3). Affiche un
-# récapitulatif des changements, ou "rien à faire" si le projet était déjà à jour.
+# (confirmation avant d'écrire, comme T9.2), puis réécrit les secrets de la VM
+# (~/.agent-vm/env). Affiche un récapitulatif des changements, ou "rien à faire"
+# si le projet était déjà à jour.
 phase_update() {
   title "Albert Code — mise à jour du projet"
   echo
@@ -313,16 +311,20 @@ phase_update() {
   sync_agents_md
   [ "$AC_AGENTS_CHANGED" -eq 1 ] && changed=1
 
-  # 3. Runtime VM : régénérer le bloc marqué (idempotent, garde-fou OpenCode T8.3).
-  #    Recalcule ALBERT_API_KEY depuis l'environnement si besoin, pas de question.
+  # 3. Secrets VM : réécrire ~/.agent-vm/env (idempotent, auto-réparant).
+  #    Recalcule les valeurs depuis l'environnement / ~/.zshenv, pas de question.
   echo
-  ensure_vm_runtime
+  local secrets="réécrits"
+  ensure_vm_secrets || secrets="NON mis à jour (moteur de VM absent)"
+  migrate_vm_runtime_block
 
   echo
+  # Le récapitulatif dit ce qui s'est passé, pas ce qui était prévu : annoncer
+  # « secrets réécrits » alors que le moteur manquait serait faux.
   if [ "$changed" -eq 1 ]; then
-    ok "Mise à jour effectuée : opencode.json réparé, AGENTS.md rafraîchi, bloc runtime VM régénéré."
+    ok "Mise à jour effectuée : opencode.json réparé, AGENTS.md rafraîchi, secrets VM %s." "$secrets"
   else
-    info "Rien à faire : opencode.json à jour, AGENTS.md à jour, bloc runtime VM régénéré."
+    info "Rien à faire : opencode.json à jour, AGENTS.md à jour, secrets VM %s." "$secrets"
   fi
   print_next_steps
   echo
@@ -332,104 +334,60 @@ phase_update() {
 # Fonctions helpers (extraites de install.sh ou nouvelles)
 # =============================================================================
 
-# check_base_vm — détection et création de la VM de base
+# AC_VM_PREINSTALL — composants demandés au moteur pour la VM de base.
+# La liste est délibérément explicite plutôt que « default » : elle n'installe
+# qu'OpenCode (pas les 4 harnais, cf. AC-R020 où un installateur en échec
+# faisait tomber tout le setup), et surtout elle OMET « mcp-chrome ».
+# C'est ce qui rend vrai le Y/N chrome-devtools du setup projet : le MCP n'est
+# pas câblé globalement dans la VM, il est déclaré par projet dans opencode.json.
+# Sur un moteur antérieur à ce nom, l'omission est sans effet (le MCP global
+# revient) : aucune erreur, juste le comportement d'avant.
+AC_VM_PREINSTALL="${AC_VM_PREINSTALL:-node,gh,chromium,opencode}"
+
+# check_base_vm — détection et création de la VM de base.
+# Trois cas, pas deux : le moteur répond « unknown » quand il ne peut pas savoir
+# (Lima absent). On ne propose alors rien — proposer une création qui échouera
+# est pire que se taire, et la Phase A a déjà signalé Lima manquant.
 check_base_vm() {
-  if ! command -v limactl >/dev/null 2>&1; then
+  if ! ac_vm_info "$PWD"; then
     return 0
   fi
-  if base_vm_exists; then
-    ok "VM de base déjà créée"
-    return 0
-  fi
+  case "$AC_VM_INFO_base_exists" in
+    1) ok "VM de base déjà créée"; return 0 ;;
+    unknown) return 0 ;;
+  esac
   echo
   if confirm "Créer la VM de base maintenant (~plusieurs minutes) ?"; then
-    apply "créer la VM de base (setup VM isolée)" _vm setup --preinstall=node,gh,chromium,opencode --disk "${AC_VM_DISK}" || {
-      warn "Création de la VM de base échouée — tu pourras la créer plus tard."
-    }
+    create_base_vm || warn "Création de la VM de base échouée — tu pourras la créer plus tard."
   fi
 }
 
-# base_vm_exists — 0 si la VM de base existe
-# Détection sans pipe : `limactl list -q | grep -q` est un faux négatif
-# intermittent sous set -o pipefail (course SIGPIPE, cf. T7.6 post-mortem) —
-# grep -q ferme le pipe, limactl prend un SIGPIPE, pipefail fait échouer le tout.
-# base_vm_exists est appelé dans phase_run/check_base_vm : un faux négatif
-# reproposait la création de la VM de base à chaque run. Capture d'abord, case pur.
-base_vm_exists() {
-  command -v limactl >/dev/null 2>&1 || return 1
-  local _list
-  _list="$(limactl list -q 2>/dev/null || true)"
-  case $'\n'"$_list"$'\n' in
-    *$'\n'agent-vm-base$'\n'*) return 0 ;;
-    *) return 1 ;;
-  esac
+# create_base_vm — crée la VM de base aux ressources voulues.
+#
+# Les ressources sont passées ICI, pas seulement au lancement : `limactl create`
+# les grave dans la VM de base, et chaque VM projet en est un `limactl clone`
+# qui en hérite. Sans ces deux flags, la base se construit aux défauts du moteur
+# (1 CPU / 3 GiB) — et c'est sur cette machine-là que tournent apt-get, Node,
+# Docker, Chromium et OpenCode, donc l'installation est inutilement lente.
+create_base_vm() {
+  # EFF_* vient de compute_effective_vm_resources (plafond hôte). Les appelants
+  # l'ont normalement déjà appelée ; on ne suppose pas.
+  [ -n "${EFF_CPUS:-}" ] || compute_effective_vm_resources
+  apply "créer la VM de base (setup VM isolée)" \
+    _vm setup --preinstall="$AC_VM_PREINSTALL" \
+      --cpus "${EFF_CPUS}" --memory "${EFF_MEM}" --disk "${AC_VM_DISK}"
 }
 
-# _project_vm_from_stale_base <vm_name> — la VM projet a-t-elle été clonée
-# d'une base plus ancienne que la base actuelle ? (T7.8, AC-R044)
-# Reprend la comparaison du moteur de VM (vendor/vm/agent-vm.sh ~408) :
-# fichiers de version du répertoire d'état, base contre VM projet.
-# Retour : 0 = périmée (il faut recréer), 1 = à jour ou indéterminable.
-# Ne décide jamais sur une information absente : sans fichier de version de
-# base, on n'affirme rien.
-_project_vm_from_stale_base() {
-  local vm_name="$1"
-  local state="${AGENT_VM_STATE_DIR:-$HOME/.agent-vm}"
-  local base_ver="$state/.agent-vm-base-version"
-  local vm_ver="$state/.agent-vm-version-${vm_name}"
-  [ -f "$base_ver" ] || return 1
-  [ -f "$vm_ver" ] || return 0
-  local base_val vm_val
-  base_val="$(cat "$base_ver" 2>/dev/null)"
-  vm_val="$(cat "$vm_ver" 2>/dev/null)"
-  [ "$base_val" != "$vm_val" ]
-}
-
-# install_agent_vm — vérifie que le bundle vendored est présent (plus de clone).
+# install_agent_vm — s'assure que le moteur de VM est présent et utilisable.
+# Ne vérifie plus un dossier vendored : il résout le moteur installé sur le
+# poste, propose de l'installer s'il manque, et pose la ligne de sourçage pour
+# que « agent-vm » reste utilisable seul (l'inverse de ce que faisait T7.2).
 install_agent_vm() {
-  if [ ! -f "$AGENT_VM_DIR/agent-vm.sh" ]; then
-    err "agent-vm.sh introuvable dans $AGENT_VM_DIR — le bundle est incomplet."
+  if ! ac_vm_ensure_installed; then
+    echo
+    err "Installation interrompue : Albert Code a besoin d'agent-vm >= %s." "$AC_AGENT_VM_MIN"
     exit 1
   fi
-  if [ "$_agent_vm_sourced" -eq 0 ]; then
-    # Si le source a échoué (bash 3.2) on ressource ici
-    source "$AGENT_VM_DIR/agent-vm.sh" 2>/dev/null && _agent_vm_sourced=1
-  fi
-  if [ "$_agent_vm_sourced" -eq 1 ]; then
-    ok "Moteur de VM prêt (vendored dans $AGENT_VM_DIR)"
-  else
-    err "Échec du chargement du moteur de VM ($AGENT_VM_DIR/agent-vm.sh) — bundle incomplet."
-    exit 1
-  fi
-
-  # Nettoyage non-destructif : si un ancien shim agent-vm ou un sourçage
-  # dans le rc traîne, proposer de les retirer.
-  if command -v agent-vm >/dev/null 2>&1; then
-    local _vm_real
-    _vm_real="$(command -v agent-vm 2>/dev/null)"
-    # Si c'est un shim exécutable (pas la fonction shell), proposer le retrait
-    if [ -x "$_vm_real" ] && [ -f "$_vm_real" ]; then
-      warn "Ancien shim du moteur de VM détecté : $_vm_real"
-      if confirm "Retirer l'ancien shim (Albert Code utilise désormais le moteur vendored) ?"; then
-        rm -f "$_vm_real"
-        ok "Ancien shim retiré"
-      fi
-    fi
-  fi
-
-  # Vérifier les lignes de sourçage dans les rc (installations pré-vendor)
-  for _rc_file in "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.profile"; do
-    [ -f "$_rc_file" ] || continue
-    if file_contains "$_rc_file" "agent-vm.sh"; then
-      warn "Ancienne ligne de sourçage du moteur de VM trouvée dans $_rc_file"
-      if confirm "Retirer la ligne de sourçage obsolète de $_rc_file ?"; then
-        _tmp="$(mktemp)"
-        grep -v "agent-vm.sh" "$_rc_file" > "$_tmp" || true
-        mv "$_tmp" "$_rc_file"
-        ok "Ligne retirée de $_rc_file"
-      fi
-    fi
-  done
 }
 
 # warn_secret_shadowing — garde-fou anti-shadowing (T10.11).
@@ -457,184 +415,189 @@ warn_secret_shadowing() {
   done
 }
 
-# ensure_vm_runtime — ~/.agent-vm/runtime.sh
-ensure_vm_runtime() {
-  apply_mkdir "créer $(dirname "$RUNTIME_VM_FILE")" "$(dirname "$RUNTIME_VM_FILE")"
-  apply_touch "créer $RUNTIME_VM_FILE si absent" "$RUNTIME_VM_FILE"
-  apply_chmod "chmod 600 $RUNTIME_VM_FILE (contient une clé)" 600 "$RUNTIME_VM_FILE"
-  info "Configuration du runtime VM (~/.agent-vm/runtime.sh)…"
+# =============================================================================
+# Secrets de la VM — ~/.agent-vm/env
+# -----------------------------------------------------------------------------
+# Le moteur de VM pousse ce fichier dans chaque VM à chaque démarrage, et le
+# ~/.zshenv de la VM l'auto-source (`set -a`). Les valeurs sont donc rafraîchies
+# à chaque lancement, rotables sans reconstruire la VM : c'est la propriété
+# d'auto-réparation que l'ancien bloc marqué de ~/.agent-vm/runtime.sh
+# obtenait en réécrivant à la main le ~/.zshenv de la VM depuis l'hôte.
+#
+# Ce que ce changement fait perdre, explicitement :
+#   - Le garde-fou de divergence (T10.11) disparaît. Il n'a plus d'objet : il
+#     surveillait deux lignes par secret (helper + export) dans le runtime, il
+#     n'y en a plus qu'une, dans un seul fichier.
+#   - GH_TOKEN et l'identité git ne sont plus écrits dans le ~/.zshenv de
+#     l'HÔTE. C'est le but : une variable exportée est ambiante, donc le `gh` de
+#     l'utilisateur héritait du jeton de l'agent — restreint à une organisation
+#     depuis T10.3 — et renvoyait des 404 trompeurs sur ses propres dépôts.
+#     ALBERT_API_KEY et CONTEXT7_API_KEY restent dans ~/.zshenv : ce sont les
+#     clés de l'utilisateur, utiles sur l'hôte (le catalogue Albert est
+#     interrogé depuis l'hôte par `albert-code update`).
+# =============================================================================
 
-  local albert_val="${ALBERT_API_KEY:-}"
-  if [ -z "$albert_val" ] && file_contains "$ZSHENV" "ALBERT_API_KEY"; then
-    albert_val="$(grep -E "^export ALBERT_API_KEY=" "$ZSHENV" | head -1 | sed -E "s/^export ALBERT_API_KEY=['\"]?//; s/['\"]?$//")"
+# _ac_sq_escape <VALEUR> — neutralise les apostrophes pour une valeur destinée à
+# vivre entre simples quotes dans un fichier sourcé par un shell (`'` → `'"'"'`).
+# Ne sert plus que pour ~/.zshenv, qui reste du ressort d'Albert Code ; le canal
+# de secrets de la VM est écrit par le moteur.
+#
+# Via sed, PAS via `${val//\'/\'\"\'\"\'}` : bash 3.2 (celui de macOS) conserve
+# les antislashs dans la partie remplacement et produit `avec\'"\'"\'quote`, ce
+# qui fait une erreur de syntaxe dans le fichier. Vérifié sur bash 3.2 et 5.2.
+# Cas réel : une identité git du type « O'Brien ».
+_ac_sq_escape() {
+  printf '%s' "$1" | sed "s/'/'\"'\"'/g"
+}
+
+# _ac_env_set <VAR> <VALEUR> — écrit un secret dans le canal du moteur.
+#
+# Délégué à `agent-vm env set` : le fichier est SOURCÉ par le shell de la VM, un
+# seul échappement raté y coûte tous les secrets d'un coup, et le moteur teste
+# ce quoting sur bash 3.2 (celui de macOS, qui diverge sur ce point précis).
+# Ce n'est pas à Albert Code de refaire ça.
+#
+# Réécriture systématique : c'est ce qui répare une valeur périmée. Abstention
+# sur une valeur vide, pour ne pas effacer ce qui aurait été posé à la main.
+_ac_env_set() {
+  local var="$1" val="$2"
+  [ -z "$val" ] && return 0
+  apply "écrire ${var} dans ~/.agent-vm/env" _vm env set "$var" "$val"
+}
+
+# _ac_host_value <VAR> — valeur du secret côté hôte : l'environnement d'abord,
+# puis la ligne `export VAR=` de ~/.zshenv (installations antérieures au canal
+# env). Vide si introuvable.
+#
+# Le dé-quotage est volontairement sommaire : il ne sert qu'à la migration
+# d'une ligne que persist_zshenv a écrite, dont on connaît la forme exacte.
+_ac_host_value() {
+  local var="$1" val=""
+  eval "val=\${${var}:-}"
+  if [ -z "$val" ] && file_contains "$ZSHENV" "^export ${var}="; then
+    val="$(grep -E "^export ${var}=" "$ZSHENV" | head -1 | sed -E "s/^export ${var}=['\"]?//; s/['\"]?\$//")"
+    val="$(printf '%s' "$val" | sed "s/'\"'\"'/'/g")"
   fi
-  local ctx7_val="${CONTEXT7_API_KEY:-}"
-  if [ -z "$ctx7_val" ] && file_contains "$ZSHENV" "CONTEXT7_API_KEY"; then
-    ctx7_val="$(grep -E "^export CONTEXT7_API_KEY=" "$ZSHENV" | head -1 | sed -E "s/^export CONTEXT7_API_KEY=['\"]?//; s/['\"]?$//")"
-  fi
-  local gh_token_val="${GH_TOKEN:-}"
-  if [ -z "$gh_token_val" ] && file_contains "$ZSHENV" "GH_TOKEN"; then
-    gh_token_val="$(grep -E "^export GH_TOKEN=" "$ZSHENV" | head -1 | sed -E "s/^export GH_TOKEN=['\"]?//; s/['\"]?$//")"
-  fi
-  local git_name_val="${AC_GIT_USER_NAME:-}"
-  if [ -z "$git_name_val" ] && file_contains "$ZSHENV" "AC_GIT_USER_NAME"; then
-    git_name_val="$(grep -E "^export AC_GIT_USER_NAME=" "$ZSHENV" | head -1 | sed -E "s/^export AC_GIT_USER_NAME=['\"]?//; s/['\"]?$//")"
-  fi
-  local git_email_val="${AC_GIT_USER_EMAIL:-}"
-  if [ -z "$git_email_val" ] && file_contains "$ZSHENV" "AC_GIT_USER_EMAIL"; then
-    git_email_val="$(grep -E "^export AC_GIT_USER_EMAIL=" "$ZSHENV" | head -1 | sed -E "s/^export AC_GIT_USER_EMAIL=['\"]?//; s/['\"]?$//")"
+  printf '%s' "$val"
+}
+
+# persist_agent_secret <VAR> <VALEUR> — secret destiné à la VM SEULEMENT.
+# Écrit dans ~/.agent-vm/env et pas dans le ~/.zshenv de l'hôte : ces variables
+# n'ont aucune raison d'être ambiantes dans le shell de l'utilisateur, et un
+# GH_TOKEN exporté capture son propre `gh` (cf. migrate_host_gh_token).
+# Également exporté dans le processus courant, pour que la suite de la phase
+# (ensure_vm_secrets, récapitulatif) voie la valeur fraîche.
+persist_agent_secret() {
+  local var="$1" val="$2"
+  [ -z "$val" ] && return 0
+  # Pas de mkdir/chmod ici : `agent-vm env set` crée le dossier et force le 600.
+  _ac_env_set "$var" "$val"
+  # Export process-local : la suite de la phase (ensure_vm_secrets, récap) doit
+  # voir la valeur fraîche. Sans effet sur le shell de l'utilisateur.
+  export "$var=$val"
+  # Ne pas annoncer une écriture qui n'a pas eu lieu en dry-run.
+  [ "${DRY_RUN:-0}" -eq 0 ] && ok "%s enregistrée pour la VM (~/.agent-vm/env)" "$var"
+  return 0
+}
+
+# _ac_agent_secret_set <VAR> — 0 si la variable a une valeur pour la VM, en
+# regardant les deux sources possibles : l'environnement courant et le canal
+# ~/.agent-vm/env. Sert aux récapitulatifs, jamais à afficher une valeur.
+_ac_agent_secret_set() {
+  local var="$1" cur=""
+  eval "cur=\${${var}:-}"
+  [ -n "$cur" ] && return 0
+  # `env has` interroge le FICHIER, pas l'environnement ambiant : c'est la
+  # question qu'on pose ici.
+  _vm env has "$var" >/dev/null 2>&1
+}
+
+# ensure_vm_secrets — alimente ~/.agent-vm/env. Idempotent, additif (les lignes
+# non gérées par Albert Code sont conservées), 600.
+ensure_vm_secrets() {
+  # L'écriture est déléguée au moteur : sans lui, on ne peut rien faire. On
+  # sort AVANT d'annoncer quoi que ce soit, plutôt que d'échouer cinq fois de
+  # suite et de conclure par un « configurés » mensonger.
+  if ! ac_vm_present; then
+    warn "Moteur de VM introuvable — secrets de la VM non mis à jour."
+    info "Lance « albert-code install » pour l'installer, puis relance."
+    return 1
   fi
 
-  # T10.11 : garde-fou anti-shadowing (source racine côté poste).
+  info "Configuration des secrets de la VM (~/.agent-vm/env)…"
+
+  # Garde-fou anti-shadowing côté hôte (T10.11) : toujours pertinent, c'est là
+  # qu'on lit les valeurs.
   warn_secret_shadowing
 
-  local safe_albert="" safe_ctx="" safe_gh="" safe_name="" safe_email=""
-  [ -n "$albert_val" ] && safe_albert="${albert_val//\'/\'\"\'\"\'}"
-  [ -n "$ctx7_val" ] && safe_ctx="${ctx7_val//\'/\'\"\'\"\'}"
-  [ -n "$gh_token_val" ] && safe_gh="${gh_token_val//\'/\'\"\'\"\'}"
-  [ -n "$git_name_val" ] && safe_name="${git_name_val//\'/\'\"\'\"\'}"
-  [ -n "$git_email_val" ] && safe_email="${git_email_val//\'/\'\"\'\"\'}"
+  local var
+  for var in ALBERT_API_KEY CONTEXT7_API_KEY GH_TOKEN AC_GIT_USER_NAME AC_GIT_USER_EMAIL; do
+    _ac_env_set "$var" "$(_ac_host_value "$var")"
+  done
 
-  # --- Construction atomique du runtime ---------------------------------------
-  # On reconstruit le contenu complet dans un fichier temporaire sans toucher au
-  # fichier réel : la coquille (ancien bloc marqué exclu) est copiée d'abord,
-  # puis le nouveau bloc y est ajouté. Le fichier réel n'est remplacé qu'à la
-  # toute fin, uniquement si toute la construction a réussi (atomicité : sur
-  # échec, l'ancien runtime reste intact et complet).
-  #
-  # Le helper est écrit via un here-doc DIRECT dans un fichier temporaire
-  # (redirection simple), jamais dans une substitution $() : sous bash 3.2
-  # (macOS) un here-doc imbriqué dans $( ) n'est pas parse correctement et son
-  # corps est évalué comme du code (crash « unbound variable » sous set -u).
-  local _new_runtime _ac_helper_file _div_helper_file
-  _new_runtime="$(mktemp)"
-  _ac_helper_file="$(mktemp)"
-  _div_helper_file="$(mktemp)"
+  ok "Secrets de la VM configurés — repoussés à chaque démarrage"
+}
 
-  if file_contains "$RUNTIME_VM_FILE" "$AC_MARKER"; then
-    if file_contains "$RUNTIME_VM_FILE" "$AC_MARKER_END"; then
-      sed -E "\|^${AC_MARKER}$|,\|^${AC_MARKER_END}$|d" "$RUNTIME_VM_FILE" > "$_new_runtime"
-    else
-      awk -v marker="$AC_MARKER" '
-        $0 == marker { in_block=1; next }
-        in_block && $0 ~ /^export (ALBERT_API_KEY|CONTEXT7_API_KEY|GH_TOKEN|AC_GIT_USER_NAME|AC_GIT_USER_EMAIL)=/ { next }
-        in_block && $0 ~ /^[[:space:]]*$/ { next }
-        in_block { in_block=0 }
-        { print }
-      ' "$RUNTIME_VM_FILE" > "$_new_runtime"
-    fi
-    info "Ancien bloc runtime.sh repéré, régénération atomique."
+# migrate_vm_runtime_block — retire l'ancien bloc marqué de
+# ~/.agent-vm/runtime.sh (installations antérieures au canal env).
+# Le laisser n'est pas neutre : il réécrit le ~/.zshenv de la VM à chaque
+# démarrage, donc il peut y reposer une valeur périmée par-dessus celle que le
+# canal env vient de pousser. Non-destructif hors de la plage marquée.
+migrate_vm_runtime_block() {
+  [ -f "$RUNTIME_VM_FILE" ] || return 0
+  file_contains "$RUNTIME_VM_FILE" "$AC_MARKER" || return 0
+
+  warn "Ancien bloc Albert Code détecté dans ~/.agent-vm/runtime.sh."
+  info "Les secrets passent maintenant par ~/.agent-vm/env, repoussé à chaque démarrage."
+  info "Laissé en place, cet ancien bloc réécrit le ~/.zshenv de la VM au démarrage"
+  info "et peut y remettre une valeur périmée par-dessus la fraîche."
+
+  # Sans marqueur de fin, la frontière du bloc n'est pas déterminable : on ne
+  # devine pas sur le fichier d'un utilisateur, on lui dit quoi retirer.
+  if ! file_contains "$RUNTIME_VM_FILE" "$AC_MARKER_END"; then
+    warn "Bloc sans marqueur de fin : je n'y touche pas (frontière indéterminable)."
+    info "Retire à la main les lignes à partir de « %s »." "$AC_MARKER"
+    return 0
+  fi
+
+  if ! confirm "Retirer l'ancien bloc de ~/.agent-vm/runtime.sh ?"; then
+    warn "Bloc conservé — des secrets périmés peuvent persister dans les VM."
+    return 0
+  fi
+
+  local tmp
+  tmp="$(mktemp)"
+  sed -E "\|^${AC_MARKER}$|,\|^${AC_MARKER_END}$|d" "$RUNTIME_VM_FILE" > "$tmp"
+  apply "retirer l'ancien bloc de ~/.agent-vm/runtime.sh" mv "$tmp" "$RUNTIME_VM_FILE"
+  [ "$DRY_RUN" -eq 1 ] && rm -f "$tmp"
+  apply_chmod "chmod 600 $RUNTIME_VM_FILE" 600 "$RUNTIME_VM_FILE"
+  ok "Ancien bloc retiré"
+}
+
+# migrate_host_gh_token — retire du ~/.zshenv de l'HÔTE les variables qui n'y
+# étaient que pour alimenter la VM. Elles y sont désormais nuisibles : exportées,
+# elles capturent le `gh` de l'utilisateur avec le jeton restreint de l'agent.
+migrate_host_gh_token() {
+  local var found=0
+  for var in GH_TOKEN AC_GIT_USER_NAME AC_GIT_USER_EMAIL; do
+    file_contains "$ZSHENV" "^export ${var}=" && found=1
+  done
+  [ "$found" -eq 1 ] || return 0
+
+  echo
+  warn "GH_TOKEN / identité git encore exportés depuis ton ~/.zshenv."
+  info "Ils sont maintenant transmis à la VM par ~/.agent-vm/env, sans passer"
+  info "par ton environnement. Les garder exporte le jeton de l'agent dans TON"
+  info "shell : ton propre « gh » en hérite et peut renvoyer des 404 trompeurs"
+  info "sur des dépôts hors de son périmètre."
+  if confirm "Les retirer de ~/.zshenv (la VM les garde via ~/.agent-vm/env) ?"; then
+    for var in GH_TOKEN AC_GIT_USER_NAME AC_GIT_USER_EMAIL; do
+      _zshenv_drop "$var"
+    done
+    ok "Retirés de ~/.zshenv — effectif au prochain terminal."
   else
-    cp "$RUNTIME_VM_FILE" "$_new_runtime"
+    info "Conservés. Tu peux les retirer plus tard à la main."
   fi
-
-  if ! file_contains "$_new_runtime" "$AC_MARKER"; then
-    cat > "$_ac_helper_file" <<'AC_HELPER'
-_ac_zsh_set() {
-  [ -z "$2" ] && return 0
-  _f="$HOME/.zshenv"
-  if [ ! -f "$_f" ]; then : > "$_f"; chmod 600 "$_f"; fi
-  _t="${_f}.tmp.$$"
-  : > "$_t"
-  chmod 600 "$_t"
-  while IFS= read -r _l || [ -n "$_l" ]; do
-    case "$_l" in
-      "export $1="*) : ;;
-      *) printf '%s\n' "$_l" >> "$_t" ;;
-    esac
-  done < "$_f"
-  _v="$2"
-  _e=$(printf '%s' "$_v" | sed "s/'/'\"'\"'/g")
-  printf "export %s='%s'\n" "$1" "$_e" >> "$_t"
-  mv "$_t" "$_f"
-  chmod 600 "$_f"
-  unset _f _t _l _v _e
-}
-AC_HELPER
-    apply_append "blank line dans runtime.sh" "$_new_runtime" ""
-    apply_append "albert-code block start" "$_new_runtime" "$AC_MARKER"
-    apply_append "définir helper _ac_zsh_set dans runtime.sh" "$_new_runtime" "$(cat "$_ac_helper_file")"
-    # Abstention : si l'hôte n'a pas de valeur, on n'écrit RIEN pour cette
-    # variable — une valeur posée à la main dans la VM est ainsi conservée.
-    if [ -n "$albert_val" ]; then
-      apply_append "persist ALBERT_API_KEY dans runtime.sh" "$_new_runtime" \
-        "_ac_zsh_set ALBERT_API_KEY '${safe_albert}'"
-      apply_append "export ALBERT_API_KEY dans runtime.sh" "$_new_runtime" \
-        "export ALBERT_API_KEY='${safe_albert}'"
-    fi
-    if [ -n "$ctx7_val" ]; then
-      apply_append "persist CONTEXT7_API_KEY dans runtime.sh" "$_new_runtime" \
-        "_ac_zsh_set CONTEXT7_API_KEY '${safe_ctx}'"
-      apply_append "export CONTEXT7_API_KEY dans runtime.sh" "$_new_runtime" \
-        "export CONTEXT7_API_KEY='${safe_ctx}'"
-    fi
-    if [ -n "$gh_token_val" ]; then
-      apply_append "persist GH_TOKEN dans runtime.sh" "$_new_runtime" \
-        "_ac_zsh_set GH_TOKEN '${safe_gh}'"
-      apply_append "export GH_TOKEN dans runtime.sh" "$_new_runtime" \
-        "export GH_TOKEN='${safe_gh}'"
-    fi
-    if [ -n "$git_name_val" ]; then
-      apply_append "persist AC_GIT_USER_NAME dans runtime.sh" "$_new_runtime" \
-        "_ac_zsh_set AC_GIT_USER_NAME '${safe_name}'"
-      apply_append "export AC_GIT_USER_NAME dans runtime.sh" "$_new_runtime" \
-        "export AC_GIT_USER_NAME='${safe_name}'"
-    fi
-    if [ -n "$git_email_val" ]; then
-      apply_append "persist AC_GIT_USER_EMAIL dans runtime.sh" "$_new_runtime" \
-        "_ac_zsh_set AC_GIT_USER_EMAIL '${safe_email}'"
-      apply_append "export AC_GIT_USER_EMAIL dans runtime.sh" "$_new_runtime" \
-        "export AC_GIT_USER_EMAIL='${safe_email}'"
-    fi
-    # T10.11: détecter une divergence entre les deux lignes (helper _ac_zsh_set
-    # / export) d'un même secret dans le runtime perso — une rotation faite à la
-    # main sur la mauvaise ligne produit une panne indétectable autrement. Les
-    # deux lignes sont émises ensemble ci-dessus depuis une source unique, mais
-    # rien ne protège une édition manuelle ultérieure. Ne jamais afficher de valeur.
-    cat > "$_div_helper_file" <<'AC_DIVERGENCE'
-_ac_zsh_check() {
-  _v="$1"
-  _h="$(awk -F"'" "/_ac_zsh_set ${_v} /{print \$2; exit}" "$0" 2>/dev/null)"
-  _x="$(awk -F"'" "/^export ${_v}='{print \$2; exit}" "$0" 2>/dev/null)"
-  if [ "${_h:-}" != "${_x:-}" ]; then
-    echo "! divergence dans ~/.agent-vm/runtime.sh entre la ligne '_ac_zsh_set ${_v} ' et 'export ${_v}=' : seule la ligne _ac_zsh_set alimente les VM, remets-les en cohérence (valeurs jamais affichées)"
-  fi
-}
-_ac_zsh_check ALBERT_API_KEY
-_ac_zsh_check CONTEXT7_API_KEY
-_ac_zsh_check GH_TOKEN
-_ac_zsh_check AC_GIT_USER_NAME
-_ac_zsh_check AC_GIT_USER_EMAIL
-AC_DIVERGENCE
-    apply_append "garde-fou cohérence runtime perso (T10.11)" "$_new_runtime" "$(cat "$_div_helper_file")"
-    # T8.3: Garde-fou OpenCode --auto execute dans la VM au boot
-    # Si opencode est trop ancien pour --auto, upgrade auto.
-    apply_append "garde-fou OpenCode --auto (T8.3)" "$_new_runtime" \
-      "  _oc_help=\"\$(opencode --help 2>&1 || true)\""
-    apply_append "garde-fou OpenCode --auto (T8.3)" "$_new_runtime" \
-      "  case \"\$_oc_help\" in"
-    apply_append "garde-fou OpenCode --auto (T8.3)" "$_new_runtime" \
-      "    *--auto*) : ;;"
-    apply_append "garde-fou OpenCode --auto (T8.3)" "$_new_runtime" \
-      "    *) echo \"OpenCode trop ancien pour --auto - mise a jour...\"; opencode upgrade || true ;;"
-    apply_append "garde-fou OpenCode --auto (T8.3)" "$_new_runtime" \
-      "  esac"
-    apply_append "garde-fou OpenCode --auto (T8.3)" "$_new_runtime" \
-      "  unset _oc_help"
-    apply_append "albert-code block end" "$_new_runtime" "$AC_MARKER_END"
-  fi
-
-  # Finalisation atomique : le fichier réel n'est remplacé qu'ici, et seulement
-  # si toute la construction ci-dessus a réussi (set -e a déjà fait échouer la
-  # fonction sinon, $RUNTIME_VM_FILE restant alors intact). Jamais en dry-run.
-  if _dry_gate "remplacer $RUNTIME_VM_FILE (runtime régénéré)"; then
-    mv "$_new_runtime" "$RUNTIME_VM_FILE"
-  fi
-  # Nettoyage des fichiers temporaires quoi qu'il arrive (dry-run compris).
-  rm -f "$_ac_helper_file" "$_div_helper_file" "$_new_runtime"
-
-  ok "Runtime VM configuré"
-  [ "$DRY_RUN" -eq 0 ] || true
 }
 
 # sync_skills_host — skills côté hôte
@@ -718,7 +681,8 @@ persist_zshenv() {
     case "$_decision" in
       Remplacer|remplacer)
         _zshenv_drop "$var"
-        local safe="${val//\'/\'\"\'\"\'}"
+        local safe
+        safe="$(_ac_sq_escape "$val")"
         apply_append "remplacer $var dans ~/.zshenv" "$ZSHENV" "export ${var}='${safe}'"
         [ "$DRY_RUN" -eq 0 ] && ok "$var remplacée dans ~/.zshenv" || true
         ;;
@@ -728,7 +692,8 @@ persist_zshenv() {
     esac
     return 0
   fi
-  local safe="${val//\'/\'\"\'\"\'}"
+  local safe
+  safe="$(_ac_sq_escape "$val")"
   apply_append "ajouter $var à ~/.zshenv" "$ZSHENV" "export ${var}='${safe}'"
   [ "$DRY_RUN" -eq 0 ] && ok "$var ajoutée à ~/.zshenv" || true
 }
@@ -755,9 +720,13 @@ _github_auth() {
     printf '%s[dry-run] confirm: Activer le push et les PR GitHub depuis la VM ? → non%s\n' "${C_GREY}" "${C_RESET}" >&2
     _answer="n"
   elif [ -t 0 ]; then
-    read -r _answer </dev/tty
+    # `|| _answer=""` : sur EOF (entrée redirigée plus courte que le nombre de
+    # questions), `read` renvoie non nul et le `set -e` de l'appelant sortait en
+    # 1 SANS message, au beau milieu de l'install. Une entrée épuisée vaut
+    # « non », comme dans confirm().
+    read -r _answer </dev/tty || _answer=""
   else
-    read -r _answer
+    read -r _answer || _answer=""
   fi
 
   case "$_answer" in
@@ -824,13 +793,13 @@ _github_auth() {
         git_name="$gh_login"
         git_email="${gh_id}+${gh_login}@users.noreply.github.com"
         ok "Compte GitHub : ${gh_login} <${git_email}>"
-        persist_zshenv "GH_TOKEN" "$gh_token"
-        persist_zshenv "AC_GIT_USER_NAME" "$git_name"
-        persist_zshenv "AC_GIT_USER_EMAIL" "$git_email"
+        persist_agent_secret "GH_TOKEN" "$gh_token"
+        persist_agent_secret "AC_GIT_USER_NAME" "$git_name"
+        persist_agent_secret "AC_GIT_USER_EMAIL" "$git_email"
         return 0
       fi
       # 2xx mais parsing vide (cas rare) → token valide, persist puis fallback
-      persist_zshenv "GH_TOKEN" "$gh_token"
+      persist_agent_secret "GH_TOKEN" "$gh_token"
       _github_fallback
       return 0
     fi
@@ -871,8 +840,8 @@ _github_fallback() {
   if [ "$email_attempts" -ge 3 ]; then
     warn "3 tentatives échouées — on accepte l'email tel quel."
   fi
-  persist_zshenv "AC_GIT_USER_NAME" "$git_name"
-  persist_zshenv "AC_GIT_USER_EMAIL" "$git_email"
+  persist_agent_secret "AC_GIT_USER_NAME" "$git_name"
+  persist_agent_secret "AC_GIT_USER_EMAIL" "$git_email"
 }
 
 # copy_template — copie non-destructive
@@ -1518,7 +1487,7 @@ print_setup_summary() {
   [ -z "$_skills_display" ] && _skills_display="aucune"
 
   local _gh_display=""
-  if [ -n "${GH_TOKEN:-}" ] || file_contains "$ZSHENV" "GH_TOKEN"; then
+  if _ac_agent_secret_set GH_TOKEN; then
     _gh_display="push + PR activés"
   else
     _gh_display="non configuré"

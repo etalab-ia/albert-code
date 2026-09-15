@@ -17,7 +17,9 @@
 set -euo pipefail
 
 ROOT="${1:-.}"
-ROOT="$(cd "$ROOT" 2>/dev/null && pwd)"
+# CDPATH= : ROOT vient de l'argument utilisateur ; avec CDPATH positionné, cd le
+# chercherait ailleurs qu'au dossier courant et imprimerait où il a atterri.
+ROOT="$(CDPATH= cd -- "$ROOT" >/dev/null 2>&1 && pwd)"
 STATUS=0
 
 # --- Couleurs -----------------------------------------------------------------
