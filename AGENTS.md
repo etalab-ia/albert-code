@@ -14,7 +14,7 @@ Ce n'est **pas un IDE ni un fork** : c'est de l'**orchestration mince** (scripts
 
 | Brique | Rôle | Source |
 |---|---|---|
-| **agent-vm** | Sandbox d'isolation (VM Lima jetable, mode autonome sûr) | `github.com/sylvinus/agent-vm` |
+| **agent-vm** | Sandbox d'isolation (VM Lima jetable, mode autonome sûr). **Dépendance externe**, détectée sur le poste à l'exécution — plus vendorisée (EPIC 13) | `github.com/sylvinus/agent-vm` |
 | **OpenCode** | Harness unique (assistant de code terminal) | `opencode.ai` |
 | **Albert API** | Provider LLM souverain (OpenAI-compatible) | `albert.api.etalab.gouv.fr` |
 | **Skills État** | Connaissances métier (DSFR, RGAA, sécurité, data.gouv) | `github.com/etalab-ia/skills` |
@@ -78,6 +78,7 @@ albert-code/
 ├── uninstall.sh                   # Désinstallation propre
 ├── lib/                           # Fonctions bash partagées (banner, ui, checks, phases)
 │   ├── ui.sh
+│   ├── vm.sh                      # Résolution du moteur agent-vm à l'exécution + _vm()
 │   └── phases.sh
 ├── config/
 │   └── opencode.template.json     # Config OpenCode : provider Albert + MCP + permissions
@@ -152,6 +153,22 @@ albert-code/
 
 ---
 
+## 7bis. Le moteur de VM est une dépendance externe (EPIC 13)
+
+agent-vm n'est **plus vendorisé**. Conséquences sur la façon d'écrire du code ici :
+
+- **Appeler la COMMANDE `agent-vm`, jamais sourcer `agent-vm.sh`.** Une fonction shell n'est pas héritée par un processus fils : la sourcer imposerait de retrouver un chemin de fichier, ce qui est précisément ce qu'on a supprimé. `_vm()` fait `command agent-vm "$@"`.
+- **Ne pas réimplémenter ce que le moteur expose.** Les secrets passent par `agent-vm env` (le fichier est sourcé par la VM : un échappement raté y coûte tous les secrets, et le moteur teste ce quoting sur bash 3.2). L'état passe par `agent-vm info`. Si quelque chose manque au moteur, c'est là qu'il faut l'ajouter.
+- **Le plancher `AC_AGENT_VM_MIN` (`lib/vm.sh`) est bloquant, et ne se lève QUE si Albert Code ne peut vraiment pas tourner en dessous** — sinon on casse la promesse « ça marche avec celui déjà installé ». À `0.1.0` il est légitime : c'est la version qui apporte `agent-vm info` (toute la détection d'état), `agent-vm env` (les secrets), le nom `mcp-chrome` et le lancement par shell de connexion. Comme tout est arrivé ensemble, exiger le plancher autorise à **supposer que `mcp-chrome` existe** — c'est la seule supposition de version permise, et elle est verrouillée par `TESTS.md` S70 §7. Un moteur qui ne sait pas dire sa version est antérieur au verbe `version` : trop ancien, sans autre sondage. Échappatoire assumée : `AC_AGENT_VM_MIN=0` désactive la vérification.
+- **Ne jamais lire l'intérieur du moteur.** Ni ses fonctions privées (`_agent_vm_name`), ni le nom du template (`agent-vm-base`), ni ses fichiers d'état (`.agent-vm-base-version`). Tout passe par `agent-vm info` via `ac_vm_info()`, qui publie `AC_VM_INFO_*`. Un état indéterminable vaut `unknown` : ne jamais le convertir en `0`/`1`.
+- **Ne jamais appeler `limactl` directement** (verrouillé par `TESTS.md` S65). Le moteur possède Lima.
+- **Ne jamais retirer la ligne de sourçage d'agent-vm** d'un rc utilisateur : c'est sa commande à lui, pas une trace d'Albert Code. Ceci **inverse T7.2**, qui la supprimait.
+- **Préférer faire corriger le moteur en amont** plutôt que contourner ici : un contournement local survit à sa cause (cf. T7.6, T-FIX-16, tous deux repris upstream dans agent-vm 0.1.0).
+
+Les secrets passent par `agent-vm env` (canal du moteur, repoussé dans la VM à chaque démarrage), pas par le `~/.zshenv` de l'hôte. Seules `ALBERT_API_KEY` et `CONTEXT7_API_KEY` restent aussi dans `~/.zshenv` : ce sont les clés de l'utilisateur, et l'hôte en a besoin pour interroger le catalogue Albert.
+
+---
+
 ## 8. Synchro des skills (décision d'archi)
 
 Les skills ne se mettent **PAS** à jour toutes seules. Mécanisme retenu : **cloner `etalab-ia/skills` dans `~/.config/opencode/skills/` et `git pull` dans `runtime/agent-vm.runtime.sh`** → skills fraîches à chaque démarrage de VM. Ne pas reposer sur un snapshot `npx skills add` figé.
@@ -167,7 +184,8 @@ Le bundle pose un `AGENTS.md` de référence (`templates/AGENTS.default.md`) ave
 ## 10. À NE PAS faire
 
 - Ne pas supporter d'autre harness que **OpenCode** (ni Vibe, ni Claude Code).
-- **Ne pas écraser une config OpenCode / agent-vm existante.** La config provider du bundle est de **portée projet** (`opencode.json` à la racine du projet cible), jamais le global perso de l'utilisateur (qui peut contenir d'autres providers, ex. Scaleway). Écritures globales (dossier skills, `~/.zshenv`) = **additives + idempotentes** (détecter avant d'écrire).
+- **Ne pas écraser une config OpenCode / agent-vm existante.** La config provider du bundle est de **portée projet** (`opencode.json` à la racine du projet cible), jamais le global perso de l'utilisateur (qui peut contenir d'autres providers, ex. Scaleway). Écritures globales (dossier skills, `~/.zshenv`, `~/.agent-vm/env`) = **additives + idempotentes** (détecter avant d'écrire). Dans `~/.agent-vm/env`, ne toucher QUE les cinq variables gérées : le fichier appartient à agent-vm et peut contenir les secrets d'autres outils.
+- **Ne pas vendoriser agent-vm à nouveau**, ni le patcher localement. Ce qui manque au moteur se corrige en amont (cf. §7bis).
 - Ne pas utiliser de modèle Albert autre que `deepseek-v4-flash` (le seul modèle embarqué).
 - Ne jamais coder un **alias** de modèle Albert. Utiliser uniquement le champ `id` renvoyé par `GET /v1/models` ; les alias sont une commodité utilisateur non contractuelle et ont déjà été re-versionnés ou supprimés sans préavis.
 - Ne pas créer de défaut implicite de profil ni merger les conventions de deux contextes. (Les profils ont été supprimés dans T6.3 — un seul `AGENTS.default.md` neutre.)

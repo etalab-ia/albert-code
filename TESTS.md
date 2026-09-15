@@ -1059,3 +1059,72 @@ Plus les assertions de non-pollution : le vrai `~/.zshenv` de la machine et les 
 
 **Validé le :** — (à remplir après validation réelle)
 
+
+---
+
+## S70 — Dé-vendoring : le moteur appelé comme commande, secrets délégués (EPIC 13)
+
+**But :** verrouiller les trois mécaniques de l'EPIC 13 — Albert Code appelle la
+**commande** `agent-vm` du `PATH` (plus de `vendor/vm/`, plus de fichier à
+sourcer) ; le plancher de version est opposé de façon bloquante ; les secrets
+sont écrits par le moteur, plus par Albert Code.
+
+**Préconditions :** `lib/ui.sh`, `lib/vm.sh`, `lib/phases.sh`. Bac à sable
+jetable (`HOME` **et** `PATH` détournés), moteur remplacé par un **stub
+exécutable** qui journalise ses appels. Aucune VM, aucun réseau, aucune écriture
+hors bac ; empreintes avant/après du vrai `~/.zshenv` et `~/.agent-vm/env`.
+Automatisé : `tests/s70_vm_resolution.sh`, joué en CI sur bash 5 **et bash 3.2**.
+
+**Étapes :**
+
+1. **Plus de vendoring, plus de sourçage.** `vendor/` absent ; aucune référence
+   à `vendor/vm` ; et aucun `source …agent-vm.sh` dans `lib/` — sourcer
+   réintroduirait la dépendance à un chemin de fichier.
+
+2. **Résolution.** Sans commande sur le `PATH`, `ac_vm_present` échoue ; avec,
+   elle réussit et `ac_vm_version` rend la version par le verbe public.
+
+3. **Migration d'une install « à l'ancienne ».** Une fonction shell n'est pas
+   héritée par un processus fils : un agent-vm seulement sourcé est invisible
+   depuis Albert Code, il faut savoir le **dire**. `_ac_vm_legacy_path` retrouve
+   le chemin dans un rc, ignore une ligne commentée, développe `~` et `$HOME`
+   écrits littéralement, et rejette un chemin qui n'existe plus.
+
+4. **Surface publique.** `ac_vm_info` publie `AC_VM_INFO_*` ; un `vm_stale`
+   ou `base_exists` à `unknown` remonte **tel quel**, jamais converti en `0`/`1` ;
+   `base_exists` suit le moteur dans les deux sens ; sans moteur, échec franc.
+
+5. **Comparaison de versions.** `_ac_ver_num` : `0.1.0`→`1000`,
+   `1.0.0`→`1000000`, `1.2.3`→`1002003`, `1`/`1.2` complétés, suffixe `-rc1`
+   ignoré, et `1.10.0 > 1.9.0` (numérique, pas lexical).
+
+6. **Secrets : délégation.** `_ac_env_set` doit **appeler** `agent-vm env set`
+   et ne plus écrire le fichier lui-même (assertion sur l'absence de `mktemp`
+   dans cette fonction). Une valeur vide ne produit **aucun** appel — sinon on
+   écraserait une valeur posée à la main. `_ac_agent_secret_set` interroge
+   `agent-vm env has`, qui répond sur le fichier.
+   *Piège :* vider `GH_TOKEN` avant cette dernière assertion — la machine qui
+   joue le test peut l'avoir dans son environnement (une VM agent-vm,
+   typiquement), et le court-circuit « déjà dans l'env » masquerait l'appel.
+
+7. **Migration de l'ancien bloc marqué.** Bloc **sans** marqueur de fin → intact
+   *même en répondant oui* (la frontière n'est pas déterminable ; répondre non
+   validerait le test pour la mauvaise raison). Bloc complet → la plage part,
+   les lignes perso avant et après restent. Refus → bloc conservé.
+
+8. **Le plancher de version est bloquant.** Un moteur `0.0.1` est refusé ; un
+   moteur **sans verbe `version`** aussi ; `AC_AGENT_VM_MIN=0` le laisse passer ;
+   un moteur au niveau du plancher est accepté.
+   *Piège :* le stub « vieux moteur » doit répondre sur **stderr** avec un code
+   non nul, comme le vrai. Sur stdout, il donnerait une version non vide qui se
+   réduit à `0` au parsing, et l'assertion de l'échappatoire passerait sans rien
+   prouver.
+
+**Attendu :** toutes les assertions passent ; le vrai `HOME` est inchangé.
+
+**Contre-épreuve (mutation) :** vérifié en mutant la source — `ac_vm_check_version`
+ramené à un `|| true`, court-circuit `AC_AGENT_VM_MIN=0` retiré,
+`migrate_vm_runtime_block` privé de son garde-fou de marqueur de fin. Chacune
+fait échouer S70.
+
+**Validé le :** 2026-09-15 (exécution réelle : bash 5.2 et bash 3.2).

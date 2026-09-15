@@ -32,3 +32,26 @@ jobs:
 
       - name: Test S69 — zone gérée des AGENTS.md de projet (T8.5)
         run: bash tests/s69_agents_zone.sh
+
+      - name: Test S65 — lancement d'OpenCode par shell de connexion
+        run: bash tests/s65_opencode_bash_path.sh
+
+      - name: Test S70 — résolution du moteur de VM + canal de secrets (EPIC 13)
+        run: bash tests/s70_vm_resolution.sh
+
+      # macOS livre bash 3.2, qui diverge de bash 5 sur des points qui touchent
+      # les secrets : `${val//\'/…}` y garde les antislashs et produit un
+      # ~/.agent-vm/env syntaxiquement invalide (donc TOUS les secrets perdus).
+      # Sans ce job, la régression revient sans bruit.
+      # S15 est exclu, et seulement pour une raison d'image : il impose
+      # PATH="$SHIM_BIN_DIR:/usr/bin:/bin" (c'est sa précondition), or l'image
+      # alpine met bash dans /usr/local/bin — le shebang `#!/usr/bin/env bash`
+      # du shim n'y résout donc pas. Sur macOS comme sur Debian bash est dans
+      # /bin : rien à corriger côté bundle.
+      - name: Tests sur bash 3.2 (ce que livre macOS)
+        run: |
+          for t in tests/s65_opencode_bash_path.sh tests/s67_shim_path_rc.sh \
+                   tests/s69_agents_zone.sh tests/s70_vm_resolution.sh; do
+            echo "bash 3.2 : $t"
+            docker run --rm -v "$PWD:/w" -w /w bash:3.2 bash "$t"
+          done

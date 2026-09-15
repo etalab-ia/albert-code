@@ -12,6 +12,9 @@ opencode.json.bak*
 # Runtime agent-vm local
 .agent-vm.runtime.sh
 
+# Clone de travail du moteur de VM (agent-vm est un dépôt séparé, plus vendorisé)
+/agent-vm/
+
 # OS
 .DS_Store
 Thumbs.db

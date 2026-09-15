@@ -1223,3 +1223,152 @@ jamais. Les rappeler au setup, au moment où elles sont actionnables.
 et la limite de 80 colonnes s'appliquent.
 **DoD :** le setup affiche un encart de rappel tenant en quelques lignes ;
 le README porte la version longue.
+
+---
+
+## EPIC 13 — Dé-vendoriser agent-vm `<- AC-R052, AC-R053, AC-R054`
+
+**Contexte.** L'EPIC 7 avait absorbé agent-vm dans `vendor/vm/` au commit
+`6f20194`. Bénéfice réel (plus de clone réseau à l'install), coût devenu
+dominant : le moteur étant figé, **chacune de ses limites s'est transformée en
+contournement permanent** côté bundle, et trois de ces contournements ont chacun
+coûté un post-mortem (T7.6 `pipefail`, T7.8 lecture d'état privé, T-FIX-16
+Lima 2.2.0). En face, le poste d'un utilisateur a souvent déjà agent-vm
+installé : le bundle lui en imposait une seconde copie invisible.
+
+**Principe retenu.** Albert Code redevient un **assembleur mince** : il se
+branche sur le moteur du poste, résolu **à l'exécution**, et ce qui manque au
+moteur se corrige **en amont** plutôt que localement.
+
+### T13.1 🔴 Donner à agent-vm une version et un socle de tests ✅ implémenté `<- AC-R054`
+**But :** un intégrateur ne peut exiger un minimum que si le moteur sait dire sa
+version. agent-vm n'avait ni `VERSION`, ni verbe, ni tag, ni test, ni CI.
+**Implémenté (amont) :** `AGENT_VM_VERSION` + `agent-vm version` / `--version` ;
+`test.sh` (stub `limactl`, HOME jetable, ni VM ni réseau) couvrant nommage,
+comparaison de ressources, obsolescence, surface machine, parseur `--preinstall`
+et écriture des configs MCP ; CI GitHub Actions sur bash, bash 3.2 et zsh.
+**Trouvé au passage :** `limactl edit <vm>` sans option ouvre `$EDITOR` — donc
+`--disk` seul sur une VM existante bloquait un appelant non interactif. Corrigé.
+
+### T13.2 🔴 Un nom `mcp-chrome` dans `--preinstall` ✅ implémenté `<- AC-R053, absorbe T6.11/AC-R023`
+**But :** rendre vrai le Y/N « chrome-devtools ? » du setup projet. Le vendoring
+le faisait via une variable maison inexistante en amont.
+**Implémenté (amont) :** noms `mcp-chrome` (dans `default`) et `mcp-playwright`
+(opt-in, dans `all` seulement), préfixe `mcp-*` réservé aux serveurs MCP dont une
+**dépendance doit être cuite dans l'image** — un MCP remote est une URL et parfois
+un secret, il reste en config projet. `configure_mcp` factorise l'écriture des 4
+formats (Claude, OpenCode, Vibe, Codex) au lieu de la dupliquer par serveur.
+**Compatibilité :** le levier joue **par omission**. albert-code passe
+`--preinstall=node,gh,chromium,opencode` sans jamais nommer `mcp-chrome` : sur un
+moteur récent le MCP n'est pas câblé, sur un ancien la liste ne contient que des
+noms connus et rien ne casse. Un nom inconnu est fatal (`return 1`), donc un
+levier exigeant de *passer* un nom aurait cassé toutes les installations.
+
+### T13.3 🟠 Rendre agent-vm sourçable en mode strict ✅ implémenté `<- AC-R052`
+**But :** supprimer le sous-shell `( set +u +e +o pipefail )` qui enveloppait
+chaque appel, et avec lui la classe de bugs qu'il masquait.
+**Implémenté (amont) :** `… | grep -q` remplacé par capture puis `case`
+(`_agent_vm_has_line`) — c'était la cause du faux négatif intermittent du
+post-mortem T7.6 ; les expansions de tableaux potentiellement vides protégées en
+`${arr[@]+"${arr[@]}"}` (bash 3.2 sous `set -u` les refuse, bash récent non — d'où
+le job CI bash 3.2 dédié).
+**Non fait, délibérément :** le moteur n'est **pas** rendu sûr sous le `set -e` de
+l'appelant. Une bibliothèque shell utilise `test && action` partout ; auditer ~30
+sites pour un bénéfice nul serait risqué. `_vm()` neutralise donc `set -e`
+seulement, et le README amont le documente.
+
+### T13.4 🟠 Comparer les ressources avant de proposer l'arrêt de la VM ✅ implémenté `<- absorbe T7.6/AC-R037`
+**But :** le moteur déclenchait « Stop the VM and apply changes? » dès qu'un flag
+ressource était présent ET la VM démarrée, sans jamais comparer (le commentaire
+« if … changed » était faux).
+**Implémenté (amont) :** `_agent_vm_resources_differ` compare au réel ; le disque
+n'est comparé qu'à la hausse (Lima ne rétrécit pas) ; une lecture impossible vaut
+« ça change » — on n'affirme jamais « rien ne change » sur une information absente.
+**Effet ici :** `phase_run` peut repasser les ressources à chaque lancement, donc
+tout le branchement « la VM existe-t-elle déjà ? » disparaît.
+
+### T13.5 🟠 Surface publique du moteur : `name`, `info` ✅ implémenté `<- absorbe T7.8`
+**But :** albert-code lisait des symboles et fichiers privés (`_agent_vm_name`, le
+nom `agent-vm-base`, `.agent-vm-base-version`). Tolérable sur un vendored figé,
+intenable sur une dépendance externe.
+**Implémenté (amont) :** `agent-vm name [dir]` et `agent-vm info [dir]` (clés
+`version template state_dir dir vm_name base_exists vm_exists vm_running
+vm_stale`). Booléens `1`/`0`, et **`unknown`** quand c'est indéterminable — jamais
+une supposition. Fonctionne sans Lima installé.
+**Effet ici :** `base_vm_exists` et `_project_vm_from_stale_base` (supprimée)
+passent par `ac_vm_info()`. Plus aucun `limactl` dans `lib/` (verrouillé par S65).
+
+### T13.6 🔴 Appeler le moteur comme une commande ✅ implémenté `<- AC-R052`
+**But :** trouver le moteur du poste au lieu d'un chemin embarqué.
+**Première version (abandonnée) :** résoudre le CHEMIN de `agent-vm.sh` pour le
+sourcer — variable explicite, puis ligne `source …` d'un rc, puis emplacements
+conventionnels. 148 lignes, et le passage le plus tordu du bundle.
+**Retenu :** agent-vm expose désormais une **commande** sur le `PATH`
+(`install.sh` amont, symlink vers le clone). `_vm()` se réduit à
+`command agent-vm "$@"` : plus de résolution de chemin, plus de sourçage, et
+le `set -e` du moteur ne peut plus tuer Albert Code. **Inverse T7.2**, qui
+retirait la ligne de sourçage de l'utilisateur.
+**Migration :** le sourçage reste pleinement supporté en amont — une install
+existante ne casse pas. Mais une fonction shell n'est pas héritée par un
+processus fils : un agent-vm seulement sourcé est invisible depuis Albert Code.
+`_ac_vm_legacy_path` le détecte (scan des rc), l'explique et propose de lancer
+l'installeur du clone. À supprimer quand le parc aura migré.
+Plancher `AC_AGENT_VM_MIN=0.1.0`, **bloquant** à l'install : sous ce niveau,
+`agent-vm info` n'existe pas et tout le reste est cassé — autant échouer là où
+c'est actionnable plutôt qu'au premier `run`. Un moteur incapable de dire sa
+version est antérieur au verbe `version`, donc trop ancien, sans autre sondage.
+Mise à jour **proposée, jamais forcée**, et seulement sur un dépôt git propre
+suivant un remote ; échappatoire assumée `AC_AGENT_VM_MIN=0`.
+**Effet de bord voulu :** `mcp-chrome`, `info` et le lancement par shell de
+connexion étant arrivés ensemble en 0.1.0, le plancher autorise à **supposer**
+que le nom existe — plus besoin de documenter un repli (T13.2). C'est la seule
+supposition de version permise ; elle est verrouillée par S70 §7.
+→ `TESTS.md` S70.
+
+### T13.7 🟠 Secrets par `~/.agent-vm/env` ✅ implémenté `<- AC-R052, ferme la Facette C de l'EPIC 10`
+**But :** `ensure_vm_runtime` faisait 92 lignes pour refaire ce que le moteur
+offre déjà : `~/.agent-vm/env` est poussé dans la VM **à chaque démarrage** et
+auto-sourcé par son `~/.zshenv` (`set -a`).
+**DoD :** `ensure_vm_secrets` + `_ac_env_set` remplacent le bloc marqué de
+`~/.agent-vm/runtime.sh`. L'écriture elle-même est **déléguée à
+`agent-vm env set`** : le fichier est *sourcé* par le shell de la VM, donc un
+échappement raté y coûte tous les secrets d'un coup — et le moteur teste ce
+quoting sur bash 3.2, ce qu'albert-code ne faisait pas. Les lignes non gérées du
+fichier sont préservées par le moteur.
+`GH_TOKEN` et l'identité git ne sont **plus** exportés dans le `~/.zshenv` de
+l'hôte — c'était la Facette C : une variable exportée est ambiante, et la CLI `gh`
+de l'humain héritait du jeton restreint de l'agent (404 trompeurs).
+`ALBERT_API_KEY` / `CONTEXT7_API_KEY` y restent : ce sont les clés de
+l'utilisateur, et l'hôte en a besoin pour le catalogue Albert.
+**Ce que ça fait perdre :** le garde-fou de divergence T10.11 disparaît — sans
+objet, il surveillait deux lignes par secret, il n'y en a plus qu'une. Migration
+non destructive : l'ancien bloc marqué est retiré sur confirmation, et jamais
+touché s'il n'a pas de marqueur de fin (frontière indéterminable).
+→ `TESTS.md` S70 §5-6.
+
+
+### T13.8 🟠 Déléguer au moteur ce qu'Albert Code réimplémentait ✅ implémenté `<- AC-R052`
+**But :** l'EPIC 13 avait remplacé le vendoring par 400 lignes de contournement
+d'un moteur qui ne savait pas assez de choses. agent-vm étant maintenu par la
+même personne, la bonne réponse est d'enrichir le moteur, pas de le contourner.
+**Livré côté agent-vm (0.1.0) :**
+- `install.sh` : pose `agent-vm` sur le `PATH` (symlink vers le clone, donc
+  `git pull` suffit à mettre à jour). Le sourçage reste supporté : aucune
+  install existante ne casse.
+- `agent-vm env set|get|has|unset|list` : le canal à secrets, avec son quoting,
+  testé sur bash 3.2. `get`/`has` répondent sur le FICHIER, jamais sur
+  l'environnement ambiant — sans quoi un appelant tournant lui-même dans une VM
+  verrait ses propres variables exportées comme « enregistrées ».
+- `AGENT_VM_SCRIPT_DIR` suit les symlinks : sans ça, un lien sur le `PATH` fait
+  chercher `agent-vm.setup.sh` à côté du lien et `agent-vm setup` échoue.
+**Effet ici :** `lib/vm.sh` perd `ac_vm_find`, `ac_vm_load`,
+`_ac_vm_from_rc`, `_ac_vm_rc_candidates` et `ac_vm_ensure_rc_line` ;
+`lib/phases.sh` perd son quoting dotenv maison. `_vm()` devient une ligne.
+→ `TESTS.md` S70 (réécrit sur le modèle « commande »).
+
+### T13.9 🟡 Ne plus mettre à jour le moteur à la place de l'utilisateur ✅ implémenté
+**But :** `ac_vm_check_version` faisait un `git pull` dans un dépôt qui
+n'appartient pas à Albert Code, entouré de trois garde-fous (est-ce un dépôt
+git ? propre ? suivant un remote ?) qui n'existaient que pour rendre ce `pull`
+sûr. **DoD :** la commande de mise à jour est affichée, l'utilisateur décide ;
+les trois garde-fous disparaissent avec elle.

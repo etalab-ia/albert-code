@@ -11,7 +11,9 @@
 # la non-pollution. Même résultat sur un poste de dev et un runner CI. bash 3.2.
 set -euo pipefail
 
-SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# CDPATH= : joué en « bash tests/x.sh », dirname rend « tests », un relatif nu
+# que cd chercherait dans CDPATH avant le dossier courant.
+SELF_DIR="$(CDPATH= cd -- "$(dirname "${BASH_SOURCE[0]}")/.." >/dev/null && pwd)"
 LIB_DIR="$SELF_DIR/lib"
 REAL_HOME="$HOME"
 FAIL=0
@@ -35,10 +37,15 @@ UL_BEFORE=""
 SB="$(mktemp -d)"
 trap 'rm -rf "$SB"' EXIT
 
-export SELF_DIR LIB_DIR AGENT_VM_DIR="$SB/vm" AC_VM_CPUS=4 AC_VM_MEMORY=8 DRY_RUN=0
+export SELF_DIR LIB_DIR AC_VM_CPUS=4 AC_VM_MEMORY=8 AC_VM_DISK=32 DRY_RUN=0
+export ZSHENV="$SB/zshenv"
 
 # shellcheck source=../lib/ui.sh
 source "$LIB_DIR/ui.sh"
+# phases.sh déclare dépendre de vm.sh : on honore le contrat même si ce
+# scénario ne touche pas au moteur.
+# shellcheck source=../lib/vm.sh
+source "$LIB_DIR/vm.sh"
 # shellcheck source=../lib/phases.sh
 source "$LIB_DIR/phases.sh"
 

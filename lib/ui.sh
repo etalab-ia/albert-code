@@ -26,9 +26,11 @@ fi
 DRY_RUN="${DRY_RUN:-0}"
 OPENCODE_CONFIG_DIR="${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}"
 
-# Marqueur unique pour les blocs Albert Code dans les fichiers de l'utilisateur.
-# Utilisé à l'écriture (install.sh) ET aux tests (install.sh idempotence, uninstall.sh retrait).
-# Début et FIN pour ne supprimer QUE le bloc, jamais les lignes hors plage.
+# Marqueur de l'ancien bloc Albert Code de ~/.agent-vm/runtime.sh.
+# PLUS ÉCRIT depuis que les secrets passent par ~/.agent-vm/env (EPIC 13) :
+# il ne sert plus qu'à retrouver ce bloc pour le retirer — migration
+# (migrate_vm_runtime_block) et désinstallation. Début ET fin, pour ne
+# supprimer QUE la plage marquée et jamais une ligne hors plage.
 AC_MARKER="# --- albert-code : clés VM ---"
 AC_MARKER_END="# --- /albert-code ---"
 
@@ -79,6 +81,32 @@ path_rc_file() {
   _sh="${SHELL##*/}"
   case "$_sh" in
     zsh) printf '%s' "$HOME/.zshenv" ;;
+    bash)
+      _os="$(uname -s)"
+      case "$_os" in
+        Linux)  printf '%s' "$HOME/.bashrc" ;;
+        Darwin) printf '%s' "$HOME/.bash_profile" ;;
+        *)      printf '%s' "$HOME/.profile" ;;
+      esac
+      ;;
+    *) printf '%s' "$HOME/.profile" ;;
+  esac
+}
+
+# shell_rc_file : LE fichier rc du shell INTERACTIF, là où une fonction shell
+# sourcée a un sens (le moteur de VM en est une).
+# À ne pas confondre avec path_rc_file() ci-dessus, qui vise un ajout au PATH :
+# pour zsh le PATH va dans ~/.zshenv (lu par toute invocation) alors qu'une
+# définition de fonction va dans ~/.zshrc (shells interactifs).
+#   zsh                   → ~/.zshrc
+#   bash + Linux          → ~/.bashrc
+#   bash + macOS (Darwin) → ~/.bash_profile
+#   tout le reste         → ~/.profile
+shell_rc_file() {
+  local _sh _os
+  _sh="${SHELL##*/}"
+  case "$_sh" in
+    zsh) printf '%s' "$HOME/.zshrc" ;;
     bash)
       _os="$(uname -s)"
       case "$_os" in
@@ -181,7 +209,9 @@ install_shim() {
     local abs_source="$source_script"
     case "$abs_source" in
       /*) ;; # déjà absolu
-      *) abs_source="$(cd "$(dirname "$source_script")" && pwd)/$(basename "$source_script")" ;;
+      # CDPATH= : sur un chemin relatif, cd consulterait CDPATH avant le dossier
+      # courant et rendrait un shim pointant ailleurs.
+      *) abs_source="$(CDPATH= cd -- "$(dirname "$source_script")" >/dev/null && pwd)/$(basename "$source_script")" ;;
     esac
     shim_content="#!/usr/bin/env bash
 # Shim pour $name (script exécutable, généré par Albert Code)
@@ -408,16 +438,32 @@ prompt_choice() {
     printf '%s' "$choice"
     return 0
   fi
-  while true; do
+  # Boucle BORNÉE. Une boucle infinie ici tourne sans fin dès que l'entrée est
+  # épuisée : `read` renvoie EOF immédiatement, la réponse est vide donc
+  # invalide, et on re-demande pour toujours (observé avec une entrée redirigée
+  # plus courte que le nombre de questions). Deux sorties : EOF détecté, ou
+  # trop de réponses invalides. Dans les deux cas on prend le PREMIER choix,
+  # qui est par convention le plus conservateur — même règle que `confirm`, qui
+  # répond « non » sur EOF.
+  local attempts=0
+  while [ "$attempts" -lt 3 ]; do
+    attempts=$((attempts + 1))
     title "$question" >&2
     for i in "${!choices[@]}"; do
       printf '  %s%d)%s %s\n' "${C_CYAN}" "$((i+1))" "${C_RESET}" "${choices[$i]}" >&2
     done
     printf '%s→ %s' "${C_BOLD}" "${C_RESET}" >&2
+    local read_ok=1
     if [ -t 0 ]; then
-      read -r n </dev/tty
+      read -r n </dev/tty || read_ok=0
     else
-      read -r n
+      read -r n || read_ok=0
+    fi
+    if [ "$read_ok" -eq 0 ]; then
+      echo >&2
+      warn "Plus d'entrée disponible — choix par défaut : %s" "${choices[0]}" >&2
+      printf '%s' "${choices[0]}"
+      return 0
     fi
     if [[ "$n" =~ ^[0-9]+$ ]] && [ "$n" -ge 1 ] && [ "$n" -le "${#choices[@]}" ]; then
       choice="${choices[$((n-1))]}"
@@ -427,6 +473,9 @@ prompt_choice() {
     fi
     warn "Choix invalide, réessaie." >&2
   done
+  warn "Trop de réponses invalides — choix par défaut : %s" "${choices[0]}" >&2
+  printf '%s' "${choices[0]}"
+  return 0
 }
 
 # prompt_secret <question> : lit une valeur masquée, renvoie via stdout.
@@ -517,7 +566,9 @@ Options :
 Variables d'environnement (sandbox) :
   HOME                   Redirige ~/.zshenv, ~/.config/opencode, etc.
   OPENCODE_CONFIG_DIR     Dossier de config OpenCode (défaut: ~/.config/opencode).
-  AGENT_VM_DIR            Dossier du moteur de VM vendored (défaut: \$SELF_DIR/vendor/vm).
+  AGENT_VM_HOME           Où installer le moteur s'il est absent (défaut:
+                          ~/agent-vm). Une fois installé, Albert Code appelle
+                          simplement la commande « agent-vm » du PATH.
   SHIM_BIN_DIR            Dossier du shim (défaut: sonde /opt/homebrew/bin,
                           /usr/local/bin puis \$PATH, sinon ~/.local/bin).
 
@@ -549,6 +600,8 @@ Environnement (sandbox) :
   HOME                   Redirige ~/.zshenv, ~/.config/opencode, etc.
   OPENCODE_CONFIG_DIR     Dossier de config OpenCode (défaut: ~/.config/opencode).
   SHIM_BIN_DIR            Dossier du shim (défaut: sonde PATH).
+  AGENT_VM_HOME           Où installer le moteur s'il est absent (défaut:
+                          ~/agent-vm).
   AC_VM_CPUS/AC_VM_MEMORY/AC_VM_DISK   Ressources VM (voir README).
 
 Exemple complet :
@@ -570,8 +623,11 @@ Options:
   --dry-run   Affiche chaque action sans l'exécuter (test sur VM déjà configurée).
   --help      Affiche cette aide.
 
+Les secrets ne sont pas écrits par ce script : ils arrivent par ~/.agent-vm/env,
+poussé dans la VM à chaque démarrage par le moteur.
+
 Variables d'environnement (sandbox) :
-  HOME                   Redirige ~/.zshenv, ~/.config/opencode dans la VM.
+  HOME                   Redirige ~/.config/opencode dans la VM.
   OPENCODE_CONFIG_DIR     Dossier de config OpenCode (défaut: ~/.config/opencode).
 USAGE
 }

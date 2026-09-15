@@ -16,7 +16,10 @@
 # =============================================================================
 set -euo pipefail
 
-SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# CDPATH= : lancé en « bash sous-dossier/install.sh », dirname rend un relatif
+# nu, et cd consulte alors CDPATH AVANT le dossier courant — il résoudrait un
+# autre dossier et imprimerait où il a atterri, polluant la capture.
+SELF_DIR="$(CDPATH= cd -- "$(dirname "${BASH_SOURCE[0]}")" >/dev/null && pwd)"
 LIB_DIR="$SELF_DIR/lib"
 source "$LIB_DIR/ui.sh"
 
@@ -35,17 +38,18 @@ AC_VM_CPUS="${AC_VM_CPUS:-4}"
 AC_VM_MEMORY="${AC_VM_MEMORY:-8}"
 AC_VM_DISK="${AC_VM_DISK:-32}"
 
-AGENT_VM_DIR="${AGENT_VM_DIR:-$SELF_DIR/vendor/vm}"
 RUNTIME_VM_FILE="${RUNTIME_VM_FILE:-$HOME/.agent-vm/runtime.sh}"
 ZSHENV="${ZSHENV:-$HOME/.zshenv}"
 
-# Source les phases (contient phase_a, phase_b, phase_run)
-if [ -f "$LIB_DIR/phases.sh" ]; then
-  source "$LIB_DIR/phases.sh"
-else
-  err "lib/phases.sh introuvable. Albert Code est-il complet ?"
-  exit 1
-fi
+# Source l'accès au moteur de VM puis les phases (phase_a, phase_b, phase_run)
+for _lib in vm phases; do
+  if [ -f "$LIB_DIR/$_lib.sh" ]; then
+    source "$LIB_DIR/$_lib.sh"
+  else
+    err "lib/$_lib.sh introuvable. Albert Code est-il complet ?"
+    exit 1
+  fi
+done
 
 # --- Détection ancien installeur (albert-code() dans shell rc) -----------------
 _detect_old_albert_code_function() {

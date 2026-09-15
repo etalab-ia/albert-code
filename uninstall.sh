@@ -4,27 +4,32 @@
 # -----------------------------------------------------------------------------
 # Retire ce qu'Albert Code a ajouté, sans toucher au reste du poste :
 #   - skills clonées dans ~/.config/opencode/skills/
-#   - bloc Albert Code dans ~/.agent-vm/runtime.sh
+#   - les 5 clés gérées par Albert Code dans ~/.agent-vm/env
+#   - bloc Albert Code dans ~/.agent-vm/runtime.sh (installations antérieures)
 #   - clés Albert/Context7 dans ~/.zshenv
 #   - ligne d'ajout de ~/.local/bin au PATH posée par install_shim (fichier rc)
-#   - ligne de sourcing agent-vm dans le shell rc
 #   - fichiers projet (opencode.json, .agent-vm.runtime.sh, AGENTS.md de profil)
 #
 # Ne supprime JAMAIS la config OpenCode globale perso (~/.config/opencode/opencode.*),
-# ni les autres providers (Scaleway, etc.), ni les VM existantes (sauf demande).
+# ni les autres providers (Scaleway, etc.), ni les VM existantes (sauf demande),
+# ni agent-vm lui-même : c'est un outil séparé, sa ligne de sourçage reste en
+# place pour que la commande « agent-vm » continue de fonctionner.
 # Compatible bash 3.2. Idempotent.
 # =============================================================================
 set -euo pipefail
 
-SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# CDPATH= : cf. install.sh — un relatif nu serait résolu via CDPATH.
+SELF_DIR="$(CDPATH= cd -- "$(dirname "${BASH_SOURCE[0]}")" >/dev/null && pwd)"
 # shellcheck source=lib/ui.sh
 source "$SELF_DIR/lib/ui.sh"
+# shellcheck source=lib/vm.sh
+source "$SELF_DIR/lib/vm.sh"
 
 SKILLS_DIR="$HOME/.config/opencode/skills"
 SKILLS_CACHE="$HOME/.config/opencode/.albert-skills-cache"
 RUNTIME_VM_FILE="${RUNTIME_VM_FILE:-$HOME/.agent-vm/runtime.sh}"
 ZSHENV="${ZSHENV:-$HOME/.zshenv}"
-AGENT_VM_DIR="${AGENT_VM_DIR:-$SELF_DIR/vendor/vm}"
+AC_ENV_FILE="${AC_ENV_FILE:-$HOME/.agent-vm/env}"
 AC_MARKER="# --- albert-code : clés VM ---"
 
 banner
@@ -72,6 +77,33 @@ if [ -f "$RUNTIME_VM_FILE" ] && file_contains "$RUNTIME_VM_FILE" "$AC_MARKER"; t
     mv "$_tmp" "$RUNTIME_VM_FILE"
     chmod 600 "$RUNTIME_VM_FILE" 2>/dev/null || true
     ok "bloc Albert Code retiré de ~/.agent-vm/runtime.sh"
+  fi
+fi
+
+# 2bis. Secrets poussés dans les VM (~/.agent-vm/env)
+#       Ne retire QUE les lignes des variables gérées par Albert Code ; les
+#       autres lignes du fichier (posées à la main, ou par un autre outil)
+#       sont conservées — c'est un fichier d'agent-vm, pas d'Albert Code.
+#
+#       Seul endroit du bundle qui lit ce fichier directement plutôt que de
+#       passer par `agent-vm env unset`, et c'est délibéré : une désinstallation
+#       doit fonctionner quand l'outil est déjà à moitié parti. Si le moteur a
+#       été retiré avant Albert Code, ses clés resteraient sinon en place.
+if [ -f "$AC_ENV_FILE" ]; then
+  if confirm "Retirer les clés d'Albert Code de ~/.agent-vm/env ?"; then
+    _before="$(grep -cE "^(ALBERT_API_KEY|CONTEXT7_API_KEY|GH_TOKEN|AC_GIT_USER_NAME|AC_GIT_USER_EMAIL)=" "$AC_ENV_FILE" || true)"
+    _tmp="$(mktemp)"
+    grep -vE "^(ALBERT_API_KEY|CONTEXT7_API_KEY|GH_TOKEN|AC_GIT_USER_NAME|AC_GIT_USER_EMAIL)=" \
+      "$AC_ENV_FILE" > "$_tmp" || true
+    mv "$_tmp" "$AC_ENV_FILE"
+    chmod 600 "$AC_ENV_FILE" 2>/dev/null || true
+    # Annoncer ce qui s'est réellement passé, pas ce qu'on a tenté.
+    if [ "${_before:-0}" -gt 0 ]; then
+      ok "%s clé(s) retirée(s) de ~/.agent-vm/env" "$_before"
+      info "Les autres lignes du fichier sont conservées."
+    else
+      info "Aucune clé d'Albert Code dans ~/.agent-vm/env — fichier inchangé."
+    fi
   fi
 fi
 
@@ -148,30 +180,33 @@ for _check_rc in "$RC_FILE_ALBERT" "$HOME/.zshenv"; do
   fi
 done
 
-# 5. Ancien sourçage agent-vm dans le shell rc (migration)
-rc=""
-case "${SHELL##*/}" in
-  zsh)  rc="$HOME/.zshrc" ;;
-  bash) rc="$HOME/.bashrc" ;;
-  *)    rc="$HOME/.profile" ;;
-esac
+# 5. Sourçage d'agent-vm dans le shell rc.
+#    agent-vm est un outil SÉPARÉ, qu'Albert Code n'a pas forcément installé :
+#    retirer cette ligne casserait la commande « agent-vm » de l'utilisateur.
+#    On ne la propose donc plus par défaut, on signale seulement.
+rc="$(shell_rc_file)"
 if [ -f "$rc" ] && file_contains "$rc" "agent-vm.sh"; then
-  if confirm "Retirer le sourcing d'agent-vm de $rc ?"; then
-    _tmp="$(mktemp)"
-    grep -v "agent-vm.sh" "$rc" > "$_tmp" || true
-    mv "$_tmp" "$rc"
-    ok "sourcing retiré de $rc"
-  fi
+  info "Le sourçage d'agent-vm dans %s est conservé." "$rc"
+  info "agent-vm est un outil indépendant : Albert Code n'y touche pas."
 fi
 
 # 6. VMs Lima (optionnel) — les VMs créées par agent-vm
-if command -v limactl >/dev/null 2>&1 && limactl list -q 2>/dev/null | grep -q '^agent-vm-'; then
-  if confirm "Supprimer toutes les VMs agent-vm (Lima) ?"; then
-    if command -v agent-vm >/dev/null 2>&1; then
-      agent-vm destroy-all 2>/dev/null || true
-    fi
-    ok "VMs agent-vm supprimées"
-  fi
+#    Capture d'abord, pas de « | grep -q » : sous pipefail, grep -q ferme le
+#    pipe et limactl part en SIGPIPE (faux négatif intermittent).
+if command -v limactl >/dev/null 2>&1; then
+  _vms="$(limactl list -q 2>/dev/null || true)"
+  case $'\n'"$_vms"$'\n' in
+    *$'\n'agent-vm-*)
+      if confirm "Supprimer toutes les VMs agent-vm (Lima) ?"; then
+        if ac_vm_present; then
+          # Le moteur redemande confirmation et peut être annulé : on ne peut
+          # pas affirmer la suppression depuis ici, on laisse sa sortie parler.
+          _vm destroy-all || true
+        else
+          warn "Moteur de VM introuvable — supprime-les avec « agent-vm destroy-all »."
+        fi
+      fi ;;
+  esac
 fi
 
 

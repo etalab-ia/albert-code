@@ -15,7 +15,7 @@
 Albert Code assemble des briques existantes pour coder avec une IA souveraine, isolée, avec les standards de l'administration embarqués :
 
 - **[Albert API](https://albert.api.etalab.gouv.fr)** : modèles souverains de l'État (hébergement SecNumCloud), provider OpenAI-compatible.
-- **[agent-vm](https://github.com/sylvinus/agent-vm)** (vendored) : sandbox Lima jetable. L'agent tourne en autonomie sans accès à l'hôte.
+- **[agent-vm](https://github.com/sylvinus/agent-vm)** : sandbox Lima jetable. L'agent tourne en autonomie sans accès à l'hôte. Outil séparé, installé sur ton poste : Albert Code se branche dessus et te le laisse utilisable seul.
 - **[OpenCode](https://opencode.ai)** : le harness (assistant de code en terminal).
 - **[Skills de l'État](https://github.com/etalab-ia/skills)** : DSFR, accessibilité (RGAA), sécurité, data.gouv (à la carte, choisis au setup).
 - **MCP** : data.gouv, context7, playwright, chrome-devtools (à la carte, choisis au setup).
@@ -28,6 +28,7 @@ Ce n'est pas un IDE ni un fork : de l'orchestration mince (scripts + config) au-
 
 - macOS ou Linux (pas de Windows).
 - [Lima](https://lima-vm.io) : sur macOS, installé par le script si absent (via Homebrew). Sur Linux, à installer à la main avant : https://lima-vm.io/docs/installation/
+- [agent-vm](https://github.com/sylvinus/agent-vm) (version 0.1.0 minimum) : le moteur d'isolation, un outil séparé. Albert Code appelle simplement la commande `agent-vm` de ton `PATH`. Si tu ne l'as pas, il te propose de le cloner dans `~/agent-vm` et de lancer son installeur. Si tu l'avais installé « à l'ancienne » (juste `source .../agent-vm.sh` dans ton shell), il te le dira : une fonction shell n'existe pas dans les processus qu'Albert Code lance, un `./install.sh` dans ton clone suffit à poser la commande sans rien casser.
 - **Linux uniquement** : QEMU (`sudo apt-get install qemu-system-x86`, ou `qemu-system-arm` sur ARM) et l'accès à `/dev/kvm`. Si `/dev/kvm` n'existe pas, la virtualisation est désactivée dans le BIOS ou tu es déjà dans une VM. S'il existe mais refuse l'accès : `sudo usermod -aG kvm "$USER"` puis reconnexion.
 - Node.js (pour les serveurs MCP lancés via `npx`).
 - Une **clé Albert API** (réservée aux agents publics : demande sur https://albert.api.etalab.gouv.fr).
@@ -86,9 +87,11 @@ AC_VM_CPUS=8 AC_VM_MEMORY=16 AC_VM_DISK=64 ./install.sh
 
 | Variable | Défaut | Rôle |
 |---|---|---|
-| `AC_VM_CPUS` | `4` | CPU alloués (s'applique au lancement de la VM). |
-| `AC_VM_MEMORY` | `8` (GiB) | RAM allouée (s'applique au lancement). |
-| `AC_VM_DISK` | `32` (GiB) | Disque, fixé au 1er lancement, ne peut ensuite que grandir. |
+| `AC_VM_CPUS` | `4` | CPU alloués. |
+| `AC_VM_MEMORY` | `8` (GiB) | RAM allouée. |
+| `AC_VM_DISK` | `32` (GiB) | Disque, fixé à la création, ne peut ensuite que grandir. |
+
+Ces valeurs sont gravées dans la **VM de base** à sa création, et chaque VM projet en hérite (elle en est un clone). Elles sont aussi repassées à chaque `run`, ce qui te permet de changer `AC_VM_CPUS` / `AC_VM_MEMORY` et de voir l'effet au lancement suivant, sans reconstruire la VM de base. Le disque, lui, ne peut que grandir.
 
 **Garde-fou hôte** (lecture seule, macOS + Linux) : `install.sh` détecte les ressources de ta machine (`sysctl`/`nproc`) et ne propose jamais plus de ~la moitié du CPU/RAM hôte, même si `AC_VM_*` demande plus — pour ne pas sur-allouer sur un petit poste. Le disque n'est jamais rogné (sparse : alloué à l'usage, pas d'un coup) ; un avertissement s'affiche si l'espace libre est insuffisant.
 
@@ -100,18 +103,18 @@ Par défaut, l'agent peut **committer** dans la VM mais **ni pusher ni ouvrir de
    - *Repository access* → seulement les dépôts que l'agent doit toucher (pas « All repositories »).
    - *Permissions* → **Contents: Read and write** + **Pull requests: Read and write** (Metadata: read est ajouté d'office).
    - Expiration courte, à renouveler. **Token dédié et révocable** (pas ton token maître).
-2. **Pose-le dans ton runtime perso** `~/.agent-vm/runtime.sh` (hôte, hors de tout dépôt, `chmod 600`) — jamais dans un `opencode.json` ni un fichier versionné :
+2. **Pose-le dans le canal à secrets du moteur**, jamais dans un `opencode.json` ni un fichier versionné. Ce canal (`~/.agent-vm/env`) est repoussé dans la VM **à chaque démarrage**, donc une clé tournée est prise en compte au lancement suivant, sans reconstruire la VM :
    ```bash
-   # --- albert-code : auth GitHub VM ---
-   grep -q 'GH_TOKEN'          ~/.zshenv 2>/dev/null || echo "export GH_TOKEN='github_pat_XXXXXXXX'"                 >> ~/.zshenv
-   export GH_TOKEN='github_pat_XXXXXXXX'
-   grep -q 'AC_GIT_USER_NAME'  ~/.zshenv 2>/dev/null || echo "export AC_GIT_USER_NAME='Prénom Nom'"                  >> ~/.zshenv
-   export AC_GIT_USER_NAME='Prénom Nom'
-   grep -q 'AC_GIT_USER_EMAIL' ~/.zshenv 2>/dev/null || echo "export AC_GIT_USER_EMAIL='ton-id@users.noreply.github.com'" >> ~/.zshenv
-   export AC_GIT_USER_EMAIL='ton-id@users.noreply.github.com'
-   # --- /albert-code ---
+   agent-vm env set GH_TOKEN github_pat_XXXXXXXX
+   agent-vm env set AC_GIT_USER_NAME 'Prénom Nom'
+   agent-vm env set AC_GIT_USER_EMAIL ton-id@users.noreply.github.com
    ```
+   Passe par `agent-vm env` plutôt que d'éditer le fichier : il est *sourcé* par le shell de la VM, donc une apostrophe mal échappée y coûte **tous** les secrets, pas seulement celui-là.
+   `albert-code install` écrit ces lignes pour toi si tu fournis un PAT au wizard.
+
    Utilise ton **email noreply GitHub** ([settings/emails](https://github.com/settings/emails)) pour ne pas exposer ton email perso dans l'historique git.
+
+   > Ces variables ne sont **pas** exportées dans ton `~/.zshenv`. C'est délibéré : une variable exportée est ambiante, et ta propre CLI `gh` hériterait du token de l'agent — restreint à quelques dépôts — ce qui donne des `404` trompeurs sur tes autres dépôts. Si une installation antérieure les avait posées dans `~/.zshenv`, `albert-code install` propose de les retirer.
 3. **Relance la bulle** (`albert-code run`). Le runtime du bundle branche alors automatiquement le credential helper (`gh auth setup-git`) et pose l'identité git. `git push` et `gh pr create` marchent depuis la VM.
 
 > Le token vit dans une bulle exposée au prompt-injection : garde-le **fine-grained, scopé, révocable**, et **relis chaque PR avant merge**. Un contenu malveillant pourrait pousser l'agent à en abuser dans la limite de sa portée — d'où les permissions minimales.
@@ -161,7 +164,7 @@ MCP (**Model Context Protocol**) est un standard qui **branche l'agent sur un ou
   Pour changer le modèle par défaut d'un projet, édite `model` dans son `opencode.json`. Pour en ajouter un autre à la main, ajoute un bloc dans `provider.albert.models` du projet en récupérant d'abord son `id` canonique via `GET /v1/models` (jamais un alias) : ex. `"models": { "qwen3-coder-30b-A3b-instruct": { "name": "Qwen3 Coder 30B A3B (Albert)", "limit": { "context": 262144, "output": 65536 } } }`.
 - **Config** : `opencode.json` de **portée projet** (jamais le global de l'utilisateur, qui peut avoir d'autres providers).
 - **Skills** : `etalab-ia/skills` cloné dans un cache (`~/.config/opencode/.albert-skills-cache`) et symliqué dans le dossier scanné par OpenCode. Au `setup`, chaque skill est proposée en Y/N avec son objectif. La sélection est écrite dans `.albert-code/skills.txt` à la racine du projet. Au boot de la VM, `sync_skills` ne symlinke que les skills sélectionnées puis réconcilie (retire les symlinks des skills non sélectionnées, sans jamais toucher les skills perso). Sans manifeste `.albert-code/skills.txt`, toutes les skills sont installées (rétrocompat). Mise à jour à chaque démarrage de VM.
-- **MCP** : les 4 connecteurs sont désormais **tous opt-in**. Au `setup`, chaque MCP est proposé en Y/N avec son objectif : `data-gouv` (accès aux données publiques), `context7` (doc à jour des librairies ; si tu le choisis, la clé gratuite est demandée à ce moment-là : https://context7.com/plans), `playwright` (navigateur headless), `chrome-devtools` (debug navigateur). Seuls les MCP acceptés sont écrits dans `opencode.json` du projet (`enabled:false` par défaut). Note : le MCP `chrome-devtools` peut aussi apparaître dans OpenCode même si non coché — il est préinstallé par le moteur d'isolation en amont et n'est pas sous le contrôle d'Albert Code.
+- **MCP** : les 4 connecteurs sont désormais **tous opt-in**. Au `setup`, chaque MCP est proposé en Y/N avec son objectif : `data-gouv` (accès aux données publiques), `context7` (doc à jour des librairies ; si tu le choisis, la clé gratuite est demandée à ce moment-là : https://context7.com/plans), `playwright` (navigateur headless), `chrome-devtools` (debug navigateur). Seuls les MCP acceptés sont écrits dans `opencode.json` du projet (`enabled:false` par défaut). Albert Code crée la VM de base avec `--preinstall=node,gh,chromium,opencode`, en **omettant** `mcp-chrome` : le moteur ne câble donc aucun MCP dans la config globale de la VM, et ton Y/N au `setup` décide seul. C'est garanti par le prérequis agent-vm ≥ 0.1.0 — la version qui introduit ce nom, et en dessous de laquelle Albert Code refuse de s'installer.
 - **Conventions** : `AGENTS.md` depuis `templates/AGENTS.default.md` (sécurité, plan mode, task management, code quality, git, accessibilité). À chaque `setup` ou `update`, une **zone gérée** (délimitée par des commentaires HTML invisibles au rendu) est rafraîchie avec les garanties du bundle : `## Sécurité (non négociable)`, `## Git & commits`, `## Accessibilité & conformité` et `## Hygiène de dépôt`. Tout ce qui est **hors zone** — l'en-tête, `## Expected Behavior` et ses sous-sections (plan mode, task management, code quality), et tes ajouts personnels — est **préservé** et jamais écrasé.
 
 Docs : [OpenCode](https://opencode.ai/docs/fr) · [Albert API](https://doc.incubateur.net/alliance/albert-api) · [agent-vm](https://github.com/sylvinus/agent-vm) · [Skills État](https://github.com/etalab-ia/skills)
@@ -170,10 +173,9 @@ Docs : [OpenCode](https://opencode.ai/docs/fr) · [Albert API](https://doc.incub
 
 - **`albert-code: command not found` juste après l'installation** → le shim est dans `~/.local/bin`, absent de ton `PATH`. Depuis le correctif, l'ajout au `PATH` est posé dans le fichier de ton shell détecté (`~/.bashrc` sous Linux avec bash, `~/.bash_profile` sous macOS avec bash, `~/.zshenv` sous zsh) : **ouvre un nouveau terminal** (ou `source <ce fichier>`). Sur une installation antérieure à ce correctif, la ligne peut encore vivre dans `~/.zshenv`, que bash ne lit pas : ajoute alors `export PATH="$HOME/.local/bin:$PATH"` à ton `~/.bashrc`, puis `source ~/.bashrc`.
 - **`Error: Lima needs 'qemu-system-x86_64' on PATH` ou `Error: /dev/kvm does not exist` (Linux)** → prérequis manquants, voir [Prérequis](#prérequis).
-- **`opencode: command not found` (préfixe `/bin/bash`)** → ton bundle est antérieur au correctif du lancement (Lima ≥ 2.2.0 n'utilise plus `zsh -l` automatiquement). Mets à jour ton bundle puis relance :
-  1. `cd ~/albert-code && git pull`
-  2. `albert-code run`
-  Si l'erreur persiste après mise à jour, `albert-code update` puis relance.
+- **`opencode: command not found` (préfixe `/bin/bash`)** → ton **moteur de VM** est antérieur au correctif du lancement (Lima ≥ 2.2.0 n'utilise plus `zsh -l` automatiquement). Ce correctif vit maintenant dans agent-vm, pas dans Albert Code : `cd ~/agent-vm && git pull`, puis `albert-code run`.
+- **`Moteur de VM injoignable ou trop ancien`** → Albert Code demande agent-vm ≥ 0.1.0 : c'est la version qui expose `agent-vm info` (toute la détection d'état en dépend), le nom `mcp-chrome`, et le lancement d'OpenCode par shell de connexion. En dessous, l'installation **s'arrête** plutôt que de te laisser le découvrir au premier `run`. Lance `albert-code install` : il localise ton moteur, affiche sa version et propose la mise à jour — mais seulement si son dépôt est propre et suit un remote, jamais par-dessus ton travail en cours. Un moteur qui ne sait pas dire sa version est antérieur au verbe `version`, donc antérieur au plancher. Si tu sais que le tien porte déjà ce qu'il faut (fork, build local), `AC_AGENT_VM_MIN=0 albert-code install` désactive la vérification.
+- **Albert Code ne trouve pas mon agent-vm** → vérifie `command -v agent-vm`. S'il ne renvoie rien alors que `agent-vm` marche dans ton terminal, c'est une install par sourçage : la commande n'existe que dans ton shell interactif. Lance `./install.sh` dans ton clone d'agent-vm — ça ajoute la commande sans retirer la fonction.
 - **`Base VM not found`** → lance `albert-code run` une fois ; la VM de base se crée automatiquement.
 - **Je suis dans OpenCode mais pas connecté à Albert (pas de `/models`, `/mcp`, `/skills`)** → tu as lancé `albert-code run` dans un dossier **sans `opencode.json`** (ex. le dépôt albert-code lui-même, ou un projet jamais scaffoldé). Scaffolde d'abord : `cd <ton-projet> && albert-code setup`, puis relance `albert-code run`.
 - **Mon projet a déjà un `opencode.json`** → il est **conservé** (non-destructif). Vérifie qu'il contient le provider albert ; sinon Albert n'est pas câblé — ajoute à la main le bloc `provider.albert` + `model`/`small_model`.
@@ -184,7 +186,7 @@ Docs : [OpenCode](https://opencode.ai/docs/fr) · [Albert API](https://doc.incub
 ./uninstall.sh
 ```
 
-Retire le bloc albert-code du runtime VM, le cache et les symlinks skills. Préserve tes skills et ta config perso.
+Retire les clés d'Albert Code de `~/.agent-vm/env`, le cache et les symlinks skills. Préserve tes skills, ta config perso, les autres lignes de `~/.agent-vm/env` — et **ne touche pas à agent-vm**, qui est un outil indépendant : ta commande `agent-vm` continue de marcher.
 
 ## Contribuer
 
