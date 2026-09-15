@@ -1069,12 +1069,14 @@ check_disk_space_warning() {
 # toucher aux autres clés (MCP, permissions, autres providers). C'est la source de
 # vérité de l'état cible par défaut ; la réparation (T9.2) est un traitement
 # distinct (jq_albert_reconcile_program) mais partage ce même état par défaut.
+# L'appelant passe --arg baseurl "$AC_ALBERT_BASE_URL", pour que l'URL soit
+# écrite en clair dans le fichier généré et non en {env:...} (T1.9).
 jq_albert_merge_program() {
   cat <<'JQ'
 .provider.albert = {
     "npm": "@ai-sdk/openai-compatible",
     "name": "Albert API (État)",
-    "options": {"baseURL": "https://albert.api.etalab.gouv.fr/v1", "apiKey": "{env:ALBERT_API_KEY}"},
+    "options": {"baseURL": $baseurl, "apiKey": "{env:ALBERT_API_KEY}"},
     "models": {
       "deepseek-v4-flash": {"name": "DeepSeek V4 Flash (Albert)", "limit": {"context": 131072, "output": 65536}}
     }
@@ -1082,7 +1084,7 @@ jq_albert_merge_program() {
 JQ
 }
 
-# fetch_albert_catalog — interroge GET /v1/models avec la clé en main et pose la
+# fetch_albert_catalog — interroge GET <base>/models avec la clé en main et pose la
 # liste des id canoniques (un par ligne) dans AC_CATALOG_IDS. Retourne 0 si le
 # catalogue est joignable et lisible, 1 sinon (avertit sans rien modifier, jamais
 # de dépendance à un catalogue injoignable pour un setup ou un lancement).
@@ -1102,9 +1104,35 @@ fetch_albert_catalog() {
     warn "ALBERT_API_KEY absente — vérification du catalogue Albert ignorée."
     return 1
   fi
+  # Le catalogue interrogé est celui du projet : le baseURL déclaré dans
+  # ./opencode.json prime sur la variable, pour qu'un `update` lancé sans
+  # AC_ALBERT_BASE_URL ne reparte pas sur Albert alors que le projet pointe
+  # ailleurs (T1.9). `run` n'appelle pas cette fonction. Garde AC-R061 : ce
+  # fichier est versionné, donc un endpoint déclaré qui diffère de la variable
+  # n'obtient la clé qu'après confirmation. jq est garanti présent ici (test
+  # plus haut).
+  local base="$AC_ALBERT_BASE_URL" declared=""
+  if [ -f ./opencode.json ]; then
+    declared="$(jq -r '.provider.albert.options.baseURL // empty' ./opencode.json 2>/dev/null || true)"
+  fi
+  declared="${declared%/}"
+  if [ -n "$declared" ] && [ "$declared" != "$AC_ALBERT_BASE_URL" ]; then
+    if [ "$AC_ALBERT_BASE_URL" != "$AC_ALBERT_DEFAULT_BASE_URL" ]; then
+      warn "AC_ALBERT_BASE_URL ($AC_ALBERT_BASE_URL) ignorée : le projet déclare déjà $declared. Modifie opencode.json pour en changer."
+    fi
+    warn "Le projet déclare un endpoint différent : $declared. Ta clé ALBERT_API_KEY lui sera envoyée."
+    if ! confirm "Interroger le catalogue de $declared ?"; then
+      warn "Vérification du catalogue ignorée, configuration conservée."
+      return 1
+    fi
+  fi
+  if [ -n "$declared" ]; then
+    base="$declared"
+  fi
+
   local body
   body="$(curl -fsS --max-time 10 -H "Authorization: Bearer $api_key" \
-    https://albert.api.etalab.gouv.fr/v1/models 2>/dev/null || true)"
+    "$base/models" 2>/dev/null || true)"
   if [ -z "$body" ]; then
     warn "Catalogue Albert injoignable (API en panne, clé invalide ou réseau) — configuration conservée."
     return 1
@@ -1262,7 +1290,7 @@ scaffold_opencode_json() {
           # Filtre cible par défaut (jq_albert_merge_program), source de vérité de
           # l'état cible pour le provider absent (la réparation T9.2 est distincte).
           # Le message de succes n'est affiche que si le merge a reellement abouti.
-          elif jq "$(jq_albert_merge_program)" "$dest" > "${dest}.tmp" 2>/dev/null && mv "${dest}.tmp" "$dest"; then
+          elif jq --arg baseurl "$AC_ALBERT_BASE_URL" "$(jq_albert_merge_program)" "$dest" > "${dest}.tmp" 2>/dev/null && mv "${dest}.tmp" "$dest"; then
             ok "Provider Albert ajoute dans ${dest}. Sauvegarde dans ${_bak}"
           else
             warn "Echec du merge jq (JSON invalide ? ex. commentaires) - fichier restaure, Albert non cable."
@@ -1322,7 +1350,7 @@ scaffold_opencode_json() {
 
   local content='{'
   content=$content'"$schema":"https://opencode.ai/config.json",'
-  content=$content'"provider":{"albert":{"npm":"@ai-sdk/openai-compatible","name":"Albert API (État)","options":{"baseURL":"https://albert.api.etalab.gouv.fr/v1","apiKey":"{env:ALBERT_API_KEY}"},"models":{"deepseek-v4-flash":{"name":"DeepSeek V4 Flash (Albert)","limit":{"context":131072,"output":65536}}}}},'
+  content=$content'"provider":{"albert":{"npm":"@ai-sdk/openai-compatible","name":"Albert API (État)","options":{"baseURL":"'"$AC_ALBERT_BASE_URL"'","apiKey":"{env:ALBERT_API_KEY}"},"models":{"deepseek-v4-flash":{"name":"DeepSeek V4 Flash (Albert)","limit":{"context":131072,"output":65536}}}}},'
   content=$content'"model":"albert/deepseek-v4-flash",'
   content=$content'"small_model":"albert/deepseek-v4-flash",'
   content=$content'"mcp":{'

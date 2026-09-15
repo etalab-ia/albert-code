@@ -32,3 +32,6 @@ jobs:
 
       - name: Test S69 — zone gérée des AGENTS.md de projet (T8.5)
         run: bash tests/s69_agents_zone.sh
+
+      - name: Test S68 — baseURL Albert surchargeable (T1.9)
+        run: bash tests/s68_albert_base_url.sh
