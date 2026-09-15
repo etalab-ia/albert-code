@@ -1143,3 +1143,29 @@ repasse OK une fois le correctif en place.
 d'origine. Le cas 6 a depuis été réécrit en 6a à 6e et le cas 8 ajouté (AC-R061).
 Rejoué en local le 2026-09-11 : exit 0, 23 assertions ; les cas 6a, 6b, 6e et 8
 échouent sur le code antérieur à la garde.
+
+## S70 — Artefacts du bundle masqués du `git status` via `.git/info/exclude` (T6.18, AC-R064)
+
+**Préconditions :** `lib/ui.sh` + `lib/phases.sh` sourcés dans un bac à sable jetable
+(`tests/s70_git_exclude.sh` : `HOME` détourné, chaque cas dans son propre mini-dépôt
+git committé). Pas de VM requise. Rejouable en CI, branché dans
+`.github/workflows/hygiene.yml`.
+
+**Étapes (automatisé) :**
+1. `bash tests/s70_git_exclude.sh`
+
+**Attendu :** exit 0, 19 assertions :
+- (A) premier passage sur un `exclude` avec ligne perso : bloc marqueur + entrées
+  (`opencode.json`, `opencode.jsonc`, `opencode.json.bak*`, `.agent-vm.runtime.sh`,
+  `.albert-code/`) posé en fin de fichier, ligne perso conservée ; `git status` ne
+  montre plus les artefacts mais montre toujours `AGENTS.md` (versionnable, T8.5) ;
+- (B) second passage idempotent : fichier inchangé, message « déjà à jour » ;
+- (C) zone existante réécrite : contenu perso avant ET après la zone préservé
+  bit-à-bit, ancienne entrée remplacée, exactement un couple de marqueurs ;
+- (D) marqueur orphelin : fichier inchangé + `warn` explicite ;
+- (E) hors dépôt git : sortie silencieuse, rc 0 (setup doit marcher sans git) ;
+- (F) `--dry-run` : aucune écriture, le fichier absent n'est pas créé ;
+- (G) `exclude` absent (git >= 2.x ne le pose plus au `init`) : recréé avec le bloc.
+
+**Validé le :** 2026-09-15 — automatisé et conservé (`tests/s70_git_exclude.sh`, 19
+assertions en sandbox, branché dans `.github/workflows/hygiene.yml`).

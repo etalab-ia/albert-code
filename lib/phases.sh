@@ -155,6 +155,9 @@ phase_b() {
   sync_agents_md
   echo
 
+  # B.1.bis Exclusions git locales (.git/info/exclude, T6.18 <- AC-R064)
+  sync_git_exclude
+
   # B.2 [2/4] opencode.json avec MCP interactifs (non-destructif)
   title "[2/4] Connecteurs MCP"
   scaffold_opencode_json
@@ -313,6 +316,10 @@ phase_update() {
   #    Réécrit la zone entre marqueurs si elle existe, sinon insertion silencieuse. Sans question.
   sync_agents_md
   [ "$AC_AGENTS_CHANGED" -eq 1 ] && changed=1
+
+  # 2.bis Exclusions git locales (.git/info/exclude, T6.18 <- AC-R064) : sans question.
+  sync_git_exclude
+  [ "${AC_EXCLUDE_CHANGED:-0}" -eq 1 ] && changed=1
 
   # 3. Runtime VM : régénérer le bloc marqué (idempotent, garde-fou OpenCode T8.3).
   #    Recalcule ALBERT_API_KEY depuis l'environnement si besoin, pas de question.
@@ -1031,6 +1038,100 @@ _migrate_agents_zone() {
     ok "Zone gérée albert-code insérée en tête de ton AGENTS.md — tes sections personnalisées sont conservées en dessous."
   fi
   rm -f "$tmp"
+}
+
+# --- Exclusions git locales (.git/info/exclude, T6.18 <- AC-R064) ---------------
+# sync_git_exclude — masque les artefacts posés par le bundle (opencode.json,
+# .agent-vm.runtime.sh, .albert-code/) du `git status` sans toucher à l'arbre de
+# travail : les entrées vivent dans .git/info/exclude, fichier PAR CLONE et
+# jamais versionné (contrairement à un .gitignore, qui serait un fichier de
+# plus à committer et à fusionner). AGENTS.md n'est PAS exclu : il est prévu
+# pour être versionné (zone gérée T8.5, le `git diff` fait la revue).
+# Même motif de zone délimitée que sync_agents_md :
+#   - hors dépôt git          → rien (silencieux, pas d'avertissement : setup
+#                               doit marcher dans un dossier non-git) ;
+#   - marqueurs appariés      → réécrit la zone entre marqueurs, le reste du
+#                               fichier (exclusions perso de l'utilisateur)
+#                               est préservé ;
+#   - sans marqueur           → ajoute le bloc en fin de fichier ;
+#   - marqueur orphelin       → ne rien écrire, avertir.
+# Idempotent : sans changement de contenu, rien n'est écrit. Respecte --dry-run
+# via _dry_gate. Positionne AC_EXCLUDE_CHANGED=1 si le fichier a été modifié.
+AC_EXCLUDE_MARKER="# --- albert-code : exclusions locales ---"
+AC_EXCLUDE_MARKER_END="# --- /albert-code ---"
+AC_EXCLUDE_ENTRIES="opencode.json
+opencode.jsonc
+opencode.json.bak*
+.agent-vm.runtime.sh
+.albert-code/"
+
+sync_git_exclude() {
+  AC_EXCLUDE_CHANGED=0
+
+  # .git peut être un dossier (clone normal) ou un fichier (worktree git,
+  # sous-module) : git rev-parse tranche les deux cas et rend le chemin du
+  # dossier .git réel, là où vit info/exclude (relatif au CWD si racine).
+  local git_dir exclude_file
+  git_dir="$(git rev-parse --git-dir 2>/dev/null)" || return 0
+  exclude_file="${git_dir}/info/exclude"
+  # Hors dépôt git → setup doit rester utilisable : sortie silencieuse.
+  [ -d "$(dirname "$exclude_file")" ] || return 0
+
+  # Marqueur orphelin : ouvrant sans fermant (ou l'inverse) → on n'écrit pas.
+  if { file_contains "$exclude_file" "$AC_EXCLUDE_MARKER" && ! file_contains "$exclude_file" "$AC_EXCLUDE_MARKER_END"; } \
+     || { file_contains "$exclude_file" "$AC_EXCLUDE_MARKER_END" && ! file_contains "$exclude_file" "$AC_EXCLUDE_MARKER"; }; then
+    warn "ton .git/info/exclude a un marqueur de zone albert-code orphelin (ouvrant sans fermant, ou l'inverse)."
+    warn "Fichier laissé intact — corrige-le à la main avant le prochain setup/update."
+    return 0
+  fi
+
+  # Zone cible : marqueurs + entrées. Toujours en fin de fichier : le début du
+  # exclude historique (commentaires du template git) reste lisible en tête.
+  local _new_block
+  _new_block="$AC_EXCLUDE_MARKER
+$AC_EXCLUDE_ENTRIES
+$AC_EXCLUDE_MARKER_END"
+
+  # Le fichier peut ne pas exister (git >= 2.x ne le pose plus au init) :
+  # file_contains le tolère (grep -q sur fichier absent → faux), la suite
+  # crée le fichier via apply_cp ; on ne crée jamais en dry-run.
+  [ "$DRY_RUN" -eq 0 ] && touch "$exclude_file" 2>/dev/null || true
+
+  local tmp
+  tmp="$(mktemp)"
+  if file_contains "$exclude_file" "$AC_EXCLUDE_MARKER"; then
+    # Réécrit la zone entre marqueurs, préserve tout le reste. Motif awk
+    # (plus robuste que sed c\\ pour un bloc multi-lignes : pas d'échappement
+    # du contenu à injecter).
+    _rewrite_exclude_zone "$exclude_file" > "$tmp"
+  else
+    # Pas de zone : ajout en fin de fichier (le fichier peut ne pas exister).
+    { [ -f "$exclude_file" ] && cat "$exclude_file"; printf '\n%s\n' "$_new_block"; } > "$tmp"
+  fi
+
+  if ! diff -q "$tmp" "$exclude_file" >/dev/null 2>&1; then
+    mkdir -p "$(dirname "$exclude_file")"
+    apply_cp "écrire les exclusions locales .git/info/exclude (T6.18)" "$tmp" "$exclude_file"
+    if [ "$DRY_RUN" -eq 0 ]; then
+      AC_EXCLUDE_CHANGED=1
+      ok "Artefacts du bundle masqués dans git status (exclusions locales .git/info/exclude)."
+    fi
+  else
+    info "Exclusions locales déjà à jour (.git/info/exclude)."
+  fi
+  rm -f "$tmp"
+}
+
+# _rewrite_exclude_zone <file> — imprime <file> avec la zone entre marqueurs
+# remplacée par le bloc courant (marqueurs inclus), hors-zone préservé
+# bit-à-bit. awk : pas d'échappement du contenu injecté, bash 3.2 friendly.
+_rewrite_exclude_zone() {
+  awk -v start="$AC_EXCLUDE_MARKER" -v end="$AC_EXCLUDE_MARKER_END" \
+      -v block="$_new_block" '
+    $0 == start { inzone = 1; print block; next }
+    inzone && $0 == end { inzone = 0; next }
+    !inzone { print }
+  ' "$1"
 }
 
 # compute_effective_vm_resources — EFF_CPUS/EFF_MEM

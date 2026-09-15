@@ -54,6 +54,8 @@ Après installation, tu disposes de la commande `albert-code` à 4 verbes :
 | `albert-code run` | **Lancement** : crée la VM de base si absente, puis ouvre la VM isolée. |
 | `albert-code update` | **Maintenance** : rafraîchit un projet déjà configuré (répare les identifiants de modèles périmés dans opencode.json + propage les évolutions des règles dans AGENTS.md + régénère le runtime). |
 
+> **Fichiers posés et `git status`** : `setup` pose `AGENTS.md` (prévu pour être versionné — le `git diff` fait la revue) ainsi que `opencode.json`, `.agent-vm.runtime.sh` et `.albert-code/` (non versionnés). Dans un dépôt git, ces trois derniers sont masqués du `git status` via `.git/info/exclude` — un fichier local à ton clone, jamais versionné, entretenu par `setup` et `update`. Pas de `.gitignore` imposé : ton projet garde le sien.
+
 `install.sh` est **idempotent** et **non-destructif** : il amorce le poste (Phase A) et pose le shim `albert-code`. Ensuite, c'est `albert-code setup` puis `albert-code run`. Pour réparer un projet dont les modèles Albert sont devenus invalides, lance `albert-code update` dans le dossier du projet.
 
 Flags : `--dry-run` (simule sans rien écrire), `--help`.
