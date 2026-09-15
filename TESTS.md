@@ -1059,6 +1059,47 @@ Plus les assertions de non-pollution : le vrai `~/.zshenv` de la machine et les 
 
 **Validé le :** — (à remplir après validation réelle)
 
+## S71 — Une VM de base incomplète n'est pas clonée, elle est recréée (T7.9, AC-R063)
+
+**Préconditions :** `lib/ui.sh` et `lib/phases.sh` du dépôt ; `tests/s71_base_vm_complete.sh`
+rejouable en CI (hashable). Le script met un **faux `limactl`** sur un PATH de test jetable (renvoie
+la liste contrôlée par `FAKE_LIMA_LIST` à `list -q`) et pointe `AGENT_VM_STATE_DIR` vers un bac à
+sable : **aucune VM réelle** n'est créée ni détruite, `HOME` est détourné. On teste le contrat de
+`base_vm_exists` (ancre T7.9 : la base n'est prête que si `agent-vm-base` est dans Lima **ET** que
+le fichier `.agent-vm-base-version` est présent dans `$(_agent_vm_state_dir)`) et la chaîne T7.8 via
+`_project_vm_from_stale_base`.
+
+**Étapes (automatisé : `bash tests/s71_base_vm_complete.sh`):**
+1. **Cas (a)** : `FAKE_LIMA_LIST=agent-vm-base` + `.agent-vm-base-version` présent → `base_vm_exists`
+   retourne 0 (prête).
+2. **Cas (b)** : base dans Lima + fichier de version retiré → `base_vm_exists` retourne non nul
+   (absente), et un avertissement nomme la base « incomplète » et annonce sa « recréation ».
+3. **Cas (c)** : `FAKE_LIMA_LIST=` (rien listé) → `base_vm_exists` retourne non nul, **sans** mot
+   « incomplète » dans la sortie.
+4. **Cas (d)** : base « refaite » (`.agent-vm-base-version` reposé) → prête ; et `_project_vm_from_stale_base`
+   retourne 0 (périmée) pour une VM projet **sans** `.agent-vm-version-<vm>` (ancre T7.8 : `[ -f
+   "$vm_ver" ] || return 0`), ce qui déclenche la proposition de recréation de T7.8 au `run`.
+5. **Cas (e)** : recréation de la base — base absente de Lima (déjà supprimée par une recréation
+   interrompue) + **ancien marqueur `.agent-vm-base-version` encore présent** → `check_base_vm`
+   (confirm=oui, `_vm` stubé) appelle `_clear_base_vmarker` **avant** `_vm setup` : le moteur
+   vendorisé supprime la VM mais jamais le marqueur, donc sans ce correctif un ancien marqueur
+   subsisterait et ferait passer pour prête une base à moitié provisionnée. On vérifie que le
+   marqueur a disparu au moment de l'appel setup.
+
+**Attendu :** (a) prête. (b) absente + avertissement (cause probable : réseau/proxy pendant
+l'installation, outils zsh/opencode manquants) + recréation annoncée. (c) absente, muet. (d) la VM
+projet clonée d'une base refaite est périmée et T7.8 propose sa recréation. (e) le marqueur de
+version est retiré juste avant `_vm setup`, donc une recréation interrompue ne laisse pas un ancien
+marqueur masquer une base incomplète. **Rien n'est supprimé ni recréé par le test** (dry-run, faux
+`limactl`, `_vm` stubé) ; l'action « recréer la VM de base » est déléguée au chemin existant
+(« Créer la VM de base maintenant ? » → `_vm setup`), qui fait déjà `limactl delete --force` sur une
+`agent-vm-base` existante (`vendor/vm/agent-vm.sh`).
+
+**Validé le :** `bash tests/s71_base_vm_complete.sh` → « S71 : OK — 9 assertions » (exécuté en
+sandbox jetable, `FAKE_LIMA_LIST` piloté, `_vm` stubé, aucune VM réelle ni écriture hors sandbox).
+Le cas (e) a été vérifié : il échoue (ÉCHEC) si l'on retire les appels `_clear_base_vmarker`, puis
+repasse OK une fois le correctif en place.
+
 ---
 
 ## S68 : `AC_ALBERT_BASE_URL` surchargeable, écrite en clair et préservée par `update` (T1.9, AC-R051, AC-R061)

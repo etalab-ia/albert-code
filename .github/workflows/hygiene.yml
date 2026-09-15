@@ -35,3 +35,6 @@ jobs:
 
       - name: Test S68 — baseURL Albert surchargeable (T1.9)
         run: bash tests/s68_albert_base_url.sh
+
+      - name: Test S71 — VM de base à moitié provisionnée (T7.9)
+        run: bash tests/s71_base_vm_complete.sh
