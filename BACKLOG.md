@@ -475,6 +475,19 @@ change).
 **DoD :** une VM projet clonée d'une base antérieure est détectée au `run`, et l'utilisateur se voit proposer la recréation. → `TESTS.md` S49.
 **Source :** Bêta-test juillet 2026, cause racine élucidée le 15/07 → `FEEDBACK.md` AC-R044.
 
+### T7.9 🔴 Une VM de base à moitié provisionnée passe pour prête et est clonée `<- AC-R063`
+**But :** `base_vm_exists` ne teste que la présence de `agent-vm-base` dans `limactl list -q`. Or le setup de la base peut s'interrompre en cours de route (ex. `apt-get update` bloqué derrière un proxy sortant) : la VM existe alors dans Lima **sans** zsh ni opencode, et le fichier `.agent-vm-base-version` (écrit seulement en fin de setup réussi, `vendor/vm/agent-vm.sh:1093`) n'est jamais posé. La base incomplète passe pour prête, `run` la clone, et tous les appels `zsh -l` échouent en `/bin/bash: line 1: zsh: command not found`.
+
+**Tâches :**
+- `base_vm_exists` (`lib/phases.sh`) : la base n'existe que si `agent-vm-base` figure dans `limactl list -q` **ET** que le fichier `.agent-vm-base-version` est présent dans le répertoire d'état du moteur. Résoudre ce répertoire comme `_project_vm_from_stale_base` (`${AGENT_VM_STATE_DIR:-$HOME/.agent-vm}`) via un **unique helper commun** `_agent_vm_state_dir` (pas de logique dupliquée).
+- Si la base est dans Lima mais **sans** fichier de version : avertir en français une seule fois que la VM de base est incomplète (installation interrompue, souvent un problème réseau ou proxy) et qu'elle va être recréée, puis retourner « absente ».
+- Ne **rien** supprimer côté Albert Code : le chemin existant (« Créer la VM de base maintenant ? » → `_vm setup`) suffit, car `_agent_vm_setup` fait déjà `limactl delete --force` sur une `agent-vm-base` existante avant de la recréer (`vendor/vm/agent-vm.sh:1024-1025`). Ne pas rendre l'échec du setup de base bloquant à l'install (warn + continuer, AC-R021/T6.8). Rester non-destructif en dry-run (`apply`/`_dry_gate`) : action seulement annoncée.
+
+**Règles :** ne pas toucher à `vendor/vm/` (vendored figé) ; bash 3.2 / `set -euo pipefail` ; accents FR corrects ; pas de tiret cadratin ; idempotent ; diff minimal.
+
+**DoD :** une base incomplète (présente dans Lima sans fichier de version) est recréée à la place d'être clonée, avec un avertissement clair ; une base complète n'est jamais recréée ; le marqueur `.agent-vm-base-version` est retiré avant chaque recréation (via `apply`, non destructif en dry-run) pour qu'une recréation interrompue ne laisse pas un ancien marqueur faire passer la base pour prête. → `TESTS.md` S71.
+**Source :** Retour agent public 2026-09-15 (Linux, proxy sortant) → `FEEDBACK.md` AC-R063.
+
 ---
 
 ## EPIC 6 — Interface 3 verbes & simplification profils `<- AC-R014, AC-R015, AC-R016, AC-R017`

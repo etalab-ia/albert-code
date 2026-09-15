@@ -218,6 +218,7 @@ phase_run() {
    if ! base_vm_exists; then
     info "Création de la VM de base nécessaire…"
     if confirm "Créer la VM de base maintenant ?"; then
+      _clear_base_version_marker
       apply "créer la VM de base (setup VM isolée)" _vm setup --preinstall=node,gh,chromium,opencode --disk "${AC_VM_DISK}" || {
         warn "Création de la VM de base échouée."
         return 1
@@ -343,24 +344,56 @@ check_base_vm() {
   fi
   echo
   if confirm "Créer la VM de base maintenant (~plusieurs minutes) ?"; then
+    _clear_base_version_marker
     apply "créer la VM de base (setup VM isolée)" _vm setup --preinstall=node,gh,chromium,opencode --disk "${AC_VM_DISK}" || {
       warn "Création de la VM de base échouée — tu pourras la créer plus tard."
     }
   fi
 }
 
-# base_vm_exists — 0 si la VM de base existe
+# _agent_vm_state_dir — répertoire d'état du moteur de VM.
+# Une seule source de vérité pour la résolution de ce chemin (évite que
+# base_vm_exists et _project_vm_from_stale_base dérivent l'un de l'autre).
+_agent_vm_state_dir() {
+  printf '%s' "${AGENT_VM_STATE_DIR:-$HOME/.agent-vm}"
+}
+
+# _clear_base_version_marker — invalide le marqueur .agent-vm-base-version juste avant
+# de (re)créer la VM de base. Le moteur vendorisé supprime la VM (limactl
+# delete) au début de son setup mais ne touche JAMAIS au marqueur, écrit
+# seulement en fin de setup réussi (vendor/vm/agent-vm.sh). Sans ce retrait,
+# une recréation interrompue (ex. base existante détruite puis setup qui
+# échoue) laisserait l'ancien marqueur et ferait passer pour prête une base
+# à moitié provisionnée. Via apply : annoncé seulement en dry-run, non
+# destructif.
+_clear_base_version_marker() {
+  apply "supprimer l'ancien marqueur de version de la VM de base (re-posé en fin de setup)" \
+    rm -f "$(_agent_vm_state_dir)/.agent-vm-base-version"
+}
+
+# base_vm_exists — 0 si la VM de base existe ET est complètement provisionnée.
 # Détection sans pipe : `limactl list -q | grep -q` est un faux négatif
 # intermittent sous set -o pipefail (course SIGPIPE, cf. T7.6 post-mortem) —
 # grep -q ferme le pipe, limactl prend un SIGPIPE, pipefail fait échouer le tout.
 # base_vm_exists est appelé dans phase_run/check_base_vm : un faux négatif
 # reproposait la création de la VM de base à chaque run. Capture d'abord, case pur.
+# (T7.9, AC-R063) La présence dans Lima ne suffit plus : une base interrompue en
+# cours de setup (ex. apt bloque derrière un proxy) existe dans Lima sans zsh ni
+# opencode et SANS le fichier .agent-vm-base-version (écrit seulement en fin de
+# setup réussi). La base n'est « prête » que si les deux conditions tiennent.
 base_vm_exists() {
   command -v limactl >/dev/null 2>&1 || return 1
   local _list
   _list="$(limactl list -q 2>/dev/null || true)"
   case $'\n'"$_list"$'\n' in
-    *$'\n'agent-vm-base$'\n'*) return 0 ;;
+    *$'\n'agent-vm-base$'\n'*)
+      if [ -f "$(_agent_vm_state_dir)/.agent-vm-base-version" ]; then
+        return 0
+      fi
+      warn "La VM de base est incomplète : son installation a été interrompue"
+      warn "(souvent un problème réseau ou proxy pendant l'installation des"
+      warn "paquets). Il faut la recréer : elle manque de zsh et d'opencode."
+      return 1 ;;
     *) return 1 ;;
   esac
 }
@@ -374,7 +407,8 @@ base_vm_exists() {
 # base, on n'affirme rien.
 _project_vm_from_stale_base() {
   local vm_name="$1"
-  local state="${AGENT_VM_STATE_DIR:-$HOME/.agent-vm}"
+  local state
+  state="$(_agent_vm_state_dir)"
   local base_ver="$state/.agent-vm-base-version"
   local vm_ver="$state/.agent-vm-version-${vm_name}"
   [ -f "$base_ver" ] || return 1
