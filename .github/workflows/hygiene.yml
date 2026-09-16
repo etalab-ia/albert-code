@@ -13,6 +13,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Garde-fou cohérence registre et validité workflows (T14.4)
+        run: bash tests/check_registry_consistency.sh
+
       - name: Garde-fou anti-fuite chemin personnel / username (T4.5 <- AC-R008)
         run: bash tests/check_no_personal_paths.sh
 

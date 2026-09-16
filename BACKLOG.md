@@ -77,14 +77,14 @@ Config MCP de référence :
 ### T1.5 🟡 context7 conditionnel selon présence de la clé `<- AC-R011` ✅ implémenté
 **But :** `context7` est `enabled: true` en dur dans `config/opencode.template.json` ; sans `CONTEXT7_API_KEY`, le MCP échoue au démarrage dans la VM (401 / bearer vide) et s'affiche « cassé ». Répond à la note de T1.1 restée ouverte.
 **Tâches :** au scaffold (Phase B, pose de `opencode.json`), fixer `context7.enabled` selon la présence de `CONTEXT7_API_KEY` (env ou `~/.zshenv`) — `false` (ou MCP retiré) si absente ; `true` si présente. Post-patch du fichier posé (sed/jq) ou template conditionnel. Documenter le comportement.
-**DoD :** install **sans** clé context7 → `opencode.json` posé a `context7.enabled: false` → aucun MCP en erreur dans la VM ; **avec** clé → `enabled: true`. → `TESTS.md` S21.
+**DoD :** install **sans** clé context7 → `opencode.json` posé a `context7.enabled: false` → aucun MCP en erreur dans la VM ; **avec** clé → `enabled: true`. → `TESTS.md` S-ctx-2, S-ctx-3.
 **Implémenté** — la conditionnalité a évolué vers un opt-in plus strict que le ticket : les 4 MCP du template sont désormais `enabled: false` par défaut (`config/opencode.template.json:24-48`), et le scaffold n'écrit un MCP que si l'utilisateur le choisit ; la clé Context7 n'est demandée que si context7 est coché (`scaffold_opencode_json`, `lib/phases.sh:784-792`). Une personne sans clé répond simplement N à context7 → aucun MCP en erreur (objectif du ticket atteint).
 
 ### T1.6 🟠 Scaffold : `opencode.json` existant sans provider `albert` `<- AC-R012` ✅ absorbé par T7.7
 > Traité dans T7.7 (garde-fou générique run + setup) : l'avertissement au `setup` pour un `opencode.json` existant sans `albert` y est implémenté (`scaffold_opencode_json`, `lib/phases.sh:729-733`). Clôturé comme absorbé par T7.7 (DoD couverte : message explicite au `setup` + option de merge en T8.2).
 **But :** dans un repo ayant déjà un `opencode.json`, le scaffold le conserve (non-destructif) → le provider `albert` n'est jamais ajouté → Albert ne se connecte pas dans la VM, sans alerte (juste « conservé »). Footgun silencieux.
 **Tâches :** en Phase B, si `./opencode.json` existe déjà, détecter s'il contient le provider `albert` ; sinon → **avertir clairement** (« opencode.json existant sans provider Albert → Albert non câblé ») et proposer/documenter le merge du bloc `provider.albert` + `model`/`small_model` (jq/sed) sans écraser le reste. Ne jamais écraser silencieusement.
-**DoD :** scaffold dans un repo avec `opencode.json` sans `albert` → message explicite (+ option de merge) ; avec `albert` déjà présent → info « rien à faire ». → `TESTS.md` S22.
+**DoD :** scaffold dans un repo avec `opencode.json` sans `albert` → message explicite (+ option de merge) ; avec `albert` déjà présent → info « rien à faire ». → `TESTS.md` S45.
 
 ### T1.7 ✅ Auth GitHub de la VM : commit OK, mais push + PR impossibles depuis la bulle `<- AC-R013` — résolu (validé 06/07/2026)
 **But :** le README promet « l'agent pousse des PR depuis la VM », mais Albert Code ne configure dans la VM ni l'identité git (`user.name`/`user.email`), ni la clé SSH, ni de token `gh` → l'agent peut committer localement mais **ni pusher ni ouvrir la PR**. SSH = auth ≠ identité de commit.
@@ -108,7 +108,7 @@ Config MCP de référence :
 2. **Identité + garde-fou email** : demander/dériver `AC_GIT_USER_NAME` + `AC_GIT_USER_EMAIL`, avec **validation « doit finir en `users.noreply.github.com` »** (aurait attrapé le gmail saisi le 06/07). Proposer de dériver le noreply depuis le compte `gh` de l'hôte si dispo.
 3. **Gotcha de rotation** : documenter (README) + garde-fou — un `GH_TOKEN`/email déjà persisté dans le `~/.zshenv` de la VM n'est **pas** mis à jour par un changement côté hôte (grep-guard). Prévoir un chemin de mise à jour (réécrire la ligne `~/.zshenv` de la VM, ou `agent-vm rm` documenté).
 4. **Next-steps de l'install** : mentionner l'auth GitHub dans « Prochaines étapes » (actuellement absente).
-**DoD :** sur un poste vierge, `install.sh` propose l'auth GitHub ; après acceptation, une VM fraîche pushe + ouvre une PR sans aucune édition manuelle de `runtime.sh` ; un email non-noreply est refusé avec un message clair. → `TESTS.md` S24.
+**DoD :** sur un poste vierge, `install.sh` propose l'auth GitHub ; après acceptation, une VM fraîche pushe + ouvre une PR sans aucune édition manuelle de `runtime.sh` ; un email non-noreply est refusé avec un message clair. Validation absorbée par T2-CH2.
 **Implémenté (06/07/2026, branche `feat/github-auth-installer`)** — sous-points 1 (prompt token dans Phase A), 2 (identité + garde-fou email noreply, 3 tentatives) et 4 (next-steps) faits, dans `_github_auth` (`lib/phases.sh:476-587`) ; token jamais loggé (vérifié par canari en dry-run). **Gotcha de rotation (sous-point 3, resté ouvert)** : désormais tracé par l'EPIC 10 (`BACKLOG.md` T10.1) — cf. cause racine scrutée le 2026-08-26. Validation S24 absorbée par T2-CH2.
 
 ### T1.9 🟠 Rendre le baseURL Albert surchargeable `<- AC-R051` ✅ implémenté
@@ -172,7 +172,7 @@ ce que le README dit ; le défaut reste Albert.
 ### T2.2 🔴 `install.sh` / bootstrap qui DEMANDE le contexte ✅ implémenté
 **But :** aucun profil par défaut, aucun merge.
 **Tâches :** prompt « Quel contexte ? (1) beta.gouv (2) La Suite (3) IAE (4) Autre » → copie le bon `AGENTS.md` + installe le bon set de skills ; **(4) Autre = ne copie rien** (neutre). Refuser de continuer si rien n'est choisi.
-**DoD :** choisir beta.gouv → le projet ne contient AUCUNE convention IAE (commits gitmoji/uv absents), et inversement ; choisir Autre → aucun `AGENTS.md` de profil n'est posé. → `TESTS.md` S6, S7.
+**DoD :** choisir beta.gouv → le projet ne contient AUCUNE convention IAE (commits gitmoji/uv absents), et inversement ; choisir Autre → aucun `AGENTS.md` de profil n'est posé. → `TESTS.md` S6.
 
 ### T2.3 🟠 Couche universelle commune ✅ implémenté
 **But :** factoriser le socle (anglais code / FR UI, RGAA, ANSSI, RGPD, secrets, souveraineté) sans casser l'isolation.
@@ -958,7 +958,7 @@ Conséquence : sur les dernières PR, l'agent s'est arrêté avant le push et un
 - Poser le hook au setup : `git config core.hooksPath .githooks`, ajout additif et idempotent, sans écraser une config existante du projet.
 - Reformuler `templates/AGENTS.default.md:8` pour nommer le mécanisme réellement installé (le hook de pré-commit du bundle), rendre la consigne vraie, et préciser le contournement `--no-verify` comme dernier recours explicite et assumé, pas un réflexe.
 - Tests dans `TESTS.md` : un commit contenant `ALBERT_API_KEY=<vraie-clé-20+caractères>` est refusé (exit ≠ 0) ; `--no-verify` le laisse passer ; un commit sain passe ; un `ALBERT_API_KEY=` sans valeur ou avec marqueur/placeholder (`sk-xxx`, `$VAR`, `<clé>`) passe ; le motif flou ne bloque pas.
-**DoD :** sur un projet scaffoldé, committer un fichier contenant `ALBERT_API_KEY=<vraie-clé-plausible>` est **refusé** par le hook (hors `--no-verify`) ; un commit sain passe (y compris un `ALBERT_API_KEY=` documentaire vide/placeholder) ; la consigne `AGENTS.default.md` est vraie (le garde-fou décrit est réellement installé au setup). → scénario `TESTS.md` à créer (S63).
+**DoD :** sur un projet scaffoldé, committer un fichier contenant `ALBERT_API_KEY=<vraie-clé-plausible>` est **refusé** par le hook (hors `--no-verify`) ; un commit sain passe (y compris un `ALBERT_API_KEY=` documentaire vide/placeholder) ; la consigne `AGENTS.default.md` est vraie (le garde-fou décrit est réellement installé au setup). → scénario `TESTS.md` à créer (hook de pré-commit).
 **← décision T10.5 (2026-08-27).**
 
 ### T10.7 🟠 Rétention et purge de la base de session OpenCode dans la VM
@@ -1341,3 +1341,43 @@ du garde `[ -n "${EFF_CPUS:-}" ] || compute_effective_vm_resources`.
 **DoD :** les deux appels passent `--cpus $EFF_CPUS --memory $EFF_MEM` (vérifié en
 sandbox avec `AC_VM_CPUS=4`, `AC_VM_MEMORY=8` et des `detect_host_*` stubés).
 → `TESTS.md` S73.
+
+### T14.4 🟠 Garde-fou CI de cohérence du registre et de validité des workflows
+
+**Origine :** deux **incidents internes** (pas un retour utilisateur, donc aucun
+`AC-R###` associé). (a) Deux collisions d'identifiants en 24 h : `S70` pris par deux
+PR, et `AC-R037` réattribué alors que le ticket `T7.6` et les scénarios `S41`, `S42`,
+`S43` le citent déjà. (b) Un workflow refusé par GitHub pour un deux-points non quoté
+dans un `name:`, produisant un run en échec avec zéro job et aucun log — GitHub ne
+signale pas cette erreur au moment du push/pr.
+
+**But :** faire échouer la CI sur ces deux familles d'erreurs, avant les tests
+fonctionnels, car ce sont des contrôles de données et de configuration.
+
+**Tâches :**
+1. Créer `tests/check_registry_consistency.sh` : lecture seule, sans effet de bord,
+   compatible bash 3.2, sortie non nulle si une anomalie, et message qui dit quoi
+   corriger plutôt que de constater. Contrôles :
+   a. tout `AC-R###` cité dans `BACKLOG.md` ou `TESTS.md` existe comme ligne du
+      tableau de `FEEDBACK.md` (après le titre « ## Registre ») ;
+   b. aucun `AC-R###` en double dans ce tableau ;
+   c. aucune ligne « | AC-R### | » hors du tableau qui suit le titre « ## Registre » ;
+   d. toute référence de scénario via `TESTS.md` dans `BACKLOG.md` (formes
+      numériques `S##` **et** non numériques `S-ctx-##`) existe comme titre
+      « ## <id> » dans `TESTS.md` ; les lignes « à créer » (ticket ouvert) et les
+      identifiants entre parenthèses (annotations historiques) ne sont pas validées ;
+   e. aucun titre « ## S## » / « ## S-ctx-## » en double dans `TESTS.md` ;
+   f. chaque `.github/workflows/*.yml` est un YAML valide (`python3` +
+      `yaml.safe_load` ; si `python3` ou le module `yaml` est absent, sauter CE
+      contrôle avec un message explicite plutôt que d'échouer, comme S68 le fait
+      pour jq), et chaque étape `bash tests/…` pointe vers un fichier existant.
+2. Brancher ce script **en première position** dans `.github/workflows/hygiene.yml`,
+   avant le garde-fou anti-fuite de chemin personnel.
+3. Réparer les incohérences détectées (déplacer `AC-R035` dans le tableau, ajouter
+   la ligne `AC-R037`, corriger les références `S##` orphelines) sans inventer de
+   contenu de retour ni de liste d'exceptions.
+
+**DoD :** `bash tests/check_registry_consistency.sh` passe sur l'arbre du dépôt ;
+la CI échoue si (a) un `AC-R###` est en double ou cité sans ligne, (b) un `S##` est
+cité via `TESTS.md` sans titre correspondant, (c) un `name:` de workflow contient un
+deux-points non quoté. → `TESTS.md` S74.
