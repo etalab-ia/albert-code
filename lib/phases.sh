@@ -221,8 +221,12 @@ phase_run() {
    if ! base_vm_exists; then
     info "Création de la VM de base nécessaire…"
     if confirm "Créer la VM de base maintenant ?"; then
+      # AC-R067 : la VM de base par défaut du moteur (1 CPU / 3 GiB) est trop
+      # faible — c'est elle qui tourne apt, Node, Chromium, OpenCode, et chaque
+      # VM projet en est un clone. On repasse les ressources effectives.
+      [ -n "${EFF_CPUS:-}" ] || compute_effective_vm_resources
       _clear_base_version_marker
-      apply "créer la VM de base (setup VM isolée)" _vm setup --preinstall=node,gh,chromium,opencode --disk "${AC_VM_DISK}" || {
+      apply "créer la VM de base (setup VM isolée)" _vm setup --cpus "${EFF_CPUS}" --memory "${EFF_MEM}" --preinstall=node,gh,chromium,opencode --disk "${AC_VM_DISK}" || {
         warn "Création de la VM de base échouée."
         return 1
       }
@@ -351,8 +355,10 @@ check_base_vm() {
   fi
   echo
   if confirm "Créer la VM de base maintenant (~plusieurs minutes) ?"; then
+    # AC-R067 : mêmes ressources que phase_run (cf. commentaire de phase_run).
+    [ -n "${EFF_CPUS:-}" ] || compute_effective_vm_resources
     _clear_base_version_marker
-    apply "créer la VM de base (setup VM isolée)" _vm setup --preinstall=node,gh,chromium,opencode --disk "${AC_VM_DISK}" || {
+    apply "créer la VM de base (setup VM isolée)" _vm setup --cpus "${EFF_CPUS}" --memory "${EFF_MEM}" --preinstall=node,gh,chromium,opencode --disk "${AC_VM_DISK}" || {
       warn "Création de la VM de base échouée — tu pourras la créer plus tard."
     }
   fi
@@ -835,17 +841,34 @@ _github_auth() {
   esac
 
   # 2. Boucle token — TOUJOURS via prompt_secret (masqué), jamais de [o/N]
+  local _empty_attempt=0
   while [ "$_attempt" -lt "$_max_attempts" ]; do
     local _prompt_msg="Colle ton PAT GitHub (scope repo"
     if [ "$_attempt" -gt 0 ]; then
       _prompt_msg="Recolle ton PAT (tentative $((_attempt+1))/${_max_attempts}"
     fi
-    _prompt_msg="${_prompt_msg} ; Entrée pour abandonner)"
+    _prompt_msg="${_prompt_msg} ; Entrée (x2) pour abandonner)"
 
     gh_token="$(prompt_secret "$_prompt_msg")"
     if [ -z "$gh_token" ]; then
-      warn "Pas de PAT — le push/PR depuis la VM restera inactif."
-      return 0
+      # AC-R065 : une réponse vide ne doit JAMAIS abandonner en silence — un saut
+      # de ligne resté dans le tampon du terminal (presse-papier, Entrée) passait
+      # pour un « non » sans le dire. Première vide : on repose la question avec
+      # un message clair. Deuxième vide : confirmation EXPLICITE avant d'abandonner,
+      # et seule une réponse « o » abandonne (le défaut repose la question).
+      _empty_attempt=$(( _empty_attempt + 1 ))
+      if [ "$_empty_attempt" -eq 1 ]; then
+        warn "Rien n'a été saisi — recolle ton PAT, ou Entrée deux fois pour abandonner."
+        continue
+      fi
+      if confirm "Es-tu sûr de ne pas configurer GitHub maintenant ? Le push et les PR depuis la VM resteront inactifs."; then
+        warn "Pas de PAT — le push/PR depuis la VM restera inactif."
+        return 0
+      fi
+      # Pas sûr → on repose la question du PAT (le défaut de confirm ne doit
+      # jamais provoquer d'abandon accidentel).
+      _empty_attempt=0
+      continue
     fi
 
     # Validation du token via API GitHub

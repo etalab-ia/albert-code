@@ -81,6 +81,10 @@ _remove_old_albert_code_function() {
 # Le shim doit être posé AVANT la VM de base (fragile). Si la création de VM
 # échoue (429, réseau, etc.), la commande `albert-code` est quand même
 # disponible pour un essai ultérieur. Cf. AC-R021.
+# AC-R066 : vérification précoce avant toute installation — Lima refuse de
+# monter un chemin contenant une espace, inutile d'installer entièrement pour
+# échouer à la toute fin.
+check_no_space_in_path "$SELF_DIR" || exit 1
 banner
 echo
 install_shim "albert-code" "$SELF_DIR/bin/albert-code"

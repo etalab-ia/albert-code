@@ -1291,3 +1291,53 @@ jamais. Les rappeler au setup, au moment où elles sont actionnables.
 et la limite de 80 colonnes s'appliquent.
 **DoD :** le setup affiche un encart de rappel tenant en quelques lignes ;
 le README porte la version longue.
+
+## EPIC 14 — Retex install macOS : GitHub jamais silencieux, espaces de chemin, ressources VM `<- AC-R065, AC-R066, AC-R067`
+
+**Problème de fond :** un retex d'installation sur macOS (profil non-dev, 2026-09-15)
+a fait remonter trois défauts indépendants qui, ensemble, gâchent l'expérience de
+premier lancement : (a) l'étape d'authentification GitHub peut être sautée **en
+silence** (un retour à la ligne résiduel dans le tampon du terminal est consommé
+comme réponse, le `case n|N|""` répond « non » sans le dire) — l'utilisatrice s'est
+retrouvée sans push/PR sans avoir rien choisi (AC-R065) ; (b) un espace dans le
+chemin du projet n'est détecté qu'en fin de parcours, par le moteur, en anglais
+(AC-R066) ; (c) la VM de base est créée aux défauts faibles du moteur (1 CPU / 3 GiB)
+au lieu d'utiliser les ressources hôte détectées (AC-R067). Ces trois tickets
+partagent un même geste : **valider et informer tôt, plutôt que d'échouer tard et
+en silence**.
+
+### T14.1 🟠 Ne jamais abandonner la config GitHub sans que l'utilisateur n'ait choisi (AC-R065)
+
+**But :** rendre impossible un refus silencieux de l'authentification GitHub.
+**Tâches :** dans `_github_auth` (`lib/phases.sh`), dédoubler les cas de réponse
+vide (compteur `_empty_attempt`) : la **première** réponse vide retrace la question
+(avertissement « Rien n'a été saisi ») et ne fait **pas** d'hypothèse ; la
+**deuxième** réponse vide déclenche une confirmation explicite qui nomme la
+conséquence (« Es-tu sûr de ne pas configurer GitHub maintenant ? Le push et les PR
+depuis la VM resteront inactifs. »), seul un « o » explicite abandonne, toute autre
+réponse repose la question. Garder le prompt `; Entrée (x2) pour abandonner`.
+**DoD :** un flux `y`, Entrée vide, Entrée vide, `o` abandonne proprement (rc 0)
+avec les deux messages de garde ; un flux qui s'arrête après une seule réponse vide
+**ne** produit **pas** d'abandon muet. → `TESTS.md` S73.
+
+### T14.2 🟠 Vérifier l'absence d'espace dans le chemin dès le départ (AC-R066)
+
+**But :** échouer tôt et en français, pas tard et en anglais (le moteur rejette un
+chemin avec espace que Lima ne peut pas monter).
+**Tâches :** factoriser un helper `check_no_space_in_path` dans `lib/ui.sh` (retour
+non nul sur espace, message actionnable proposant `${1// /-}`) ; l'appeler dans
+`install.sh` sur `$SELF_DIR` et dans `bin/albert-code` sur `$PWD` avant `setup` et
+`run`. **Pas dans `vendor/`.**
+**DoD :** un chemin avec espace est refusé dès `install`, `setup` et `run` avec le
+renommage proposé ; un chemin sans espace passe (rc 0). → `TESTS.md` S73.
+
+### T14.3 🟠 Passer les ressources hôte aux créations de la VM de base (AC-R067)
+
+**But :** la VM de base (et chaque VM projet qui en est un clone) doit embarquer les
+ressources détectées sur l'hôte, pas les défauts faibles du moteur (1 CPU / 3 GiB).
+**Tâches :** sur les **deux** `_vm setup` — `phase_run` et `check_base_vm`
+(`lib/phases.sh`) — ajouter `--cpus "${EFF_CPUS}" --memory "${EFF_MEM}"`, précédés
+du garde `[ -n "${EFF_CPUS:-}" ] || compute_effective_vm_resources`.
+**DoD :** les deux appels passent `--cpus $EFF_CPUS --memory $EFF_MEM` (vérifié en
+sandbox avec `AC_VM_CPUS=4`, `AC_VM_MEMORY=8` et des `detect_host_*` stubés).
+→ `TESTS.md` S73.

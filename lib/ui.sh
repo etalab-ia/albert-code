@@ -331,6 +331,24 @@ warn()  { printf '%s! %s%s\n'  "${C_YELLOW}" "$(_fmt "$@")" "${C_RESET}"; }
 err()   { printf '%s✗ %s%s\n'  "${C_RED}"    "$(_fmt "$@")" "${C_RESET}" >&2; }
 title() { printf '%s%s%s\n'    "${C_BOLD}"   "$(_fmt "$@")" "${C_RESET}"; }
 
+# check_no_space_in_path <chemin> : 0 si OK, 1 si le chemin contient une espace
+# (AC-R066). Lima ne monte pas un dossier dont le chemin contient une espace, et
+# le moteur ne le signale qu'en anglais APRÈS toute l'installation. On vérifie
+# dès le départ, côté bundle, avec un message en français actionnable.
+check_no_space_in_path() {
+  case "$1" in
+    *" "*)
+      warn "Le chemin « %s » contient des espaces." "$1"
+      info "Lima (moteur de VM) ne peut pas monter un dossier dont le chemin"
+      info "contient une espace : la création de la VM échouerait après coup."
+      info "Renomme ce dossier en remplaçant les espaces par des tirets,"
+      info "par exemple : %s → %s" "$1" "${1// /-}"
+      info "puis relance la commande depuis le nouveau chemin."
+      return 1 ;;
+  esac
+  return 0
+}
+
 # --- Bannière ------------------------------------------------------------------
 banner() {
   cat <<'BANNER'
