@@ -1159,7 +1159,10 @@ git committé). Pas de VM requise. Rejouable en CI, branché dans
   (`opencode.json`, `opencode.jsonc`, `opencode.json.bak*`, `.agent-vm.runtime.sh`,
   `.albert-code/`) posé en fin de fichier, ligne perso conservée ; `git status` ne
   montre plus les artefacts mais montre toujours `AGENTS.md` (versionnable, T8.5) ;
-- (B) second passage idempotent : fichier inchangé, message « déjà à jour » ;
+- (B) second passage idempotent : fichier inchangé, message « déjà à jour » ; c'est
+  ce cas qui attrape la divergence entre awk BSD (macOS, refuse un `\n` dans une
+  affectation `-v`) et awk GNU — avec l'ancien appel `awk -v`, le cas B échouait car
+  la sortie vide était réécrite sur le fichier ;
 - (C) zone existante réécrite : contenu perso avant ET après la zone préservé
   bit-à-bit, ancienne entrée remplacée, exactement un couple de marqueurs ;
 - (D) marqueur orphelin : fichier inchangé + `warn` explicite ;
@@ -1167,5 +1170,6 @@ git committé). Pas de VM requise. Rejouable en CI, branché dans
 - (F) `--dry-run` : aucune écriture, le fichier absent n'est pas créé ;
 - (G) `exclude` absent (git >= 2.x ne le pose plus au `init`) : recréé avec le bloc.
 
-**Validé le :** 2026-09-15 — automatisé et conservé (`tests/s70_git_exclude.sh`, 19
-assertions en sandbox, branché dans `.github/workflows/hygiene.yml`).
+**Validé le :** 2026-09-16 (Linux, GNU bash 5.2 : 19/19) — automatisé et conservé
+(`tests/s70_git_exclude.sh`, 19 assertions en sandbox, branché dans
+`.github/workflows/hygiene.yml`).

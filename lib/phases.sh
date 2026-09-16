@@ -1099,15 +1099,15 @@ $AC_EXCLUDE_MARKER_END"
 
   local tmp
   tmp="$(mktemp)"
-  if file_contains "$exclude_file" "$AC_EXCLUDE_MARKER"; then
-    # Réécrit la zone entre marqueurs, préserve tout le reste. Motif awk
-    # (plus robuste que sed c\\ pour un bloc multi-lignes : pas d'échappement
-    # du contenu à injecter).
-    _rewrite_exclude_zone "$exclude_file" > "$tmp"
-  else
-    # Pas de zone : ajout en fin de fichier (le fichier peut ne pas exister).
-    { [ -f "$exclude_file" ] && cat "$exclude_file"; printf '\n%s\n' "$_new_block"; } > "$tmp"
-  fi
+  {
+    if [ -f "$exclude_file" ]; then
+      # Supprime la plage marquée, préserve tout le reste. Délimiteur | (pas /) :
+      # le marqueur de fin contient un /. Pas de awk -v ici : l'awk BSD de macOS
+      # refuse un saut de ligne dans une affectation -v (cas B / idempotence).
+      sed -E "\|^${AC_EXCLUDE_MARKER}$|,\|^${AC_EXCLUDE_MARKER_END}$|d" "$exclude_file"
+    fi
+    printf '%s\n' "$_new_block"
+  } > "$tmp"
 
   if ! diff -q "$tmp" "$exclude_file" >/dev/null 2>&1; then
     mkdir -p "$(dirname "$exclude_file")"
@@ -1120,18 +1120,6 @@ $AC_EXCLUDE_MARKER_END"
     info "Exclusions locales déjà à jour (.git/info/exclude)."
   fi
   rm -f "$tmp"
-}
-
-# _rewrite_exclude_zone <file> — imprime <file> avec la zone entre marqueurs
-# remplacée par le bloc courant (marqueurs inclus), hors-zone préservé
-# bit-à-bit. awk : pas d'échappement du contenu injecté, bash 3.2 friendly.
-_rewrite_exclude_zone() {
-  awk -v start="$AC_EXCLUDE_MARKER" -v end="$AC_EXCLUDE_MARKER_END" \
-      -v block="$_new_block" '
-    $0 == start { inzone = 1; print block; next }
-    inzone && $0 == end { inzone = 0; next }
-    !inzone { print }
-  ' "$1"
 }
 
 # compute_effective_vm_resources — EFF_CPUS/EFF_MEM
