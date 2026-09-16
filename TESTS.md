@@ -1210,3 +1210,29 @@ nettoyage du bac à sable en pleine lecture d'un fichier.
 
 **Validé le :** 2026-09-16 (Linux, GNU bash 5.2 : 12/12) — automatisé et conservé
 (`tests/s73_retex_macos.sh`, branché dans `.github/workflows/hygiene.yml`).
+
+## S74 — Garde-fou CI de cohérence du registre et de validité des workflows (T14.4)
+
+**Préconditions :** dépôt propre, dans l'état du registre réparé ;
+`tests/check_registry_consistency.sh` présent et exécutable. Ce garde-fou est un
+contrôle de **données et de configuration** : il est branché en première position
+dans `.github/workflows/hygiene.yml`, avant le garde-fou anti-fuite de chemin
+personnel.
+
+**Étapes :**
+1. Lancer `bash tests/check_registry_consistency.sh` sur l'arbre du dépôt tel quel.
+2. **AC-R### en double :** dupliquer une ligne de tableau de `FEEDBACK.md`
+   (`| AC-R037 | … |`) puis relancer le script ; rétablir l'état correct ensuite.
+3. **S## cité sans titre :** ajouter dans `BACKLOG.md` une référence
+   « → `TESTS.md` S99 » (ligne contenant `TESTS.md` sans « à créer ») puis relancer
+   le script ; rétablir l'état correct ensuite.
+4. **Deux-points non quoté dans un workflow :** insérer un `name:` avec un
+   deux-points suivi d'une espace dans `.github/workflows/hygiene.yml` (ex.
+   `- name: Été` — non quoté), puis relancer le script ; rétablir l'état correct
+   ensuite, vérifier le YAML avec `python3 -c "import yaml; yaml.safe_load(...)"`.
+
+**Attendu :** (1) exit 0, « Registre cohérent … ». Chaque introduction volontaire
+d'une anomalie (2, 3, 4) produit un exit 1 avec un message qui indique quoi corriger
+(et, pour 4, le YAML invalide n'est pas attrapé par GitHub : c'est précisément
+l'erreur qu'on cherche à empêcher). Après rétablissement de l'état correct, le
+script repasse en exit 0.**Validé le :** 2026-09-16.
