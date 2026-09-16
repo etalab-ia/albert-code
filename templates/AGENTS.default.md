@@ -33,6 +33,7 @@ Code et commentaires en anglais. Interface / messages produits en français.
 - Node : `node_modules`, `dist`, `build`, `.next`, `.env`. Python : `__pycache__`, `.venv`, `.env`.
 - Ne JAMAIS committer : dépendances installées (`node_modules/`, `.venv/`, `vendor/`), artefacts de build, fichiers volumineux, secrets ou `.env`.
 - Vérifier `git status` avant de committer ; si `node_modules/`, `.env`, ou un volume important de fichiers inattendus apparaît, créer un `.gitignore` et recommencer.
+- Les artefacts posés par Albert Code (`opencode.json`, `.agent-vm.runtime.sh`, `.albert-code/`) sont masqués du `git status` via `.git/info/exclude` (fichier local par clone, jamais versionné) ; `AGENTS.md`, lui, est prévu pour être versionné.
 
 <!-- albert-code:agents:end -->
 

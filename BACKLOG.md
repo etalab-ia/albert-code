@@ -698,6 +698,44 @@ redemande si la clé est connue), JSON produit identique octet pour octet,
 propagation vers `~/.agent-vm/runtime.sh` préservée (persistance avancée
 avant `ensure_vm_runtime`). → `TESTS.md` S-ctx-6.
 
+### T6.18 🟠 Masquer les artefacts du bundle du `git status` via `.git/info/exclude` `<- AC-R064` ✅ implémenté
+
+**But :** après `albert-code setup` dans un projet git fraîchement initialisé,
+`git status` affiche 4 fichiers/dossiers untracked que le bundle vient de poser
+(`opencode.json`, `.agent-vm.runtime.sh`, `.albert-code/`, `AGENTS.md`).
+Le `.gitignore` du dépôt albert-code traite les trois premiers comme « non
+versionnés », mais rien n'est posé dans le projet utilisateur. Choix de
+mécanisme (retour de l'issue #45) : `.git/info/exclude` plutôt qu'un
+`.gitignore` projet — fichier **par clone**, jamais versionné, donc zéro
+fichier de plus à committer ou à fusionner, aucune collision avec le
+`.gitignore` du projet, et le bundle le régénère à chaque `setup`/`update`
+puisque chaque clone passe par le bundle. `AGENTS.md` reste **versionnable**
+(zone gérée T8.5, le `git diff` fait la revue).
+
+**Tâches :**
+- `sync_git_exclude` (`lib/phases.sh`) : maintient une zone délimitée par
+  marqueurs dans `.git/info/exclude` (même motif que la zone gérée AGENTS.md
+  T8.5) couvrant `opencode.json`, `opencode.jsonc`, `opencode.json.bak*`,
+  `.agent-vm.runtime.sh`, `.albert-code/`.
+- Appelée par `phase_b` (setup) et `phase_update` (update), sans question
+  (contrat non interactif T9.3).
+- Hors dépôt git : sortie silencieuse rc 0 (setup doit marcher sans git).
+- Marqueur orphelin : fichier laissé intact + `warn`.
+- Respect de `--dry-run` via `_dry_gate` (aucune écriture).
+- Une ligne dans la zone gérée de `templates/AGENTS.default.md` documente le
+  mécanisme pour l'agent qui travaille dans le projet.
+
+**DoD :** un `setup` dans un projet git fraîchement initialisé ne montre plus
+`opencode.json`, `.agent-vm.runtime.sh` ni `.albert-code/` en untracked, mais
+montre toujours `AGENTS.md` ; un second `setup`/`update` ne réécrit rien
+(idempotent) ; les exclusions perso de l'utilisateur dans `exclude` sont
+préservées. → `TESTS.md` **S70** (créé, 19 assertions automatisées).
+
+**Implémenté** — `sync_git_exclude` + `_rewrite_exclude_zone`
+(`lib/phases.sh`), appelées depuis `phase_b` (après `sync_agents_md`) et
+`phase_update` (étape 2.bis) ; `tests/s70_git_exclude.sh` branché dans
+`.github/workflows/hygiene.yml`. → `TESTS.md` S70.
+
 ---
 
 ## EPIC 8 — Rafraîchir les fichiers projet figés au setup
