@@ -42,5 +42,5 @@ jobs:
       - name: Test S70 — exclusions locales .git/info/exclude (T6.18)
         run: bash tests/s70_git_exclude.sh
 
-      - name: Test S73 — retex install macOS : GitHub, espaces chemin, ressources VM (T14.x)
+      - name: Test S73 — retex install macOS (GitHub, espaces de chemin, ressources VM) (T14.x)
         run: bash tests/s73_retex_macos.sh
