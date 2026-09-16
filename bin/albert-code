@@ -60,9 +60,11 @@ case "$verb" in
     print_path_hint
     ;;
   setup)
+    check_no_space_in_path "$PWD" || exit 1
     phase_b
     ;;
   run)
+    check_no_space_in_path "$PWD" || exit 1
     phase_run
     ;;
   update)

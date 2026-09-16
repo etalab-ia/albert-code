@@ -1173,3 +1173,40 @@ git committé). Pas de VM requise. Rejouable en CI, branché dans
 **Validé le :** 2026-09-16 (Linux, GNU bash 5.2 : 19/19) — automatisé et conservé
 (`tests/s70_git_exclude.sh`, 19 assertions en sandbox, branché dans
 `.github/workflows/hygiene.yml`).
+
+## S73 — Retex install macOS : abandon GitHub jamais silencieux, espaces dans le chemin, ressources VM (T14.1, T14.2, T14.3 — AC-R065, AC-R066, AC-R067)
+
+**Préconditions :** `tests/s73_retex_macos.sh` rejouable en CI (sandbox jetable,
+`HOME` détourné, faux `limactl` sur PATH, `_vm`/`confirm`/`detect_host_*` stubés).
+Trois corrections d'un retex d'installation macOS. Aucune VM réelle, aucun appel
+réseau (curl jamais atteint : les tokens fournis sont vides, le flux s'abandonne à la
+confirmation), aucune écriture hors sandbox.
+
+**Étapes (automatisé : `bash tests/s73_retex_macos.sh`):**
+1. **AC-R066** (`check_no_space_in_path`, ancre : retour non nul + message français
+   actionnable) — un chemin **sans** espace est accepté (rc 0) ; un chemin **avec**
+   espace est rejeté (rc non nul), le message nomme les « espaces », indique de les
+   « remplacer par des tirets » et propose le nouveau nom (`mon-dossier-projet`).
+2. **AC-R067** (ancre : les `_vm setup` embarquent `--cpus $EFF_CPUS --memory $EFF_MEM`)
+   — stubs hôte déterministes (8 CPU / 16 GiB → `AC_VM_CPUS=4`, `AC_VM_MEMORY=8`) :
+   les **deux** sites de création de la base, `check_base_vm` puis `phase_run`,
+   appellent `_vm ... setup --cpus 4 --memory 8 ...` (le défaut du moteur vendorisé
+   est 1 CPU / 3 GiB, trop faible pour construire une image).
+3. **AC-R065** (`_github_auth`, ancre : le flux lu sur stdin) — dirigé par stdin
+   (`y`, deux Entrées vides, puis « o ») : la **première** réponse vide repose la
+   question (« rien n'a été saisi ») et n'abandonne pas ; la **deuxième** vide exige
+   une confirmation explicite qui nomme la conséquence (« Le push et les PR depuis la
+   VM resteront inactifs ») ; sur « o », abandon propre (rc 0) ; on vérifie enfin qu'
+   **aucun** abandon muet « Pas de PAT » ne survient sans que la confirmation
+   explicite n'ait été demandée au préalable.
+
+**Attendu :** exit 0, 12 assertions. L'ancien comportement — première réponse vide →
+refus silencieux / s'appuyer sur les défauts faibles du moteur — ferait échouer
+respectivement l'étape 3 (message « rien n'a été saisi » absent ou abandon muet),
+l'étape 2 (`--cpus`/`--memory` absents des `_vm setup`) et l'étape 1 (chemin avec
+espace accepté). Le flux `_github_auth` est isolé dans un sous-processus `bash -c`
+pour que les `$(prompt_secret …)` (sous-shells) ne déclenchent pas le trap EXIT de
+nettoyage du bac à sable en pleine lecture d'un fichier.
+
+**Validé le :** 2026-09-16 (Linux, GNU bash 5.2 : 12/12) — automatisé et conservé
+(`tests/s73_retex_macos.sh`, branché dans `.github/workflows/hygiene.yml`).
