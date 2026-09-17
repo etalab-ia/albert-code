@@ -16,8 +16,8 @@ SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FAIL=0
 ACC=0
 
-pass() { printf '  [OK] %s\n' "$1"; ACC=$((ACC+1)); }
-fail() { printf '  [KO] %s\n' "$1"; FAIL=$((FAIL+1)); ACC=$((ACC+1)); }
+pass() { printf '  \033[32m✓\033[0m %s\n' "$1"; ACC=$((ACC+1)); }
+fail() { printf '  \033[31m✗\033[0m %s\n' "$1"; FAIL=1; ACC=$((ACC+1)); }
 
 echo "S75 — retrait avertissement Node hôte + bruit Homebrew (AC-R068/AC-R069, lecture seule)"
 echo
