@@ -29,7 +29,7 @@ Ce n'est pas un IDE ni un fork : de l'orchestration mince (scripts + config) au-
 - macOS ou Linux (pas de Windows).
 - [Lima](https://lima-vm.io) : sur macOS, installé par le script si absent (via Homebrew). Sur Linux, à installer à la main avant : https://lima-vm.io/docs/installation/
 - **Linux uniquement** : QEMU (`sudo apt-get install qemu-system-x86`, ou `qemu-system-arm` sur ARM) et l'accès à `/dev/kvm`. Si `/dev/kvm` n'existe pas, la virtualisation est désactivée dans le BIOS ou tu es déjà dans une VM. S'il existe mais refuse l'accès : `sudo usermod -aG kvm "$USER"` puis reconnexion.
-- Node.js (pour les serveurs MCP lancés via `npx`).
+- Node.js n'est pas requis sur ton poste : il est préinstallé dans la VM (nécessaire aux serveurs MCP lancés via `npx`).
 - Une **clé Albert API** (réservée aux agents publics : demande sur https://albert.api.etalab.gouv.fr).
 - Un compte GitHub (pour que l'agent pousse des PR depuis la VM).
 
