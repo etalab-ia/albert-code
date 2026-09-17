@@ -1292,7 +1292,7 @@ et la limite de 80 colonnes s'appliquent.
 **DoD :** le setup affiche un encart de rappel tenant en quelques lignes ;
 le README porte la version longue.
 
-## EPIC 14 — Retex install macOS : GitHub jamais silencieux, espaces de chemin, ressources VM `<- AC-R065, AC-R066, AC-R067`
+## EPIC 14 — Retex install macOS : GitHub jamais silencieux, espaces de chemin, ressources VM, avertissement Node et bruit Homebrew `<- AC-R065, AC-R066, AC-R067, AC-R068, AC-R069`
 
 **Problème de fond :** un retex d'installation sur macOS (profil non-dev, 2026-09-15)
 a fait remonter trois défauts indépendants qui, ensemble, gâchent l'expérience de
@@ -1381,3 +1381,33 @@ fonctionnels, car ce sont des contrôles de données et de configuration.
 la CI échoue si (a) un `AC-R###` est en double ou cité sans ligne, (b) un `S##` est
 cité via `TESTS.md` sans titre correspondant, (c) un `name:` de workflow contient un
 deux-points non quoté. → `TESTS.md` S74.
+
+### T14.5 🟡 Retirer l'avertissement Node hôte et couper le bruit Homebrew du wizard `<- AC-R068, AC-R069`
+
+**But :** deux bruits du wizard d'installation issus du même retex macOS :
+(a) `lib/phases.sh` avertissait « Node.js absent — requis pour npx (MCP).
+Installe-le. » alors que l'hôte n'en a pas besoin (les seuls `npx` du bundle sont
+les chaînes MCP écrites dans l'`opencode.json` du projet, exécutées par OpenCode
+dans la VM où Node est préinstallé via `--preinstall=node,…`) — message
+contradictoire avec « rien à installer sur ton poste » affiché juste après
+(AC-R068) ; (b) le `brew install lima` lançait ~440 lignes de formules Homebrew au
+milieu du wizard faute des variables d'anti-bruit (AC-R069, part locale).
+
+**Tâches :**
+1. Supprimer l'avertissement Node de `lib/phases.sh`, remplacé par un commentaire
+   expliquant que Node n'est pas requis côté hôte (les npx MCP tournent dans la VM).
+   Retirer Node des prérequis obligatoires du README ou le reformuler en « installé
+   dans la VM ».
+2. Sur l'appel `apply "installer Lima via Homebrew" …`, préfixer la commande avec
+   `env HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1`
+   (portée à la seule commande, jamais d'`export` global) — compatible avec le
+   wrapper `apply` qui exécute `"$@"`.
+3. Ne **pas** traiter les deux autres bruits du finding (blocs « debconf » et
+   « Note: Existing VMs were not updated ») : ils viennent du moteur agent-vm et
+   sont suivis en amont.
+
+**DoD :** plus aucun avertissement « Node.js absent » dans `lib/` ; le message
+« OpenCode s'exécute dans la VM isolée — rien à installer sur ton poste » est
+préservé ; l'appel `brew install lima` porte les trois `HOMEBREW_NO_*` via `env` ;
+aucun `export` global de ces variables dans `lib/` ni `install.sh` ; README
+reformulé. → `TESTS.md` S75.

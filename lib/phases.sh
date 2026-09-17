@@ -71,13 +71,13 @@ phase_a() {
         err "Homebrew absent. Installe Lima manuellement : https://lima-vm.io/docs/installation/"
         exit 1
       fi
-      apply "installer Lima via Homebrew" brew install lima
+      apply "installer Lima via Homebrew" env HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1 brew install lima
     else
       warn "Sans Lima, la bulle isolée ne peut pas démarrer. Installe-le puis relance."
     fi
   fi
   check_cmd "git" || true
-  check_cmd "node" || warn "Node.js absent — requis pour npx (MCP). Installe-le."
+  # Node n'est pas requis côté hôte : les npx du bundle (MCP playwright/chrome-devtools) tournent dans la VM, où node est préinstallé.
 
   echo
 

@@ -1236,3 +1236,32 @@ d'une anomalie (2, 3, 4) produit un exit 1 avec un message qui indique quoi corr
 (et, pour 4, le YAML invalide n'est pas attrapé par GitHub : c'est précisément
 l'erreur qu'on cherche à empêcher). Après rétablissement de l'état correct, le
 script repasse en exit 0.**Validé le :** 2026-09-16.
+
+## S75 — Retrait avertissement Node hôte et bruit Homebrew du wizard (T14.5, AC-R068, AC-R069)
+
+**Préconditions :** dépôt propre (`main`). Test **lecture seule** sur l'arbre du
+dépôt : aucune écriture, aucune VM, aucun réseau.
+
+**Étapes :**
+1. Lancer `bash tests/s75_node_et_bruit_brew.sh`.
+2. Vérifier manuellement dans `lib/phases.sh` que l'avertissement « Node.js
+   absent — requis pour npx (MCP). Installe-le. » a été remplacé par un
+   commentaire expliquant que Node n'est pas requis côté hôte (les npx MCP
+   tournent dans la VM où Node est préinstallé).
+3. Vérifier dans le README que Node n'est plus listé comme prérequis obligatoire
+   de l'hôte (ou est reformulé « installé dans la VM »).
+4. Vérifier que l'appel `apply "installer Lima via Homebrew" …` porte
+   `env HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_NO_INSTALL_CLEANUP=1`
+   en préfixe de la seule commande, sans `export` global ailleurs.
+
+**Attendu :** (1) exit 0. Les assertions vérifient : plus aucun « Node.js absent »
+dans `lib/` ; « rien à installer sur ton poste » préservé ; la ligne `brew install
+lima` porte les trois `HOMEBREW_NO_*` via `env` ; aucun `export` global de ces
+variables dans `lib/` ni `install.sh`. (2, 3, 4) constats manuels conformes.
+
+**Validé le :** 2026-09-17 — `tests/s75_node_et_bruit_brew.sh` exécuté sur Linux
+(aarch64), GNU bash 5.2.37(1) : 7/7 assertions OK (exit 0). Constats manuels (2, 3, 4)
+vérifiés sur l'arbre : commentaire de remplacement présent dans `lib/phases.sh`,
+Node reformulé « installé dans la VM » dans le README, appel brew porteur des trois
+`HOMEBREW_NO_*` via `env` sans export global.
+
