@@ -1427,7 +1427,7 @@ sans ticket : le premier est suivi en amont (agent-vm#22), le second est une id�
 trier. Ces tickets sont **uniquement de la documentation** (sections README), la
 doc détaillée du proxy ayant vocation à vivre en amont dans agent-vm.
 
-### T15.1 🟡 Ajouter une section « Proxy d'entreprise » au README `<- AC-R070`
+### T15.1 🟠 Ajouter une section « Proxy d'entreprise » au README `<- AC-R070`
 
 **But :** rendre reproductible la construction de la base derrière un proxy sortant,
 sans code — c'est une configuration Lima à poser avant la création des VM.
@@ -1441,8 +1441,8 @@ sans code — c'est une configuration Lima à poser avant la création des VM.
    - un `provision` en `mode: system` écrivant `/etc/apt/apt.conf.d/90proxy`
      (`Acquire::http::Proxy` et `Acquire::https::Proxy`).
 2. Mentionner que ce fichier doit être posé **avant la création des VM** ; en cas de
-   VM déjà créées, les supprimer puis relancer (l'entourage idempotent du runtime les
-   reconstruit).
+   VM déjà créées, les supprimer puis relancer (`albert-code run` recrée
+   la VM de base puis la VM projet).
 3. Mentionner que `NODE_USE_ENV_PROXY=1` n'a pas été nécessaire, mais peut aider
    certaines bibliothèques Node.
 4. Ne **pas** dupliquer la doc détaillée du proxy dans Albert Code : elle a vocation
