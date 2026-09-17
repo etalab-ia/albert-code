@@ -1411,3 +1411,63 @@ milieu du wizard faute des variables d'anti-bruit (AC-R069, part locale).
 préservé ; l'appel `brew install lima` porte les trois `HOMEBREW_NO_*` via `env` ;
 aucun `export` global de ces variables dans `lib/` ni `install.sh` ; README
 reformulé. → `TESTS.md` S75.
+
+---
+
+## EPIC 15 — Retex Linux (proxy d'entreprise) et Windows WSL2 `<- AC-R070, AC-R071`
+
+**Problème de fond :** un retex d'un bêta-testeur sur poste Linux (derrière un proxy
+sortant obligatoire) a validé l'installation d'Albert Code, puis l'a refaite sous
+Windows 11 / WSL2. Deux enseignements **documentaires** se dégagent, sans besoin de
+corriger du code : (a) derrière un proxy d'entreprise, la VM de base ne se construit
+pas tant que le proxy n'est pas déclaré avant la création des VM (AC-R070) ; (b) le
+parcours Windows via WSL2 fonctionne de bout en bout et mérite d'être un prérequis
+documenté (AC-R071). Deux autres retours (AC-R072, AC-R073) restent « 🆕 à trier »
+sans ticket : le premier est suivi en amont (agent-vm#22), le second est une idée à
+trier. Ces tickets sont **uniquement de la documentation** (sections README), la
+doc détaillée du proxy ayant vocation à vivre en amont dans agent-vm.
+
+### T15.1 🟡 Ajouter une section « Proxy d'entreprise » au README `<- AC-R070`
+
+**But :** rendre reproductible la construction de la base derrière un proxy sortant,
+sans code — c'est une configuration Lima à poser avant la création des VM.
+
+**Tâches :**
+1. Ajouter au README une section courte « Proxy d'entreprise » avec l'exemple YAML
+   de `~/.lima/_config/default.yaml` :
+   - un bloc `env:` déclarant `http_proxy`, `https_proxy` et `no_proxy` **en
+     minuscules** (Lima ajoute les variantes majuscules, et curl ne lit `http_proxy`
+     qu'en minuscule) ;
+   - un `provision` en `mode: system` écrivant `/etc/apt/apt.conf.d/90proxy`
+     (`Acquire::http::Proxy` et `Acquire::https::Proxy`).
+2. Mentionner que ce fichier doit être posé **avant la création des VM** ; en cas de
+   VM déjà créées, les supprimer puis relancer (l'entourage idempotent du runtime les
+   reconstruit).
+3. Mentionner que `NODE_USE_ENV_PROXY=1` n'a pas été nécessaire, mais peut aider
+   certaines bibliothèques Node.
+4. Ne **pas** dupliquer la doc détaillée du proxy dans Albert Code : elle a vocation
+   à vivre en amont dans agent-vm, vers laquelle le README renverra une fois qu'elle
+   existera.
+
+**DoD :** le README contient une section « Proxy d'entreprise » avec l'exemple YAML
+complet (env minuscules + provision apt `90proxy`), la note « à poser avant la
+création des VM ; sinon supprimer les VM puis relancer », et un renvoi vers la doc
+amont agent-vm dès qu'elle existe. Aucune modification de code.
+
+### T15.2 🟡 Ajouter « Windows (via WSL2) » aux prérequis du README `<- AC-R071`
+
+**But :** acter que le parcours Windows est validé et reproductible, et le rendre
+visible dans la matrice des prérequis du README.
+
+**Tâches :**
+1. Ajouter « Windows (via WSL2) » aux prérequis du README (et, s'il y a une matrice
+   OS, à côté de macOS/Linux), avec les étapes qui ont fonctionné :
+   - Ubuntu 24.04 sous WSL2 ;
+   - virtualisation imbriquée activée dans la config WSL ;
+   - `qemu-kvm` installé et utilisateur ajouté au groupe `kvm` ;
+   - Lima installé depuis le binaire des releases officielles (pas Homebrew) ;
+   - puis `install.sh` et `albert-code run` standard.
+2. Ne pas mettre de lien vers un site personnel.
+
+**DoD :** le README liste « Windows (via WSL2) » parmi les prérequis, avec les cinq
+étapes ci-dessus, sans lien vers un site personnel. Aucune modification de code.
