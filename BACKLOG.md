@@ -529,7 +529,7 @@ change).
 - Dans `phase_b`, pour chaque MCP : `confirm` « Brancher le MCP <nom> (objectif : <desc>) ? » → `enabled: true` seulement si oui. Génère le bloc MCP en bash (PAS de dépendance jq).
 - Objectifs : `data.gouv` = "accès aux données publiques (lecture)" ; `context7` = "doc à jour des librairies (clé requise)" ; `playwright` = "piloter un navigateur / agir dans une page" ; `chrome-devtools` = "debug navigateur".
 **Skills (choisies au setup, manifeste projet lu par le runtime) :**
-- `phase_b` rafraîchit le cache `etalab-ia/skills`, énumère chaque skill (lit `description` du `SKILL.md` de chaque dossier) et demande `confirm` « Installer la skill <nom> (objectif : <description>) ? ».
+- `phase_b` rafraîchit le cache `etalab-ia/skills`, énumère chaque skill (lit `description` du `SKILL.md` de chaque dossier), hors skills non-dev exclues du bundle (ex. `usage-ia-agents-etat`), et demande `confirm` « Installer la skill <nom> (objectif : <description>) ? ».
 - Écrit la sélection dans `./.albert-code/skills.txt` (une skill par ligne).
 - Modifie `sync_skills` du runtime : au boot, ne symlinke QUE les skills listées dans `./.albert-code/skills.txt` du projet courant ; réconcilie le dossier global skills/ (retire les symlinks albert-code non sélectionnés, JAMAIS les skills perso). Si aucun manifeste → comportement actuel (toutes) pour rétrocompat.
 **DoD :** un « non » à un MCP/skill ne l'écrit pas ; re-setup conserve les choix ; skills perso jamais touchées par la réconciliation. → `TESTS.md` S28.
@@ -1471,3 +1471,22 @@ visible dans la matrice des prérequis du README.
 
 **DoD :** le README liste « Windows (via WSL2) » parmi les prérequis, avec les cinq
 étapes ci-dessus, sans lien vers un site personnel. Aucune modification de code.
+
+## EPIC 16 — Ne proposer que les skills dev au setup `<- AC-R074`
+
+**Problème de fond :** `scaffold_skills_selection` (lib/phases.sh) propose toutes les
+skills du dépôt `etalab-ia/skills`, y compris `usage-ia-agents-etat` (cadre d'usage
+de l'IA pour les agents publics, sans rapport avec le dev). Le bundle ne doit
+proposer que les skills liées au développement.
+
+### T16.1 🟡 Exclure les skills non-dev de la sélection au setup `<- AC-R074` ✅ implémenté
+
+**But :** retirer de la proposition du setup toute skill hors périmètre dev.
+
+**Tâches :**
+1. Dans `lib/phases.sh`, `scaffold_skills_selection`, ajouter `usage-ia-agents-etat`
+   au `case` qui exclut déjà `.*|.experimental|.git`, avec un commentaire d'une
+   ligne « skills non-dev exclues du bundle ».
+
+**DoD :** la sélection du setup ne propose plus `usage-ia-agents-etat` ; la skill
+`rgaa` (dev) reste proposée. Aucune autre skill dev n'est exclue.

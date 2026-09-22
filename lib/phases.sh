@@ -1654,7 +1654,8 @@ scaffold_skills_selection() {
     for _skill_dir in "$skills_dir/skills"/*/; do
       [ -d "$_skill_dir" ] || continue
       local name="$(basename "$_skill_dir")"
-      case "$name" in .*|.experimental|.git) continue ;; esac
+      # skills non-dev exclues du bundle
+      case "$name" in .*|.experimental|.git|usage-ia-agents-etat) continue ;; esac
 
       local desc=""
       if [ -f "$_skill_dir/SKILL.md" ]; then
