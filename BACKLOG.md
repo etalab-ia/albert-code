@@ -1490,3 +1490,50 @@ proposer que les skills liées au développement.
 
 **DoD :** la sélection du setup ne propose plus `usage-ia-agents-etat` ; la skill
 `rgaa` (dev) reste proposée. Aucune autre skill dev n'est exclue.
+
+## EPIC 17 — Désinstallation complète `<- AC-R075, AC-R076`
+
+**Problème de fond :** `uninstall.sh` retirait une partie seulement de ce que le
+bundle pose : 2 des 5 variables écrites par `persist_zshenv`, pas de suppression
+des VMs `agent-vm-…` ni du shim `albert-code`, pas de sauvegarde du rc avant
+modification, pas de `--dry-run`. À la bascule vers just-code, des secrets /
+identité et une VM jetable restaient derrière.
+
+### T17.1 🟡 Compléter uninstall.sh (5 vars + VM + shim + rc .bak + --dry-run) `<- AC-R075, AC-R076` ✅ implémenté
+
+**But :** une désinstallation qui retire tout ce qu'Albert Code a posé, de façon
+honnête et reproductible.
+
+**Tâches :**
+1. `uninstall.sh` : retirer les 5 variables écrites par `persist_zshenv`
+   (`ALBERT_API_KEY`, `CONTEXT7_API_KEY`, `GH_TOKEN`, `AC_GIT_USER_NAME`,
+   `AC_GIT_USER_EMAIL`) de `~/.zshenv` (pattern `^export VAR=`), à la fois dans
+   `~/.zshenv` et dans le bloc Albert Code de `~/.agent-vm/runtime.sh` (y compris
+   l'ancien format sans `AC_MARKER_END`) ; ne jamais toucher aux lignes perso hors
+   de la plage.
+2. `uninstall.sh` : retirer le shim `albert-code` posé par `install_shim`
+   (détection par l'en-tête « Shim pour albert-code », symétrique de
+   l'installation) ; un binaire albert-code d'une autre provenance est conservé
+   et signalé.
+3. `uninstall.sh` : retirer le sourçage `agent-vm.sh` du shell rc en
+   comparaison littérale (commande `source` ou `.`, y compris `[ -f … ] && source
+   …`), jamais une simple mention de « agent-vm » ; sauvegarder le rc en
+   `<rc>.bak` avant modification (additif, idempotent).
+4. `uninstall.sh` : supprimer les VMs Lima nommées `agent-vm-…` directement via
+   `limactl stop` puis `limactl delete --force`, VM par VM — pas via
+   `agent-vm destroy-all` — et rendre un compte HONNÊTE de l'état restant
+   (« existent encore » si un delete échoue, jamais un faux succès). Question
+   `confirm_yes` (défaut OUI), action gated par `_dry_gate`.
+5. `uninstall.sh` : ne retirer du projet courant que `.agent-vm.runtime.sh` ;
+   conserver `AGENTS.md`, `opencode.json` et `.albert-code/`. Récapitulatif final
+   de ce qui est retiré et de ce qui reste volontairement.
+6. `uninstall.sh` : parsing `--dry-run` (aucune mutation, loggée).
+7. `lib/ui.sh` : ajouter `confirm_yes` (réponse vide = oui) pour la question VM.
+8. Créer `tests/s77_uninstall.sh` et le brancher dans
+   `.github/workflows/hygiene.yml`.
+
+**DoD :** `uninstall.sh` retire les 5 secrets/identité, le bloc runtime, le shim,
+le sourçage rc (avec `.bak`), la ligne PATH du shim et les VMs agent-vm avec un
+compte honnête ; `AGENTS.md`/`opencode.json` restent. `--dry-run` ne mute rien.
+Scénario `TESTS.md` S77 ✅.
+

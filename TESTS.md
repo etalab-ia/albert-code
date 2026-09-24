@@ -86,16 +86,18 @@ préserve les skills perso si elles existent déjà (testé avec collision react
 **Attendu :** sortie listant chaque action en `[dry-run]`, exit 0,
 AUCUN fichier créé dans `/tmp/ac-test`, `~/.zshenv` réel inchangé.
 
-## S14 — Désinstallation propre (T-FIX-1, T-FIX-4) ✅
+## S14 — Désinstallation propre (T-FIX-1, T-FIX-4, T17.1) ✅
 **Préconditions :** dossier de test `/tmp/ac-test` avec Albert Code installé.
 **Étapes :**
 1. `HOME=/tmp/ac-test ./install.sh` (install réelle dans la sandbox).
-2. Vérifier : `~/.agent-vm/runtime.sh` contient le marqueur + 2 exports ; `~/.zshenv` contient 2 clés.
+2. Vérifier : `~/.agent-vm/runtime.sh` contient le marqueur + les 5 exports ;
+   `~/.zshenv` contient les 5 clés/identités (`ALBERT_API_KEY`,
+   `CONTEXT7_API_KEY`, `GH_TOKEN`, `AC_GIT_USER_NAME`, `AC_GIT_USER_EMAIL`).
 3. `HOME=/tmp/ac-test ./uninstall.sh` (répondre « oui » à toutes les questions).
-4. Vérifier : `~/.agent-vm/runtime.sh` ne contient PLUS le marqueur ni les exports ;
-   `~/.zshenv` ne contient PLUS les clés.
-**Attendu :** aucune clé ne subsiste dans `~/.agent-vm/runtime.sh` ni `~/.zshenv`,
-et le bloc marqueur a disparu.
+4. Vérifier : `~/.agent-vm/runtime.sh` ne contient PLUS le marqueur ni les
+   exports ; `~/.zshenv` ne contient PLUS les 5 variables.
+**Attendu :** aucune des 5 variables ne subsiste dans `~/.agent-vm/runtime.sh` ni
+`~/.zshenv`, et le bloc marqueur a disparu.
 
 ---
 
@@ -1265,3 +1267,35 @@ vérifiés sur l'arbre : commentaire de remplacement présent dans `lib/phases.s
 Node reformulé « installé dans la VM » dans le README, appel brew porteur des trois
 `HOMEBREW_NO_*` via `env` sans export global.
 
+
+## S77 — Désinstallation complète (T17.1, AC-R075, AC-R076)
+
+**Préconditions :** dépôt propre (`main`). Test **hermétique** : bac à sable
+`mktemp -d`, HOME détourné, PATH en tête sur un faux `limactl` (journalisé, valeurs
+factices uniquement), jamais le vrai `limactl`, jamais le vrai HOME.
+
+**Étapes :**
+1. Lancer `bash tests/s77_uninstall.sh`.
+2. (Automatique, boîte noire sur `uninstall.sh`) le script construit un HOME factice
+   avec : les 5 variables posées par `persist_zshenv` dans `~/.zshenv` + une ligne
+   perso ; un bloc Albert Code marqué dans `~/.agent-vm/runtime.sh` + du contenu
+   perso hors bloc ; un rc avec l'ajout `~/.local/bin` au PATH, une ligne de sourçage
+   `agent-vm.sh` et une ligne perso contenant « agent-vm » ; un projet avec
+   `AGENTS.md`, `opencode.json`, `.agent-vm.runtime.sh` ; le shim `albert-code` du
+   bundle ; un faux `limactl` listant deux VMs `agent-vm-…`.
+3. Exécution réelle de `uninstall.sh` (réponses « oui »), puis ré-exécution dans des
+   variantes : delete de VM qui échoue ; réponse vide à la question VM ; `--dry-run`.
+
+**Attendu :** (A) les 5 variables sont retirées de `~/.zshenv`, la ligne perso reste ;
+(B) le bloc Albert Code du runtime VM est retiré, le contenu perso hors bloc reste ;
+(C) le rc est sauvegardé en `.bak`, la ligne de sourçage `agent-vm.sh` et l'ajout
+PATH sont retirés, la ligne perso « agent-vm » reste ; (D) le shim est retiré,
+`AGENTS.md` et `opencode.json` restent, `.agent-vm.runtime.sh` du projet est retiré ;
+(E) les VMs sont supprimées (`delete --force` appelé) avec message honnête ; (F) si
+un delete échoue → « existent encore », jamais de faux succès ; (G) réponse vide à la
+question VM = oui (défaut) ; (H) `--dry-run` ne mute rien et n'appelle jamais
+`limactl`.
+
+**Validé le :** 2026-09-24 — `tests/s77_uninstall.sh` exécuté sur Linux, bash :
+11/11 assertions OK (exit 0). Écritures (A)-(H) constatées à la relecture de
+`uninstall.sh` et `lib/ui.sh` (helper `confirm_yes`).

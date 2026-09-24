@@ -203,10 +203,22 @@ Docs : [OpenCode](https://opencode.ai/docs/fr) · [Albert API](https://doc.incub
 ## Désinstallation
 
 ```bash
-./uninstall.sh
+./uninstall.sh          # désinstallation complète, question par question
+./uninstall.sh --dry-run  # prévisualise sans rien modifier
 ```
 
-Retire le bloc albert-code du runtime VM, le cache et les symlinks skills. Préserve tes skills et ta config perso.
+Retire tout ce qu'Albert Code a posé : les 5 clés/identité de `~/.zshenv`
+(ALBERT_API_KEY, CONTEXT7_API_KEY, GH_TOKEN, AC_GIT_USER_NAME,
+AC_GIT_USER_EMAIL), le bloc Albert Code de `~/.agent-vm/runtime.sh`, le shim
+`albert-code`, l'ajout au PATH et le sourçage `agent-vm` du rc (sauvegardé en
+`.bak`), les VMs Lima `agent-vm-…` (question « oui » par défaut) et
+`.agent-vm.runtime.sh` du projet courant.
+
+Reste volontairement en place : Lima (désinstalle-le via
+`brew uninstall lima`), le clone du dépôt, ta config OpenCode globale perso,
+`AGENTS.md` / `opencode.json` de tes projets. Pense à **révoquer le jeton
+GitHub** utilisé par Albert Code sur `github.com/settings/tokens` pour couper
+tout accès résiduel.
 
 ## Contribuer
 
