@@ -6,7 +6,13 @@
 /_/   \_\_|_.__/ \___|_|   \__|  \____\___/ \__,_|\___|
 ```
 
-⚠️ **PROJET EXPÉRIMENTAL : Nous testons actuellement plusieurs modèles dans le cadre d'une éventuelle offre pour le code. Le(s) modèle(s) de code d'Albert API peut(vent) changer.** ⚠️ 
+> ⚠️ **Fin de vie : Albert Code n'est plus maintenu, remplacé par [just-code][successeur].**
+>
+> Nouvelle installation : utilise [le nouvel outil][successeur].
+>
+> Déjà installé : désinstalle Albert Code avec `./uninstall.sh`, puis suis la section [Passer au nouvel outil](#passer-au-nouvel-outil).
+>
+> Ton code ne bouge pas : il est dans ton dépôt Git, il suffit de rouvrir le projet avec le nouvel outil.
 
 # Albert Code
 
@@ -22,7 +28,7 @@ Albert Code assemble des briques existantes pour coder avec une IA souveraine, i
 
 Ce n'est pas un IDE ni un fork : de l'orchestration mince (scripts + config) au-dessus d'OpenCode.
 
-> Statut : v1, validé en dogfood bout en bout le 2026-07-02. En test avec des early adopters. Retours et issues bienvenus.
+> Statut : fin de vie. Seuls des correctifs de sécurité ou de désinstallation sont encore acceptés.
 
 ## Prérequis
 
@@ -34,6 +40,8 @@ Ce n'est pas un IDE ni un fork : de l'orchestration mince (scripts + config) au-
 - Un compte GitHub (pour que l'agent pousse des PR depuis la VM).
 
 ## Installation
+
+> ⚠️ **Albert Code est en fin de vie : ne fais pas de nouvelle installation.** Utilise [le nouvel outil][successeur]. Les instructions ci-dessous restent pour les postes déjà équipés.
 
 ```bash
 git clone https://github.com/etalab-ia/albert-code.git ~/albert-code
@@ -200,6 +208,14 @@ Docs : [OpenCode](https://opencode.ai/docs/fr) · [Albert API](https://doc.incub
 - **Je suis dans OpenCode mais pas connecté à Albert (pas de `/models`, `/mcp`, `/skills`)** → tu as lancé `albert-code run` dans un dossier **sans `opencode.json`** (ex. le dépôt albert-code lui-même, ou un projet jamais scaffoldé). Scaffolde d'abord : `cd <ton-projet> && albert-code setup`, puis relance `albert-code run`.
 - **Mon projet a déjà un `opencode.json`** → il est **conservé** (non-destructif). Vérifie qu'il contient le provider albert ; sinon Albert n'est pas câblé — ajoute à la main le bloc `provider.albert` + `model`/`small_model`.
 
+## Passer au nouvel outil
+
+1. **Désinstalle Albert Code** : `./uninstall.sh` (supprime les clés, les VM et l'historique des conversations stockés dans les VM ; ajoute `--dry-run` pour prévisualiser sans rien modifier).
+2. **Installe [le nouvel outil][successeur]** en suivant son README. Ne recopie aucune de ses commandes d'installation.
+3. **Rouvre tes projets avec le nouvel outil.** Ce qui ne suit pas : le choix des skills et MCP (à refaire), la clé Albert (à ressaisir). `AGENTS.md` et `opencode.json` restent dans tes projets.
+
+Pense à **révoquer le jeton GitHub** utilisé par Albert Code sur `github.com/settings/tokens` pour couper tout accès résiduel.
+
 ## Désinstallation
 
 ```bash
@@ -224,6 +240,8 @@ tout accès résiduel.
 
 Issues et PR bienvenues. Le dépôt suit ses propres conventions dans [`AGENTS.md`](AGENTS.md) ; le contexte et les décisions sont dans [`docs/PLAN.md`](docs/PLAN.md).
 
+> Ce dépôt est en fin de vie. Les nouvelles contributions vont désormais au [nouvel outil][successeur].
+
 > **Développer Albert Code lui-même** : `cp config/opencode.template.json opencode.json` (déjà gitignoré) puis lance `albert-code run`, car `install.sh` ne scaffolde pas son propre dépôt. Le template porte le `baseURL` par défaut en clair ; si tu surcharges `AC_ALBERT_BASE_URL`, substitue-le au passage :
 > ```bash
 > sed "s|https://albert.api.etalab.gouv.fr/v1|$AC_ALBERT_BASE_URL|" config/opencode.template.json > opencode.json
@@ -232,3 +250,5 @@ Issues et PR bienvenues. Le dépôt suit ses propres conventions dans [`AGENTS.m
 ---
 
 Albert Code · département IA dans l'État (IAE), DINUM · Licence MIT
+
+[successeur]: https://github.com/etalab-ia/just-code

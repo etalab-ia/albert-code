@@ -1496,7 +1496,7 @@ proposer que les skills liées au développement.
 **Problème de fond :** `uninstall.sh` retirait une partie seulement de ce que le
 bundle pose : 2 des 5 variables écrites par `persist_zshenv`, pas de suppression
 des VMs `agent-vm-…` ni du shim `albert-code`, pas de sauvegarde du rc avant
-modification, pas de `--dry-run`. À la bascule vers just-code, des secrets /
+modification, pas de `--dry-run`. À la bascule vers le nouvel outil, des secrets /
 identité et une VM jetable restaient derrière.
 
 ### T17.1 🟡 Compléter uninstall.sh (5 vars + VM + shim + rc .bak + --dry-run) `<- AC-R075, AC-R076` ✅ implémenté
@@ -1536,4 +1536,26 @@ honnête et reproductible.
 le sourçage rc (avec `.bak`), la ligne PATH du shim et les VMs agent-vm avec un
 compte honnête ; `AGENTS.md`/`opencode.json` restent. `--dry-run` ne mute rien.
 Scénario `TESTS.md` S77 ✅.
+
+### T17.2 🟡 Annoncer la bascule vers le nouvel outil dans la documentation ✅ implémenté
+
+**But :** annoncer la fin de vie d'Albert Code et la bascule vers un nouvel outil
+(successeur), de façon prête à merger au jour de la bascule.
+
+**Tâches :**
+1. `README.md` : avis de fin de vie en tête (une seule occurrence du nom du
+   successeur), statut « fin de vie », avertissement en tête de la section
+   Installation, section « Passer au nouvel outil » avant Désinstallation,
+   phrase dans Contribuer, et définition de lien `[successeur]:` en toute fin de
+   fichier.
+2. `docs/PLAN.md` et `AGENTS.md` : note d'une ou deux lignes renvoyant vers la
+   section « Passer au nouvel outil » du README.
+
+**DoD :** avis de fin de vie en tête du README, section « Passer au nouvel
+outil », notes dans `docs/PLAN.md` et `AGENTS.md`. Nom et URL du nouvel outil
+présents chacun une seule fois dans le README et nulle part ailleurs, aucune
+commande d'installation recopiée. Merge au jour de la bascule seulement.
+
+Pas de ligne `FEEDBACK.md` (ce n'est pas un retour utilisateur), pas de scénario
+`TESTS.md`.
 

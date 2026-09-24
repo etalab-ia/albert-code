@@ -1,5 +1,7 @@
 # Albert Code — Plan & contexte
 
+> Dépôt en fin de vie : Albert Code est remplacé par un nouvel outil, voir la section [« Passer au nouvel outil »](../README.md#passer-au-nouvel-outil) du README. Seuls des correctifs de sécurité ou de désinstallation sont encore acceptés.
+
 > Contexte produit et décisions d'architecture du bundle. Document de référence interne au dépôt, lu par les contributeurs et l'agent de build.
 > Pour les règles de construction, voir [`AGENTS.md`](../AGENTS.md) ; pour les tâches, [`BACKLOG.md`](../BACKLOG.md) ; pour la validation, [`TESTS.md`](../TESTS.md).
 
