@@ -38,7 +38,7 @@ echo
 # On le calcule via lib/ui.sh dans un sous-shell isolé (HOME + SHELL du bac).
 _rc_path_for() {
   local sb="$1"
-  SHELL=/bin/bash HOME="$sb/home" bash -c 'source "$1"; path_rc_file' _ "$SELF_DIR/lib/ui.sh"
+  SHELL=/bin/bash HOME="$sb/maison" bash -c 'source "$1"; path_rc_file' _ "$SELF_DIR/lib/ui.sh"
 }
 
 # _sandbox <nom> : construit un bac à sable avec HOME, projet, rc, runtime,
@@ -47,7 +47,7 @@ _sandbox() {
   local name="$1"; shift
   local sb="$SB/$name"
   local path_rc
-  mkdir -p "$sb/home/.agent-vm" "$sb/proj" "$sb/bin"
+  mkdir -p "$sb/maison/.agent-vm" "$sb/proj" "$sb/bin"
   path_rc="$(_rc_path_for "$sb")"
   mkdir -p "$(dirname "$path_rc")"
   # Faux limactl en tête de PATH : journalise, maintient un état « VM restantes ».
@@ -89,7 +89,7 @@ SHIM
   chmod +x "$sb/bin/albert-code"
 
   # ~/.zshenv : les 5 variables du bundle + une ligne perso.
-  cat > "$sb/home/.zshenv" <<'ZSH'
+  cat > "$sb/maison/.zshenv" <<'ZSH'
 export ALBERT_API_KEY='FAUX-ALBERT-123'
 export CONTEXT7_API_KEY='FAUX-CONTEXT-456'
 export GH_TOKEN='FAUX-GH-TOKEN-123'
@@ -99,7 +99,7 @@ export MA_PERSO='valeur perso qui doit survivre'
 ZSH
 
   # ~/.agent-vm/runtime.sh : une ligne perso hors bloc + le bloc Albert Code.
-  cat > "$sb/home/.agent-vm/runtime.sh" <<'RUNT'
+  cat > "$sb/maison/.agent-vm/runtime.sh" <<'RUNT'
 export MA_PERSO_RUNTIME='ok-hors-bloc'
 # --- albert-code : clés VM ---
 export ALBERT_API_KEY='FAUX-ALBERT-RUNTIME'
@@ -112,7 +112,7 @@ RUNT
   # Agent-vm.sh est sourcé depuis ~/.bashrc (section 5 d'uninstall.sh choisit
   # ~/.bashrc pour bash, quel que soit l'OS) ; y ajoute aussi une ligne perso qui
   # mentionne agent-vm.sh SANS le sourcer (doit survivre) et une variable perso.
-  cat > "$sb/home/.bashrc" <<'RC'
+  cat > "$sb/maison/.bashrc" <<'RC'
 [ -f /opt/agent-vm.sh ] && source /opt/agent-vm.sh
 # note perso : agent-vm.sh vit dans /opt
 export MA_VIRT='une machine agent-vm virtuelle perso'
@@ -120,8 +120,8 @@ RC
   # L'ajout ~/.local/bin au PATH vit dans le fichier désigné par path_rc_file
   # (section 3bis d'uninstall.sh) : ~/.bashrc sous Linux, ~/.bash_profile sous
   # macOS. Sur Linux les deux fichiers coïncident → on l'ajoute en append.
-  if [ "$path_rc" = "$sb/home/.bashrc" ]; then
-    printf 'export PATH="$HOME/.local/bin:$PATH"\n' >> "$sb/home/.bashrc"
+  if [ "$path_rc" = "$sb/maison/.bashrc" ]; then
+    printf 'export PATH="$HOME/.local/bin:$PATH"\n' >> "$sb/maison/.bashrc"
   else
     printf 'export PATH="$HOME/.local/bin:$PATH"\n' > "$path_rc"
   fi
@@ -140,7 +140,7 @@ _run() {
   local dry="${1:-}"
   ( cd "$sb/proj" \
     && FAKE_LIMA_LOG="$sb/lima.log" FAKE_LIMA_STATE="$sb/lima.state" \
-    SHELL=/bin/bash PATH="$sb/bin:/usr/bin:/bin:/usr/sbin:/sbin" HOME="$sb/home" \
+    SHELL=/bin/bash PATH="$sb/bin:/usr/bin:/bin:/usr/sbin:/sbin" HOME="$sb/maison" \
     bash "$SELF_DIR/uninstall.sh" $dry <<< "$answers" ) 2>&1
 }
 
@@ -148,31 +148,31 @@ _run() {
 SB1="$(_sandbox c1)"
 OUT="$(_run "$SB1" "$(printf 'o\n%.0s' {1..12})")"
 ACC=$((ACC+1))
-if ! grep -qE '^(export )?(ALBERT_API_KEY|CONTEXT7_API_KEY|GH_TOKEN|AC_GIT_USER_NAME|AC_GIT_USER_EMAIL)=' "$SB1/home/.zshenv" \
-   && grep -q '^export MA_PERSO=' "$SB1/home/.zshenv"; then
+if ! grep -qE '^(export )?(ALBERT_API_KEY|CONTEXT7_API_KEY|GH_TOKEN|AC_GIT_USER_NAME|AC_GIT_USER_EMAIL)=' "$SB1/maison/.zshenv" \
+   && grep -q '^export MA_PERSO=' "$SB1/maison/.zshenv"; then
   pass "cas A : les 5 variables sont retirées de ~/.zshenv, ligne perso conservée"
 else
-  fail "cas A : ~/.zshenv mal nettoyé : $(cat "$SB1/home/.zshenv")"
+  fail "cas A : ~/.zshenv mal nettoyé : $(cat "$SB1/maison/.zshenv")"
 fi
 ACC=$((ACC+1))
-if ! grep -q 'ALBERT_API_KEY' "$SB1/home/.agent-vm/runtime.sh" \
-   && ! grep -q 'GH_TOKEN' "$SB1/home/.agent-vm/runtime.sh" \
-   && grep -q '^export MA_PERSO_RUNTIME=' "$SB1/home/.agent-vm/runtime.sh" \
-   && grep -q '^export MA_PERSO_APRES=' "$SB1/home/.agent-vm/runtime.sh"; then
+if ! grep -q 'ALBERT_API_KEY' "$SB1/maison/.agent-vm/runtime.sh" \
+   && ! grep -q 'GH_TOKEN' "$SB1/maison/.agent-vm/runtime.sh" \
+   && grep -q '^export MA_PERSO_RUNTIME=' "$SB1/maison/.agent-vm/runtime.sh" \
+   && grep -q '^export MA_PERSO_APRES=' "$SB1/maison/.agent-vm/runtime.sh"; then
   pass "cas B : bloc Albert Code retiré du runtime VM, contenu hors bloc conservé"
 else
-  fail "cas B : runtime.sh mal nettoyé : $(cat "$SB1/home/.agent-vm/runtime.sh")"
+  fail "cas B : runtime.sh mal nettoyé : $(cat "$SB1/maison/.agent-vm/runtime.sh")"
 fi
 ACC=$((ACC+1))
 PATH_RC1="$(_rc_path_for "$SB1")"
-if [ -f "$SB1/home/.bashrc.bak" ] \
-   && ! grep -q 'source /opt/agent-vm.sh' "$SB1/home/.bashrc" \
-   && grep -q '# note perso : agent-vm.sh vit dans /opt' "$SB1/home/.bashrc" \
-   && grep -q 'MA_VIRT' "$SB1/home/.bashrc" \
+if [ -f "$SB1/maison/.bashrc.bak" ] \
+   && ! grep -q 'source /opt/agent-vm.sh' "$SB1/maison/.bashrc" \
+   && grep -q '# note perso : agent-vm.sh vit dans /opt' "$SB1/maison/.bashrc" \
+   && grep -q 'MA_VIRT' "$SB1/maison/.bashrc" \
    && ! grep -q 'local/bin' "$PATH_RC1"; then
   pass "cas C : rc sauvegardé (.bak), source agent-vm.sh retiré, note perso et MA_VIRT conservées, PATH retiré de $(basename "$PATH_RC1")"
 else
-  fail "cas C : rc mal nettoyé (.bashrc : $(cat "$SB1/home/.bashrc"), PATH_RC : $(cat "$PATH_RC1"))"
+  fail "cas C : rc mal nettoyé (.bashrc : $(cat "$SB1/maison/.bashrc"), PATH_RC : $(cat "$PATH_RC1"))"
 fi
 ACC=$((ACC+1))
 if [ ! -e "$SB1/bin/albert-code" ] \
@@ -206,7 +206,7 @@ fi
 # --- Cas G : réponse vide = défaut OUI (suppression effectuée) -----------------
 SB3="$(_sandbox c3)"
 # On ne fait jouer QUE la question VM : HOME sans rien à retirer, une seule VM.
-rm -rf "$SB3/home/.zshenv" "$SB3/home/.agent-vm" "$SB3/home/.bashrc" "$SB3/bin/albert-code"
+rm -rf "$SB3/maison/.zshenv" "$SB3/maison/.agent-vm" "$SB3/maison/.bashrc" "$SB3/bin/albert-code"
 rm -rf "$SB3/proj/.agent-vm.runtime.sh" "$SB3/proj/AGENTS.md" "$SB3/proj/opencode.json"
 # Réécrit la liste de VMs à une seule, pour un comportement net.
 printf 'agent-vm-solo\n' > "$SB3/lima.state"
@@ -227,15 +227,15 @@ fi
 # --- Cas H : --dry-run ne mute rien ---------------------------------------------
 SB4="$(_sandbox c4)"
 PATH_RC4="$(_rc_path_for "$SB4")"
-cp "$SB4/home/.zshenv" "$SB4/zshenv.before"
-cp "$SB4/home/.bashrc" "$SB4/bashrc.before"
+cp "$SB4/maison/.zshenv" "$SB4/zshenv.before"
+cp "$SB4/maison/.bashrc" "$SB4/bashrc.before"
 cp "$PATH_RC4" "$SB4/pathtc.before"
 OUT4="$(_run "$SB4" '' --dry-run)"
 ACC=$((ACC+1))
-if cmp -s "$SB4/home/.zshenv" "$SB4/zshenv.before" \
-   && cmp -s "$SB4/home/.bashrc" "$SB4/bashrc.before" \
+if cmp -s "$SB4/maison/.zshenv" "$SB4/zshenv.before" \
+   && cmp -s "$SB4/maison/.bashrc" "$SB4/bashrc.before" \
    && cmp -s "$PATH_RC4" "$SB4/pathtc.before" \
-   && [ ! -e "$SB4/home/.bashrc.bak" ] \
+   && [ ! -e "$SB4/maison/.bashrc.bak" ] \
    && [ -e "$SB4/bin/albert-code" ] \
    && [ -e "$SB4/proj/.agent-vm.runtime.sh" ]; then
   pass "cas H : --dry-run ne mute aucun fichier"
