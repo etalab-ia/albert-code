@@ -50,3 +50,6 @@ jobs:
 
       - name: Test S75 — retrait avertissement Node et bruit Homebrew (AC-R068, AC-R069)
         run: bash tests/s75_node_et_bruit_brew.sh
+
+      - name: Test S77 — désinstallation propre (T17.1 <- AC-R075, AC-R076)
+        run: bash tests/s77_uninstall.sh

@@ -521,7 +521,7 @@ prompt_input() {
   printf '%s' "${val:-$default}"
 }
 
-# confirm <question> : 0 si oui, 1 si non. Écrit le prompt sur >&2.
+# confirm <question> : 0 si oui, 1 si non (défaut NON, [o/N]). Écrit le prompt sur >&2.
 confirm() {
   local question="$1"
   if [ "$DRY_RUN" -eq 1 ]; then
@@ -536,6 +536,29 @@ confirm() {
     read -r answer
   fi
   [[ "$answer" =~ ^[oOyY] ]]
+}
+
+# confirm_yes <question> : 0 si oui, 1 si non (défaut OUI, [O/n], réponse vide = oui).
+# Pour une action à fort impact (ex. suppression de VMs) qu'on veut valider par
+# défaut plutôt que refuser par défaut. Écrit le prompt sur >&2. En dry-run,
+# répond « oui » sans rien muter (le caller passe par _dry_gate).
+confirm_yes() {
+  local question="$1"
+  if [ "$DRY_RUN" -eq 1 ]; then
+    printf '%s[dry-run] confirm_yes: %s → oui%s\n' "${C_GREY}" "$question" "${C_RESET}" >&2
+    return 0
+  fi
+  local answer
+  printf '%s%s%s [O/n] : ' "${C_BOLD}" "$question" "${C_RESET}" >&2
+  if [ -t 0 ]; then
+    read -r answer </dev/tty
+  else
+    read -r answer
+  fi
+  case "$answer" in
+    ""|[oOyY]*) return 0 ;;
+    *) return 1 ;;
+  esac
 }
 
 # file_contains <fichier> <pattern> : 0 si le pattern est présent.
