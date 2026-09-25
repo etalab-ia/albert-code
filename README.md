@@ -211,8 +211,8 @@ Docs : [OpenCode](https://opencode.ai/docs/fr) · [Albert API](https://doc.incub
 ## Passer au nouvel outil
 
 1. **Désinstalle Albert Code** : `./uninstall.sh` (supprime les clés, les VM et l'historique des conversations stockés dans les VM ; ajoute `--dry-run` pour prévisualiser sans rien modifier).
-2. **Installe [le nouvel outil][successeur]** en suivant son README. Ne recopie aucune de ses commandes d'installation.
-3. **Rouvre tes projets avec le nouvel outil.** Ce qui ne suit pas : le choix des skills et MCP (à refaire), la clé Albert (à ressaisir). `AGENTS.md` et `opencode.json` restent dans tes projets.
+2. **Installe [le nouvel outil][successeur]** en suivant son README.
+3. **Rouvre tes projets avec le nouvel outil.** Ce qui ne suit pas : l'historique des conversations, le choix des skills et MCP (à refaire), la clé Albert (à ressaisir). `AGENTS.md` et `opencode.json` restent dans tes projets.
 
 Pense à **révoquer le jeton GitHub** utilisé par Albert Code sur `github.com/settings/tokens` pour couper tout accès résiduel.
 
