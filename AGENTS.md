@@ -1,5 +1,7 @@
 # AGENTS.md — albert-code
 
+> Dépôt en fin de vie : Albert Code est remplacé par un nouvel outil, voir la section [« Passer au nouvel outil »](README.md#passer-au-nouvel-outil) du README. Seuls des correctifs de sécurité ou de désinstallation sont encore acceptés.
+
 ---
 
 ## 1. Le projet en bref
