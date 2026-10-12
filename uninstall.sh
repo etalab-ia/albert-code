@@ -110,9 +110,36 @@ done
 # 3bis. Ligne d'ajout de ~/.local/bin au PATH posée par install_shim (T5.4, symétrie).
 #      Ne retire QUE la ligne exacte du bundle ; un ajout d'une autre provenance
 #      est conservé et signalé.
+#      Bascule just-code (AC-R077, T17.3) : ~/.local/bin n'est PAS la propriété du
+#      bundle — il peut contenir just-code (le successeur), claude, uv, vibe, … et
+#      la ligne PATH a souvent été posée par un autre installeur (Claude Code), pas
+#      par ensure_path_rc_line. On ne propose le retrait QUE si ~/.local/bin est
+#      absent, vide, ou n'abrite que le shim albert-code du bundle (en-tête « Shim
+#      pour albert-code », comme à l'étape 4bis). Sinon la ligne est CONSERVÉE avec
+#      un avertissement.
 AC_PATH_RC="$(path_rc_file)"
 if file_contains "$AC_PATH_RC" 'export PATH="\$HOME/.local/bin:\$PATH"'; then
-  if confirm "Retirer l'ajout de ~/.local/bin au PATH de $AC_PATH_RC ?"; then
+  _can_remove=1
+  _others=0
+  _names=""
+  if [ -d "$HOME/.local/bin" ]; then
+    for _entry in "$HOME/.local/bin"/*; do
+      [ -e "$_entry" ] || continue
+      if [ -f "$_entry" ] && head -3 "$_entry" 2>/dev/null | grep -q "Shim pour albert-code"; then
+        continue
+      fi
+      _others=$((_others + 1))
+      if [ "$_others" -le 5 ]; then
+        _names="${_names:+$_names }$(basename "$_entry")"
+      fi
+    done
+  fi
+  if [ "$_others" -gt 0 ]; then
+    _can_remove=0
+    warn "~/.local/bin contient %d autre(s) entrée(s) (%s) : la ligne PATH est conservée" "$_others" "$_names"
+    warn "dans $AC_PATH_RC — la retirer casserait %s et tes autres outils de ~/.local/bin." "$_names"
+  fi
+  if [ "$_can_remove" -eq 1 ] && confirm "Retirer l'ajout de ~/.local/bin au PATH de $AC_PATH_RC ?"; then
     _tmp="$(mktemp)"
     grep -vF 'export PATH="$HOME/.local/bin:$PATH"' "$AC_PATH_RC" > "$_tmp" || true
     mv "$_tmp" "$AC_PATH_RC"

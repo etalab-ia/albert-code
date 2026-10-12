@@ -1268,7 +1268,7 @@ Node reformulé « installé dans la VM » dans le README, appel brew porteur de
 `HOMEBREW_NO_*` via `env` sans export global.
 
 
-## S77 — Désinstallation complète (T17.1, AC-R075, AC-R076)
+## S77 — Désinstallation complète (T17.1, AC-R075, AC-R076 · T17.3, AC-R077)
 
 **Préconditions :** dépôt propre (`main`). Test **hermétique** : bac à sable
 `mktemp -d`, HOME détourné, PATH en tête sur un faux `limactl` (journalisé, valeurs
@@ -1289,13 +1289,16 @@ factices uniquement), jamais le vrai `limactl`, jamais le vrai HOME.
 **Attendu :** (A) les 5 variables sont retirées de `~/.zshenv`, la ligne perso reste ;
 (B) le bloc Albert Code du runtime VM est retiré, le contenu perso hors bloc reste ;
 (C) le rc est sauvegardé en `.bak`, la ligne de sourçage `agent-vm.sh` et l'ajout
-PATH sont retirés, la ligne perso « agent-vm » reste ; (D) le shim est retiré,
+PATH sont retirés, la ligne perso « agent-vm » reste ; (C2) si `~/.local/bin`
+contient un autre exécutable factice (ex. `just-code`), la ligne PATH est CONSERVÉE
+et un warn annonce sa conservation (avec le nombre d'entrées et les noms) — on ne
+touche jamais à un `~/.local/bin` qui sert d'autres outils ; (D) le shim est retiré,
 `AGENTS.md` et `opencode.json` restent, `.agent-vm.runtime.sh` du projet est retiré ;
 (E) les VMs sont supprimées (`delete --force` appelé) avec message honnête ; (F) si
 un delete échoue → « existent encore », jamais de faux succès ; (G) réponse vide à la
 question VM = oui (défaut) ; (H) `--dry-run` ne mute rien et n'appelle jamais
 `limactl`.
 
-**Validé le :** 2026-09-24 — `tests/s77_uninstall.sh` exécuté sur Linux, bash :
-11/11 assertions OK (exit 0). Écritures (A)-(H) constatées à la relecture de
-`uninstall.sh` et `lib/ui.sh` (helper `confirm_yes`).
+**Validé le :** 2026-10-12 — `tests/s77_uninstall.sh` exécuté sur Linux : 12/12
+assertions OK (exit 0), dont le nouveau cas C2 (just-code dans `~/.local/bin` →
+ligne PATH conservée + warn).
