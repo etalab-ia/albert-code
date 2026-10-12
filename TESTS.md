@@ -1299,6 +1299,10 @@ un delete échoue → « existent encore », jamais de faux succès ; (G) répon
 question VM = oui (défaut) ; (H) `--dry-run` ne mute rien et n'appelle jamais
 `limactl`.
 
-**Validé le :** 2026-10-12 — `tests/s77_uninstall.sh` exécuté sur Linux : 12/12
-assertions OK (exit 0), dont le nouveau cas C2 (just-code dans `~/.local/bin` →
-ligne PATH conservée + warn).
+**Validé le :** 2026-09-24 — `tests/s77_uninstall.sh` exécuté sur Linux, bash :
+11/11 assertions OK (exit 0). Écritures (A)-(H) constatées à la relecture de
+`uninstall.sh` et `lib/ui.sh` (helper `confirm_yes`).
+
+**Validé le :** 2026-10-12 (T17.3, AC-R077) — `tests/s77_uninstall.sh` exécuté sur
+Linux puis sur macOS : 12/12 assertions OK (exit 0), dont le nouveau cas C2
+(just-code dans `~/.local/bin` → ligne PATH conservée + warn).

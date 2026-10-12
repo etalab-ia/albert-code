@@ -1553,8 +1553,8 @@ de Claude Code, pas nécessairement par `ensure_path_rc_line`, et la retirer cas
    est conservée et pourquoi — nombre d'autres entrées dans `~/.local/bin` +
    jusqu'à 5 noms d'exemple. Le cas « ligne d'une autre forme » existant reste
    inchangé. Bash 3.2, idempotent, respect de `--dry-run`.
-2. `uninstall.sh` (récapitulatif, section 8) : n'annoncer le retrait du PATH que
-   s'il a réellement eu lieu.
+2. `uninstall.sh` (récapitulatif, section 8) : vérifié, le récapitulatif ne
+   mentionne pas le retrait du PATH ; rien à changer.
 3. `tests/s77_uninstall.sh` : conserver l'assertion (C) (cas « ~/.local/bin ne
    contient que le shim ou rien ») et ajouter un cas C2 où `~/.local/bin` du bac
    à sable contient un autre exécutable factice (`just-code`) : la ligne PATH doit
