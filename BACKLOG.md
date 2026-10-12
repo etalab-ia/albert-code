@@ -1537,3 +1537,31 @@ le sourçage rc (avec `.bak`), la ligne PATH du shim et les VMs agent-vm avec un
 compte honnête ; `AGENTS.md`/`opencode.json` restent. `--dry-run` ne mute rien.
 Scénario `TESTS.md` S77 ✅.
 
+### T17.3 🔴 Garder la ligne PATH quand ~/.local/bin n'appartient pas au bundle `<- AC-R077` ✅ implémenté
+
+**But :** à la bascule vers just-code, uninstall.sh ne doit JAMAIS retirer
+`export PATH="$HOME/.local/bin:$PATH"` quand `~/.local/bin` sert d'autres outils
+(just-code, claude, uv, vibe…) : cette ligne est posée aussi par l'installateur
+de Claude Code, pas nécessairement par `ensure_path_rc_line`, et la retirer casse
+`command not found` dans tout nouveau terminal.
+
+**Tâches :**
+1. `uninstall.sh` (étape 3bis) : ne proposer le retrait de la ligne PATH que si
+   `~/.local/bin` est absent, vide, ou ne contient que le shim albert-code du
+   bundle (détecté par l'en-tête « Shim pour albert-code », comme à l'étape
+   4bis). Sinon : ne rien retirer et afficher un warn qui annonce que la ligne
+   est conservée et pourquoi — nombre d'autres entrées dans `~/.local/bin` +
+   jusqu'à 5 noms d'exemple. Le cas « ligne d'une autre forme » existant reste
+   inchangé. Bash 3.2, idempotent, respect de `--dry-run`.
+2. `uninstall.sh` (récapitulatif, section 8) : vérifié, le récapitulatif ne
+   mentionne pas le retrait du PATH ; rien à changer.
+3. `tests/s77_uninstall.sh` : conserver l'assertion (C) (cas « ~/.local/bin ne
+   contient que le shim ou rien ») et ajouter un cas C2 où `~/.local/bin` du bac
+   à sable contient un autre exécutable factice (`just-code`) : la ligne PATH doit
+   être CONSERVÉE et le warn affiché. Hermétique, valeurs factices uniquement.
+
+**DoD :** uninstall.sh ne retire plus la ligne PATH d'un `~/.local/bin` qui
+contient d'autres entrées ; le warn annonce la conservation (compte + noms).
+Scénario `TESTS.md` S77 (cas C2) ✅.
+
+

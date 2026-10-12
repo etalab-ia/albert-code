@@ -10,7 +10,10 @@
 #       perso hors bloc est conservé ;
 #   (C) le rc est sauvegardé en <rc>.bak, la ligne de sourçage agent-vm.sh
 #       retirée, la note perso mentionnant « agent-vm » et MA_VIRT conservées,
-#       l'ajout ~/.local/bin au PATH retiré du fichier visé par path_rc_file ;
+#       l'ajout ~/.local/bin au PATH retiré du fichier visé par path_rc_file
+#       (lorsque ~/.local/bin n'abrite que le shim du bundle ou est absent) ;
+#   (C2) si ~/.local/bin contient un autre exécutable (ex. just-code), la ligne
+#       PATH est CONSERVÉE et un warn est affiché (AC-R077, T17.3) ;
 #   (D) le shim albert-code du bundle est retiré, AGENTS.md / opencode.json du
 #       projet sont conservés, .agent-vm.runtime.sh du projet est retiré ;
 #   (E) les VMs agent-vm-… sont bien supprimées (delete --force appelé) ;
@@ -30,7 +33,7 @@ fail() { printf '  \033[31m✗\033[0m %s\n' "$1"; FAIL=1; }
 SB="$(mktemp -d)"
 trap 'rm -rf "$SB"' EXIT
 
-echo "S77 — désinstallation propre (T17.1 <- AC-R075, AC-R076)"
+echo "S77 — désinstallation propre (T17.1 <- AC-R075, AC-R076 · T17.3 <- AC-R077)"
 echo
 
 # _rc_path_for <sb> : le fichier où l'ajout au PATH du bundle irait (path_rc_file)
@@ -173,6 +176,23 @@ if [ -f "$SB1/maison/.bashrc.bak" ] \
   pass "cas C : rc sauvegardé (.bak), source agent-vm.sh retiré, note perso et MA_VIRT conservées, PATH retiré de $(basename "$PATH_RC1")"
 else
   fail "cas C : rc mal nettoyé (.bashrc : $(cat "$SB1/maison/.bashrc"), PATH_RC : $(cat "$PATH_RC1"))"
+fi
+
+# --- Cas C2 : ~/.local/bin contient un autre exécutable (just-code) → la ligne
+# PATH DOIT être conservée et un warn affiché (AC-R077, T17.3) ----------------
+SB5="$(_sandbox c5)"
+mkdir -p "$SB5/maison/.local/bin"
+printf '#!/usr/bin/env bash\nexec just-code "$@"\n' > "$SB5/maison/.local/bin/just-code"
+chmod +x "$SB5/maison/.local/bin/just-code"
+PATH_RC5="$(_rc_path_for "$SB5")"
+OUT5="$(_run "$SB5" "$(printf 'o\n%.0s' {1..12})")"
+ACC=$((ACC+1))
+if grep -q 'local/bin' "$PATH_RC5" \
+   && printf '%s' "$OUT5" | grep -q 'just-code' \
+   && printf '%s' "$OUT5" | grep -q 'conservée'; then
+  pass "cas C2 : ~/.local/bin contient just-code → ligne PATH conservée, warn affiché"
+else
+  fail "cas C2 : ligne PATH retirée alors que ~/.local/bin abrite d'autres outils ($(cat "$PATH_RC5"))"
 fi
 ACC=$((ACC+1))
 if [ ! -e "$SB1/bin/albert-code" ] \
