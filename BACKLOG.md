@@ -1537,7 +1537,7 @@ le sourçage rc (avec `.bak`), la ligne PATH du shim et les VMs agent-vm avec un
 compte honnête ; `AGENTS.md`/`opencode.json` restent. `--dry-run` ne mute rien.
 Scénario `TESTS.md` S77 ✅.
 
-### T17.3 🔴 Garder la ligne PATH quand ~/.local/bin n'appartient pas au bundle `<- AC-R077` ✅ implémenté
+### T17.3 🔴 Garder la ligne PATH quand ~/.local/bin n'appartient pas au bundle `<- AC-R077, AC-R078` ✅ implémenté
 
 **But :** à la bascule vers just-code, uninstall.sh ne doit JAMAIS retirer
 `export PATH="$HOME/.local/bin:$PATH"` quand `~/.local/bin` sert d'autres outils
@@ -1563,5 +1563,7 @@ de Claude Code, pas nécessairement par `ensure_path_rc_line`, et la retirer cas
 **DoD :** uninstall.sh ne retire plus la ligne PATH d'un `~/.local/bin` qui
 contient d'autres entrées ; le warn annonce la conservation (compte + noms).
 Scénario `TESTS.md` S77 (cas C2) ✅.
+
+**Correctif complémentaire (AC-R078) :** bit exécutable d'`uninstall.sh` rétabli (100755), perdu dans la PR #57.
 
 
