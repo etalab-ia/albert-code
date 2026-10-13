@@ -1566,4 +1566,16 @@ Scénario `TESTS.md` S77 (cas C2) ✅.
 
 **Correctif complémentaire (AC-R078) :** bit exécutable d'`uninstall.sh` rétabli (100755), perdu dans la PR #57.
 
+### T17.4 🟠 Récapitulatif d'uninstall.sh construit à partir des actions réellement effectuées `<- AC-R079` 📥 backlogué
+
+**But :** le récapitulatif final d'uninstall.sh est un texte figé qui annonce des retraits qui n'ont pas eu lieu (sourcing du fichier rc, fichiers .bak inexistants), y compris en `--dry-run`, où il affiche « ✓ Désinstallation terminée » alors que rien n'a été modifié. Le récapitulatif doit refléter les actions réellement effectuées.
+
+**Tâches :**
+1. `uninstall.sh` : enregistrer chaque action effectuée ou sautée pendant l'exécution.
+2. `uninstall.sh` : n'afficher dans le récapitulatif que les actions réellement effectuées, et lister à part celles qui ont été sautées.
+3. `uninstall.sh` : en `--dry-run`, titre « Simulation : voici ce qui serait retiré », jamais « Désinstallation terminée ».
+4. `tests/s77_uninstall.sh` : ajouter un cas (dry-run : aucun « terminée » dans la sortie ; exécution réelle sans .bak : pas de mention .bak).
+
+**DoD :** le récapitulatif d'uninstall.sh ne liste que les actions réellement effectuées, liste à part les sautées, et en `--dry-run` n'affiche jamais « Désinstallation terminée ». Scénario `TESTS.md` S77 (nouveaux cas) à écrire.
+
 
